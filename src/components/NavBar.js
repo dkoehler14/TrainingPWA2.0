@@ -15,6 +15,7 @@ function NavBar({ user }) {
       <Navbar.Collapse id="basic-navbar-nav">
         <Nav className="me-auto">
           <Nav.Link href="/">Home</Nav.Link>
+          <Nav.Link href="/exercises">Exercises</Nav.Link>
           <Nav.Link href="/create-workout">Create Workout</Nav.Link>
           <Nav.Link href="/create-program">Create Program</Nav.Link>
           <Nav.Link href="/programs">Programs</Nav.Link>
