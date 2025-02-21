@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Container, Row, Col, Form, Button, ListGroup, Accordion, InputGroup } from 'react-bootstrap';
+import { Trash } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { collection, addDoc, getDocs } from 'firebase/firestore';
-import { Form, Button, Container, Row, Col, ListGroup, Accordion, InputGroup } from 'react-bootstrap';
-import { Trash } from 'react-bootstrap-icons';
+import '../styles/Exercises.css';
 
 function Exercises() {
   const [exercises, setExercises] = useState([]);
@@ -64,91 +65,101 @@ function Exercises() {
   const groupedExercises = groupByPrimaryMuscle();
 
   return (
-    <Container className="mt-5">
+    <Container fluid className="soft-container exercises-container">
       <Row className="justify-content-center">
         <Col md={8}>
-          <h1 className="text-center mb-4">Exercises</h1>
-          <Form>
-            <Form.Group controlId="formExerciseName">
-              <Form.Label>Exercise Name</Form.Label>
-              <Form.Control 
-                type="text" 
-                value={newExercise} 
-                onChange={e => setNewExercise(e.target.value)} 
-                placeholder="Enter exercise name" 
-              />
-            </Form.Group>
-
-            <h5>Primary Muscle Groups</h5>
-            {primaryMuscleGroups.map((group, index) => (
-              <InputGroup key={index} className="mb-2">
-                <Form.Control 
-                  type="text" 
-                  value={group} 
-                  onChange={e => handleMuscleGroupChange(index, e, primaryMuscleGroups, setPrimaryMuscleGroups)} 
-                  placeholder="Primary muscle group"
+          <div className="soft-card exercises-card shadow border-0">
+            <h1 className="soft-title exercises-title text-center">Exercises</h1>
+            <Form>
+              <Form.Group controlId="formExerciseName" className="exercises-form-group">
+                <Form.Label className="soft-label exercises-label">Exercise Name</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={newExercise}
+                  onChange={e => setNewExercise(e.target.value)}
+                  placeholder="Enter exercise name"
+                  className="soft-input exercises-input"
                 />
-                <Button 
-                  variant="outline-secondary" 
-                  onClick={() => addMuscleGroup(primaryMuscleGroups, setPrimaryMuscleGroups)}
-                >+</Button>
-                {index !== 0 && (
-                  <Button 
-                    variant="outline-danger" 
-                    onClick={() => removeMuscleGroup(index, primaryMuscleGroups, setPrimaryMuscleGroups)}
+              </Form.Group>
+
+              <h5 className="soft-label exercises-label">Primary Muscle Groups</h5>
+              {primaryMuscleGroups.map((group, index) => (
+                <InputGroup key={index} className="exercises-form-group">
+                  <Form.Control
+                    type="text"
+                    value={group}
+                    onChange={e => handleMuscleGroupChange(index, e, primaryMuscleGroups, setPrimaryMuscleGroups)}
+                    placeholder="Primary muscle group"
+                    className="soft-input exercises-input"
+                  />
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => addMuscleGroup(primaryMuscleGroups, setPrimaryMuscleGroups)}
+                    className="soft-button exercises-button"
                   >
-                    <Trash />
+                    +
                   </Button>
-                )}
-              </InputGroup>
-            ))}
+                  {index !== 0 && (
+                    <Button
+                      variant="outline-danger"
+                      onClick={() => removeMuscleGroup(index, primaryMuscleGroups, setPrimaryMuscleGroups)}
+                      className="soft-button exercises-button"
+                    >
+                      <Trash />
+                    </Button>
+                  )}
+                </InputGroup>
+              ))}
 
-            <h5 className="mt-3">Secondary Muscle Groups</h5>
-            {secondaryMuscleGroups.map((group, index) => (
-              <InputGroup key={index} className="mb-2">
-                <Form.Control 
-                  type="text" 
-                  value={group} 
-                  onChange={e => handleMuscleGroupChange(index, e, secondaryMuscleGroups, setSecondaryMuscleGroups)} 
-                  placeholder="Secondary muscle group"
-                />
-                <Button 
-                  variant="outline-secondary" 
-                  onClick={() => addMuscleGroup(secondaryMuscleGroups, setSecondaryMuscleGroups)}
-                >+</Button>
-                {index !== 0 && (
-                  <Button 
-                    variant="outline-danger" 
-                    onClick={() => removeMuscleGroup(index, secondaryMuscleGroups, setSecondaryMuscleGroups)}
+              <h5 className="soft-label exercises-label mt-3">Secondary Muscle Groups</h5>
+              {secondaryMuscleGroups.map((group, index) => (
+                <InputGroup key={index} className="exercises-form-group">
+                  <Form.Control
+                    type="text"
+                    value={group}
+                    onChange={e => handleMuscleGroupChange(index, e, secondaryMuscleGroups, setSecondaryMuscleGroups)}
+                    placeholder="Secondary muscle group"
+                    className="soft-input exercises-input"
+                  />
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => addMuscleGroup(secondaryMuscleGroups, setSecondaryMuscleGroups)}
+                    className="soft-button exercises-button"
                   >
-                    <Trash />
+                    +
                   </Button>
-                )}
-              </InputGroup>
-            ))}
+                  {index !== 0 && (
+                    <Button
+                      variant="outline-danger"
+                      onClick={() => removeMuscleGroup(index, secondaryMuscleGroups, setSecondaryMuscleGroups)}
+                      className="soft-button exercises-button"
+                    >
+                      <Trash />
+                    </Button>
+                  )}
+                </InputGroup>
+              ))}
 
-            <Button variant="primary" onClick={addExercise} className="mt-3">
-              Add Exercise
-            </Button>
-          </Form>
+              <Button onClick={addExercise} className="soft-button exercises-button gradient">Add Exercise</Button>
+            </Form>
 
-          <Accordion className="mt-4">
-            {Object.keys(groupedExercises).map((muscleGroup, index) => (
-              <Accordion.Item key={index} eventKey={index.toString()}>
-                <Accordion.Header>{muscleGroup}</Accordion.Header>
-                <Accordion.Body>
-                  <ListGroup>
-                    {groupedExercises[muscleGroup].map((exercise) => (
-                      <ListGroup.Item key={exercise.id}>
-                        <strong>{exercise.name}</strong> - 
-                        Secondary: {exercise.secondaryMuscleGroups.join(', ')}
-                      </ListGroup.Item>
-                    ))}
-                  </ListGroup>
-                </Accordion.Body>
-              </Accordion.Item>
-            ))}
-          </Accordion>
+            <Accordion className="mt-4">
+              {Object.keys(groupedExercises).map((muscleGroup, index) => (
+                <Accordion.Item key={index} eventKey={index.toString()} className="soft-accordion-item exercises-accordion-item">
+                  <Accordion.Header>{muscleGroup}</Accordion.Header>
+                  <Accordion.Body>
+                    <ListGroup>
+                      {groupedExercises[muscleGroup].map((exercise) => (
+                        <ListGroup.Item key={exercise.id} className="soft-list-group-item exercises-list-group-item">
+                          <strong>{exercise.name}</strong> - Secondary: {exercise.secondaryMuscleGroups.join(', ')}
+                        </ListGroup.Item>
+                      ))}
+                    </ListGroup>
+                  </Accordion.Body>
+                </Accordion.Item>
+              ))}
+            </Accordion>
+          </div>
         </Col>
       </Row>
     </Container>

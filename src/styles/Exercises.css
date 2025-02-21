@@ -1,0 +1,43 @@
+.exercises-container {
+    padding: 0 1.5rem;
+  }
+  
+  .exercises-card {
+    border-radius: 20px;
+    padding: 2rem;
+  }
+  
+  .exercises-title {
+    color: #344767;
+    font-weight: 600;
+    margin-bottom: 2rem;
+  }
+  
+  .exercises-form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .exercises-label {
+    color: #67748e;
+  }
+  
+  .exercises-input {
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+  }
+  
+  .exercises-button {
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 500;
+  }
+  
+  .exercises-accordion-item {
+    border-radius: 15px;
+    margin-bottom: 10px;
+  }
+  
+  .exercises-list-group-item {
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+  }

@@ -1,7 +1,8 @@
 import React from 'react';
-import { Nav, Navbar, Button } from 'react-bootstrap';
+import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import '../styles/Navbar.css';
 
 function NavBar({ user }) {
   const handleLogout = () => {
@@ -9,25 +10,28 @@ function NavBar({ user }) {
   };
 
   return (
-    <Navbar bg="light" expand="lg">
-      <Navbar.Brand href="/">Exercise Tracker</Navbar.Brand>
-      <Navbar.Toggle aria-controls="basic-navbar-nav" />
-      <Navbar.Collapse id="basic-navbar-nav">
-        <Nav className="me-auto">
-          <Nav.Link href="/">Home</Nav.Link>
-          <Nav.Link href="/exercises">Exercises</Nav.Link>
-          <Nav.Link href="/create-workout">Create Workout</Nav.Link>
-          <Nav.Link href="/create-program">Create Program</Nav.Link>
-          <Nav.Link href="/programs">Programs</Nav.Link>
-        </Nav>
-        <Nav>
-          {user ? (
-            <Button variant="outline-danger" onClick={handleLogout}>Logout</Button>
-          ) : (
-            <Nav.Link href="/auth">Sign In</Nav.Link>
-          )}
-        </Nav>
-      </Navbar.Collapse>
+    <Navbar expand="lg" className="navbar mb-4">
+      <Container fluid className="soft-container">
+        <Navbar.Brand href="/" className="navbar-brand">Exercise Tracker</Navbar.Brand>
+        <Navbar.Toggle aria-controls="basic-navbar-nav" className="navbar-toggler" />
+        <Navbar.Collapse id="basic-navbar-nav">
+          <Nav className="me-auto">
+            <Nav.Link href="/" className="nav-link">Home</Nav.Link>
+            <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
+            <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
+            <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>
+            {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
+            {user && <Nav.Link href="/log-workout" className="nav-link">Log Workout</Nav.Link>}
+          </Nav>
+          <Nav>
+            {user ? (
+              <Button variant="outline-danger" onClick={handleLogout} className="soft-button soft-logout-button">Logout</Button>
+            ) : (
+              <Nav.Link href="/auth" className="nav-link">Sign In</Nav.Link>
+            )}
+          </Nav>
+        </Navbar.Collapse>
+      </Container>
     </Navbar>
   );
 }

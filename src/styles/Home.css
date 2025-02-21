@@ -1,0 +1,44 @@
+.home-container {
+  padding: 0 1.5rem;
+}
+
+.home-title {
+  font-weight: 600;
+  color: #344767;
+  margin-bottom: 3rem;
+}
+
+.tile-row {
+  gap: 1.5rem;
+}
+
+.tile-card {
+  border-radius: 15px;
+  padding: 20px;
+  transition: transform 0.3s ease-in-out;
+  font-family: 'Roboto', sans-serif !important; /* Ensure Roboto */
+}
+
+.tile-card:hover {
+  transform: translateY(-10px);
+}
+
+.tile-title {
+  color: #344767;
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-family: 'Roboto', sans-serif !important; /* Ensure Roboto */
+}
+
+.tile-text {
+  color: #67748e;
+  font-size: 1rem;
+  font-family: 'Roboto', sans-serif !important; /* Ensure Roboto */
+}
+
+.tile-button {
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+  font-family: 'Roboto', sans-serif !important; /* Ensure Roboto */
+}

@@ -1,0 +1,43 @@
+.profile-container {
+    padding: 0 1.5rem;
+  }
+  
+  .profile-card {
+    border-radius: 20px;
+    padding: 2rem;
+  }
+  
+  .profile-title {
+    color: #344767;
+    font-weight: 600;
+    margin-bottom: 2rem;
+  }
+  
+  .profile-form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .profile-label {
+    color: #67748e;
+  }
+  
+  .profile-input {
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+  }
+  
+  .profile-alert {
+    border-radius: 10px;
+  }
+  
+  .profile-button {
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 500;
+  }
+  
+  .password-section-title {
+    color: #344767;
+    font-weight: 600;
+    margin-top: 3rem;
+  }

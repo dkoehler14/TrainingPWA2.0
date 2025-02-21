@@ -1,0 +1,39 @@
+/* src/styles/Navbar.css */
+.navbar {
+  background: #f0f2f5; /* Soft UI light background */
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1), 0 6px 20px rgba(0, 0, 0, 0.05);
+}
+
+.navbar-brand {
+  color: #344767;
+  font-weight: 600;
+  font-family: 'Roboto', sans-serif !important;
+}
+
+.nav-link {
+  color: #67748e;
+  font-family: 'Roboto', sans-serif !important;
+}
+
+.nav-link:hover {
+  color: #5e72e4;
+}
+
+.navbar-toggler {
+  border: none; /* Remove default border */
+  padding: 0.5rem;
+}
+
+.navbar-toggler-icon {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(52, 71, 103, 1)' stroke-width='2' stroke-linecap='round' stroke-miterlimit='10' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+  width: 1.5em;
+  height: 1.5em;
+}
+
+.soft-logout-button {
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 500;
+  font-family: 'Roboto', sans-serif !important;
+}

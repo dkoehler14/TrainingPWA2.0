@@ -1,0 +1,82 @@
+/* Shared Soft UI-inspired styles */
+body {
+  font-family: 'Roboto', sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Container */
+.soft-container {
+  padding: 0 1.5rem;
+}
+
+/* Card */
+.soft-card {
+  border-radius: 20px;
+  padding: 2rem;
+}
+
+/* Title */
+.soft-title {
+  color: #344767;
+  font-weight: 600;
+  margin-bottom: 2rem;
+}
+
+/* Subtitle */
+.soft-subtitle {
+  color: #344767;
+  font-weight: 500;
+}
+
+/* Label */
+.soft-label {
+  color: #67748e;
+}
+
+/* Input */
+.soft-input {
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+}
+
+/* Button */
+.soft-button {
+  /* background: linear-gradient(90deg, #007BFF 0%, #00C4FF 100%) !important; Cool blue gradient */
+  background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); /* Blue shadow */
+}
+
+/* Button Hover */
+.soft-button:hover {
+  /* background: linear-gradient(90deg, #0066CC 0%, #00A3CC 100%) !important; Darker blue on hover */
+  background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
+  color: #fff !important;
+}
+
+/* Alert */
+.soft-alert {
+  border-radius: 10px;
+}
+
+/* List Group Item */
+.soft-list-group-item {
+  border-radius: 10px;
+  margin-bottom: 0.5rem;
+}
+
+/* Accordion Item */
+.soft-accordion-item {
+  border-radius: 15px;
+  margin-bottom: 10px;
+}
+
+/* Text */
+.soft-text {
+  color: #67748e;
+}

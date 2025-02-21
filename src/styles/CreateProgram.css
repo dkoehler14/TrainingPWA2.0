@@ -1,0 +1,44 @@
+.create-program-container {
+    padding: 0 1.5rem;
+  }
+  
+  .create-program-card {
+    border-radius: 20px;
+    padding: 2rem;
+  }
+  
+  .create-program-title {
+    color: #344767;
+    font-weight: 600;
+    margin-bottom: 2rem;
+  }
+  
+  .create-program-form-group {
+    margin-bottom: 1.5rem;
+  }
+  
+  .create-program-label {
+    color: #67748e;
+  }
+  
+  .create-program-input {
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+  }
+  
+  .create-program-button {
+    border-radius: 10px;
+    padding: 10px 20px;
+    font-weight: 500;
+  }
+  
+  .create-program-list-group-item {
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+  }
+  
+  .create-program-subtitle {
+    color: #344767;
+    font-weight: 500;
+    margin-top: 2rem;
+  }
