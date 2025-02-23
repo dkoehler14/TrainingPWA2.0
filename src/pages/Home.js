@@ -5,11 +5,11 @@ import '../styles/Home.css';
 
 function Home() {
   const tiles = [
-    { title: 'Exercises', path: '/exercises', description: 'View and add exercises' },
-    { title: 'Create Program', path: '/create-program', description: 'Design a fitness program' },
     { title: 'Programs', path: '/programs', description: 'View your programs' },
-    { title: 'Profile', path: '/profile', description: 'Manage your profile' },
     { title: 'Log Workout', path: '/log-workout', description: 'Track your workout weights' },
+    { title: 'Profile', path: '/profile', description: 'Manage your profile' },
+    { title: 'Create Program', path: '/create-program', description: 'Design a fitness program' },
+    { title: 'Exercises', path: '/exercises', description: 'View and add exercises' },
   ];
 
   return (

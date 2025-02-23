@@ -1,44 +1,200 @@
 .create-program-container {
-    padding: 0 1.5rem;
+  padding: 0 1.5rem;
+}
+
+.create-program-card {
+  border-radius: 20px;
+  padding: 2rem;
+}
+
+.create-program-title {
+  color: #344767;
+  font-weight: 600;
+  margin-bottom: 2rem;
+}
+
+.create-program-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.create-program-label {
+  color: #67748e;
+}
+
+.create-program-input {
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+  width: auto;
+  /* Default flexible width */
+}
+
+.create-program-button {
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+}
+
+.create-program-list-group-item {
+  border-radius: 10px;
+  margin-bottom: 0.5rem;
+}
+
+.create-program-subtitle {
+  color: #344767;
+  font-weight: 500;
+  margin-top: 2rem;
+}
+
+.week-header {
+  background-color: #f8f9fa;
+  border-radius: 10px;
+  padding: 10px 15px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.week-header:hover {
+  background-color: #e9ecef;
+}
+
+.week-header svg {
+  color: #67748e;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: #e9ecef !important;
+}
+
+.accordion-button {
+  background-color: #f8f9fa !important;
+  color: #344767 !important;
+  font-weight: 500 !important;
+}
+
+/* Styles for header labels */
+.header-labels {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.sets-label {
+  width: 60px;
+  text-align: center;
+  margin-right: 20px;
+  /* Matches "x" spacer */
+}
+
+.reps-label {
+  width: 60px;
+  text-align: center;
+  margin-right: 325px;
+  /* Desktop alignment */
+}
+
+/* Preset button alignment */
+.preset-btn {
+  height: 38px;
+  /* Match Form.Control height */
+  padding: 6px 12px;
+  /* Consistent padding */
+  align-self: center;
+  /* Ensure vertical centering */
+}
+
+/* Desktop-specific row styling */
+.desktop-row {
+  flex-wrap: wrap;
+  /* Allow wrapping if needed, but prioritize horizontal */
+}
+
+/* Override align-items-center on mobile */
+.align-items-center.exercise-row {
+  align-items: flex-start !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 767px) {
+  .create-program-container {
+    padding: 0 0 !important;
+    /* Remove all padding on mobile */
   }
-  
+
   .create-program-card {
-    border-radius: 20px;
-    padding: 2rem;
+    padding: 0.5rem !important;
+    /* Minimize internal padding */
+    border-radius: 10px;
+    /* Keep rounded corners */
   }
-  
-  .create-program-title {
-    color: #344767;
-    font-weight: 600;
-    margin-bottom: 2rem;
+
+  .header-labels {
+    justify-content: flex-start;
   }
-  
-  .create-program-form-group {
-    margin-bottom: 1.5rem;
+
+  .sets-label {
+    margin-right: 15px;
   }
-  
-  .create-program-label {
-    color: #67748e;
+
+  .reps-label {
+    margin-right: 0;
   }
-  
+
+  .desktop-row {
+    flex-direction: row !important;
+    /* Horizontal layout on mobile */
+    align-items: flex-start !important;
+    /* Left-align */
+    flex-wrap: wrap;
+    /* Allow wrapping if content overflows */
+  }
+
+  .preset-buttons {
+    flex-direction: row;
+    justify-content: flex-start;
+    width: 100%;
+    margin-top: 5px;
+    /* Tighter spacing */
+  }
+
+  .preset-buttons .btn {
+    margin-right: 5px;
+    padding: 4px 8px;
+    /* Smaller buttons */
+    font-size: 0.75rem;
+    /* Smaller text */
+  }
+
+  /* Restore Program Name and Add Exercise to full width */
+  .program-name-input,
+  .exercise-input {
+    width: 100% !important;
+    /* Full width on mobile */
+  }
+
+  /* Adjust Duration and Days per Week to same line with flexible widths on mobile */
+  .create-program-form-group.d-flex.flex-row {
+    flex-direction: column !important;
+    /* Default stack on mobile */
+  }
+
+  @media (min-width: 350px) and (max-width: 767px) {
+    .create-program-form-group.d-flex.flex-row {
+      flex-direction: row !important;
+      /* Horizontal on wider mobiles */
+    }
+
+    .duration-input,
+    .days-input {
+      width: 50% !important;
+      /* Equal flexible widths */
+      margin-right: 5px;
+      /* Slight spacing between inputs */
+    }
+  }
+
+  /* Adjust input widths for sets/reps on mobile */
   .create-program-input {
-    border-radius: 10px;
-    border: 1px solid #e9ecef;
+    width: 50px !important;
+    /* Reduce input width for sets/reps */
   }
-  
-  .create-program-button {
-    border-radius: 10px;
-    padding: 10px 20px;
-    font-weight: 500;
-  }
-  
-  .create-program-list-group-item {
-    border-radius: 10px;
-    margin-bottom: 0.5rem;
-  }
-  
-  .create-program-subtitle {
-    color: #344767;
-    font-weight: 500;
-    margin-top: 2rem;
-  }
+}
