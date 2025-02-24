@@ -38,23 +38,48 @@ body {
 .soft-input {
   border-radius: 10px;
   border: 1px solid #e9ecef;
+  height: 38px;
+  /* Match button height from .soft-button */
+  padding: 6px 12px;
+  /* Match button padding for consistency */
+  line-height: 1.5;
+  /* Ensure text aligns properly */
+  font-size: 1rem;
+  /* Match button font size */
+}
+
+.soft-input:focus {
+  outline: none;
+  /* Remove default outline */
+  border-color: #0056D2;
+  /* Match button gradient blue */
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
+  /* Subtle blue glow for accessibility */
 }
 
 /* Button */
 .soft-button {
-  /* background: linear-gradient(90deg, #007BFF 0%, #00C4FF 100%) !important; Cool blue gradient */
   background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
   border: none;
   color: #fff;
-  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); /* Blue shadow */
+  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+  /* Blue shadow */
+  height: 38px;
+  /* Explicit height for buttons */
+}
+
+.soft-button:focus {
+  outline: none;
+  /* Remove default outline */
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
+  /* Subtle blue glow matching inputs */
 }
 
 /* Button Hover */
 .soft-button:hover {
-  /* background: linear-gradient(90deg, #0066CC 0%, #00A3CC 100%) !important; Darker blue on hover */
   background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
   color: #fff !important;
 }

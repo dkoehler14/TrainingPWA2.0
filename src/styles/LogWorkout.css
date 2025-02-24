@@ -3,9 +3,25 @@
   padding: 0 1.5rem;
 }
 
+@media (max-width: 767px) {
+  .soft-container {
+    padding: 0 !important;
+    /* Remove padding on mobile */
+  }
+}
+
 .soft-card {
   border-radius: 20px;
   padding: 2rem;
+}
+
+@media (max-width: 767px) {
+  .soft-card {
+    padding: 0.5rem !important;
+    /* Reduce padding on mobile */
+    border-radius: 10px;
+    /* Keep rounded corners */
+  }
 }
 
 .soft-title {
@@ -31,4 +47,76 @@
 
 .soft-text {
   color: #67748e;
+}
+
+.workout-log-table {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.workout-log-table th,
+.workout-log-table td {
+  padding: 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.workout-log-table th {
+  background-color: #f8f9fa;
+  color: #344767;
+  font-weight: 500;
+  border-bottom: none;
+  /* Remove border between header and body */
+}
+
+.workout-log-table tr {
+  background-color: #fff;
+  /* Subtle row background for separation */
+}
+
+.workout-log-table tr:nth-child(even) {
+  background-color: #f8f9fa;
+  /* Alternating row colors for readability */
+}
+
+.workout-log-table .soft-input {
+  margin: 0 auto;
+  display: block;
+}
+
+/* Custom styling for React-Bootstrap checkbox for completion status */
+.completed-checkbox {
+  cursor: pointer;
+}
+
+.completed-checkbox input[type="checkbox"]:checked {
+  background-color: #28a745;
+  /* Green for checked state */
+  border-color: #28a745;
+}
+
+.completed-checkbox input[type="checkbox"]:checked::after {
+  content: '\2713';
+  /* Unicode checkmark */
+  color: #fff;
+  font-size: 12px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.completed-checkbox input[type="checkbox"] {
+  border: 2px solid #e9ecef;
+  border-radius: 4px;
+  background-color: #fff;
+  width: 20px;
+  height: 20px;
+  position: relative;
+}
+
+.completed-checkbox input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
+  /* Subtle green glow for focus */
 }

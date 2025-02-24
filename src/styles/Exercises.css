@@ -1,43 +1,60 @@
 .exercises-container {
-    padding: 0 1.5rem;
-  }
-  
-  .exercises-card {
-    border-radius: 20px;
-    padding: 2rem;
-  }
-  
-  .exercises-title {
-    color: #344767;
-    font-weight: 600;
-    margin-bottom: 2rem;
-  }
-  
-  .exercises-form-group {
-    margin-bottom: 1.5rem;
-  }
-  
-  .exercises-label {
-    color: #67748e;
-  }
-  
-  .exercises-input {
-    border-radius: 10px;
-    border: 1px solid #e9ecef;
-  }
-  
-  .exercises-button {
-    border-radius: 10px;
-    padding: 10px 20px;
-    font-weight: 500;
-  }
-  
-  .exercises-accordion-item {
-    border-radius: 15px;
-    margin-bottom: 10px;
-  }
-  
-  .exercises-list-group-item {
-    border-radius: 10px;
-    margin-bottom: 0.5rem;
-  }
+  padding: 0 1.5rem;
+}
+
+.exercises-card {
+  border-radius: 20px;
+  padding: 2rem;
+}
+
+.exercises-title {
+  color: #344767;
+  font-weight: 600;
+  margin-bottom: 2rem;
+}
+
+.exercises-form-group {
+  margin-bottom: 1.5rem;
+}
+
+.exercises-label {
+  color: #67748e;
+}
+
+.exercises-input {
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+  height: 38px;
+  /* Match button height from .soft-button */
+  padding: 6px 12px;
+  /* Match button padding for consistency */
+  line-height: 1.5;
+  /* Ensure text aligns properly */
+  font-size: 1rem;
+  /* Match button font size */
+}
+
+.exercises-input:focus {
+  outline: none;
+  /* Remove default outline */
+  border-color: #0056D2;
+  /* Match global soft-input focus color from global.css */
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
+  /* Subtle blue glow for accessibility */
+}
+
+.exercises-button {
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+}
+
+.exercises-accordion-item {
+  border-radius: 15px;
+  margin-bottom: 10px;
+}
+
+.exercises-list-group-item {
+  border-radius: 10px;
+  margin-bottom: 0.5rem;
+}

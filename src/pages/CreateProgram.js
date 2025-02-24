@@ -111,6 +111,20 @@ function CreateProgram() {
 
   const saveProgram = async () => {
     if (!user || !programName || weeklyConfigs.length === 0 || weeklyConfigs[0][0].exercises.length === 0) return;
+
+    // Transform weeklyConfigs into a Firestore-compatible format
+    const flattenedConfigs = {};
+    weeklyConfigs.forEach((week, weekIndex) => {
+      week.forEach((day, dayIndex) => {
+        const key = `week${weekIndex + 1}_day${dayIndex + 1}_exercises`;
+        flattenedConfigs[key] = day.exercises.map(exercise => ({
+          exerciseId: exercise.exerciseId,
+          sets: exercise.sets,
+          reps: exercise.reps,
+        }));
+      });
+    });
+
     try {
       await addDoc(collection(db, "programs"), {
         userId: user.uid,
@@ -118,7 +132,7 @@ function CreateProgram() {
         name: programName,
         duration,
         daysPerWeek,
-        weeklyConfigs,
+        weeklyConfigs: flattenedConfigs, // Use flattened object instead of nested arrays
         createdAt: new Date()
       });
       setProgramName('');
@@ -161,7 +175,7 @@ function CreateProgram() {
                   value={programName}
                   onChange={e => setProgramName(e.target.value)}
                   placeholder="Enter program name"
-                  className="soft-input create-program-input program-name-input"
+                  className="soft-input create-program-input-wide program-name-input"
                 />
               </Form.Group>
 
@@ -173,7 +187,7 @@ function CreateProgram() {
                     value={duration}
                     onChange={e => handleDurationChange(Number(e.target.value))}
                     min="1"
-                    className="soft-input create-program-input duration-input"
+                    className="soft-input create-program-input-wide duration-input"
                   />
                 </div>
                 <div className="flex-grow-1">
@@ -184,7 +198,7 @@ function CreateProgram() {
                     onChange={e => handleDaysPerWeekChange(Number(e.target.value))}
                     min="1"
                     max="7"
-                    className="soft-input create-program-input days-input"
+                    className="soft-input create-program-input-wide days-input"
                   />
                 </div>
               </Form.Group>
@@ -195,7 +209,7 @@ function CreateProgram() {
                   as="select"
                   value={newExercise}
                   onChange={e => setNewExercise(e.target.value)}
-                  className="soft-input create-program-input exercise-input"
+                  className="soft-input create-program-input-wide exercise-input"
                 >
                   <option value="">Select an exercise</option>
                   {exercisesList.map(ex => (
@@ -211,7 +225,7 @@ function CreateProgram() {
                     as="select"
                     value={newExerciseDay}
                     onChange={e => setNewExerciseDay(Number(e.target.value))}
-                    className="soft-input create-program-input"
+                    className="soft-input create-program-input-wide"
                     style={{ backgroundColor: '#e6f0ff' }}
                   >
                     {Array.from({ length: daysPerWeek }).map((_, index) => (
@@ -249,18 +263,17 @@ function CreateProgram() {
                           {week.map((day, dayIndex) => (
                             <div key={dayIndex} className="mb-3">
                               <h6 className="soft-label">Day {dayIndex + 1}</h6>
-                              <div className="d-flex align-items-center mb-2 header-labels">
-                                <span className="soft-label flex-grow-1"></span>
+                              <div className="d-flex header-labels mb-2">
                                 <span className="soft-label sets-label">Sets</span>
                                 <span className="soft-label reps-label">Reps</span>
                               </div>
                               {day.exercises.map((ex, exIndex) => (
-                                <div key={exIndex} className="mb-2 exercise-row d-flex align-items-center desktop-row">
+                                <div key={exIndex} className="mb-2 exercise-row d-flex desktop-row">
                                   <Form.Control
                                     value={exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
                                     disabled
-                                    className="soft-input create-program-input me-2"
-                                    style={{ width: 'auto', flexGrow: 1 }}
+                                    className="soft-input create-program-input-wide me-2"
+                                    style={{ width: 'auto', flexGrow: 1, minWidth: '150px' }}
                                   />
                                   <InputGroup style={{ width: 'auto' }}>
                                     <Form.Control
@@ -270,7 +283,7 @@ function CreateProgram() {
                                       placeholder="Sets"
                                       min="1"
                                       className="soft-input create-program-input"
-                                      style={{ width: '60px' }}
+                                      style={{ width: '40px' }}
                                     />
                                     <InputGroup.Text className="soft-text">x</InputGroup.Text>
                                     <Form.Control
@@ -280,10 +293,10 @@ function CreateProgram() {
                                       placeholder="Reps"
                                       min="1"
                                       className="soft-input create-program-input"
-                                      style={{ width: '60px' }}
+                                      style={{ width: '40px' }}
                                     />
                                   </InputGroup>
-                                  <div className="preset-buttons d-flex align-items-center flex-wrap">
+                                  <div className="preset-buttons d-flex flex-wrap">
                                     <Button
                                       variant="outline-secondary"
                                       onClick={() => applyProgressionPreset(weekIndex, dayIndex, exIndex, '3x10')}

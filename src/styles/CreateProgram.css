@@ -5,6 +5,8 @@
 .create-program-card {
   border-radius: 20px;
   padding: 2rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  min-height: 300px;
 }
 
 .create-program-title {
@@ -24,14 +26,27 @@
 .create-program-input {
   border-radius: 10px;
   border: 1px solid #e9ecef;
-  width: auto;
-  /* Default flexible width */
+  width: 40px;
+  /* Default narrow width for sets/reps */
+}
+
+.create-program-input-wide {
+  border-radius: 10px;
+  border: 1px solid #e9ecef;
+  width: 100%;
+  /* Full width by default for program name, add exercise, etc. */
 }
 
 .create-program-button {
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
+}
+
+.create-program-button.gradient {
+  background: linear-gradient(90deg, #344767, #67748e);
+  color: white;
+  border: none;
 }
 
 .create-program-list-group-item {
@@ -74,127 +89,115 @@
 /* Styles for header labels */
 .header-labels {
   display: flex;
-  align-items: center;
   justify-content: flex-end;
+  gap: 10px;
+  padding-right: 250px;
+  /* Align over inputs and preset buttons */
 }
 
 .sets-label {
-  width: 60px;
+  width: 50px;
   text-align: center;
-  margin-right: 20px;
-  /* Matches "x" spacer */
 }
 
 .reps-label {
-  width: 60px;
+  width: 50px;
   text-align: center;
-  margin-right: 325px;
-  /* Desktop alignment */
 }
 
 /* Preset button alignment */
 .preset-btn {
   height: 38px;
-  /* Match Form.Control height */
   padding: 6px 12px;
-  /* Consistent padding */
   align-self: center;
-  /* Ensure vertical centering */
+}
+
+.preset-btn:hover {
+  background-color: #e9ecef;
+  border-color: #344767;
 }
 
 /* Desktop-specific row styling */
 .desktop-row {
   flex-wrap: wrap;
-  /* Allow wrapping if needed, but prioritize horizontal */
-}
-
-/* Override align-items-center on mobile */
-.align-items-center.exercise-row {
-  align-items: flex-start !important;
 }
 
 /* Responsive adjustments */
 @media (max-width: 767px) {
   .create-program-container {
-    padding: 0 0 !important;
-    /* Remove all padding on mobile */
+    padding: 0 !important;
   }
 
   .create-program-card {
     padding: 0.5rem !important;
-    /* Minimize internal padding */
     border-radius: 10px;
-    /* Keep rounded corners */
   }
 
   .header-labels {
-    justify-content: flex-start;
-  }
-
-  .sets-label {
-    margin-right: 15px;
-  }
-
-  .reps-label {
-    margin-right: 0;
+    justify-content: flex-end;
+    padding-right: 0;
+    gap: 5px;
   }
 
   .desktop-row {
     flex-direction: row !important;
-    /* Horizontal layout on mobile */
-    align-items: flex-start !important;
-    /* Left-align */
+    align-items: center !important;
     flex-wrap: wrap;
-    /* Allow wrapping if content overflows */
+    gap: 5px;
+  }
+
+  .desktop-row .create-program-input-wide {
+    min-width: 150px;
+    max-width: 100%;
+    flex: 1 1 auto;
   }
 
   .preset-buttons {
     flex-direction: row;
-    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 5px;
     width: 100%;
-    margin-top: 5px;
-    /* Tighter spacing */
+    margin-top: 10px;
+    /* Space below inputs */
   }
 
-  .preset-buttons .btn {
-    margin-right: 5px;
-    padding: 4px 8px;
-    /* Smaller buttons */
+  .preset-btn {
+    padding: 6px 10px;
+    min-width: 50px;
     font-size: 0.75rem;
-    /* Smaller text */
   }
 
-  /* Restore Program Name and Add Exercise to full width */
   .program-name-input,
   .exercise-input {
     width: 100% !important;
-    /* Full width on mobile */
   }
 
-  /* Adjust Duration and Days per Week to same line with flexible widths on mobile */
+  /* .create-program-input-wide {
+    max-width: 70%;
+  } */
+
   .create-program-form-group.d-flex.flex-row {
     flex-direction: column !important;
-    /* Default stack on mobile */
   }
 
   @media (min-width: 350px) and (max-width: 767px) {
     .create-program-form-group.d-flex.flex-row {
       flex-direction: row !important;
-      /* Horizontal on wider mobiles */
     }
 
     .duration-input,
     .days-input {
       width: 50% !important;
-      /* Equal flexible widths */
       margin-right: 5px;
-      /* Slight spacing between inputs */
     }
   }
 
-  /* Adjust input widths for sets/reps on mobile */
   .create-program-input {
-    width: 50px !important;
-    /* Reduce input width for sets/reps */
+    width: 40px !important;
+    /* Narrow but usable for sets/reps */
+  }
+
+  .week-header {
+    padding: 15px 20px;
   }
 }

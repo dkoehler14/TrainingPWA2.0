@@ -13,14 +13,29 @@ function Programs() {
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
+        // Fetch user programs
         const userProgramsQuery = query(collection(db, "programs"), where("userId", "==", user.uid));
         const userProgramsSnapshot = await getDocs(userProgramsQuery);
-        setUserPrograms(userProgramsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const userProgramsData = userProgramsSnapshot.docs.map(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          // Parse the flattened weeklyConfigs into a 2D array
+          data.weeklyConfigs = parseWeeklyConfigs(data.weeklyConfigs, data.duration, data.daysPerWeek);
+          return data;
+        });
+        setUserPrograms(userProgramsData);
 
+        // Fetch predefined programs
         const predefProgramsQuery = query(collection(db, "programs"), where("isPredefined", "==", true));
         const predefProgramsSnapshot = await getDocs(predefProgramsQuery);
-        setPredefinedPrograms(predefProgramsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const predefinedProgramsData = predefProgramsSnapshot.docs.map(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          // Parse the flattened weeklyConfigs into a 2D array
+          data.weeklyConfigs = parseWeeklyConfigs(data.weeklyConfigs, data.duration, data.daysPerWeek);
+          return data;
+        });
+        setPredefinedPrograms(predefinedProgramsData);
 
+        // Fetch exercises
         const exercisesSnapshot = await getDocs(collection(db, "exercises"));
         setExercises(exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       }
@@ -37,12 +52,17 @@ function Programs() {
         name: `${program.name} (Adopted)`,
         duration: program.duration,
         daysPerWeek: program.daysPerWeek,
-        weeklyConfigs: program.weeklyConfigs,
+        weeklyConfigs: program.weeklyConfigs, // Use the flattened object directly
         createdAt: new Date()
       });
       const userProgramsQuery = query(collection(db, "programs"), where("userId", "==", user.uid));
       const userProgramsSnapshot = await getDocs(userProgramsQuery);
-      setUserPrograms(userProgramsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const updatedUserPrograms = userProgramsSnapshot.docs.map(doc => {
+        const data = { id: doc.id, ...doc.data() };
+        data.weeklyConfigs = parseWeeklyConfigs(data.weeklyConfigs, data.duration, data.daysPerWeek);
+        return data;
+      });
+      setUserPrograms(updatedUserPrograms);
     } catch (error) {
       console.error("Error adopting program: ", error);
     }
@@ -50,6 +70,26 @@ function Programs() {
 
   const getExerciseName = (exerciseId) => {
     return exercises.find(ex => ex.id === exerciseId)?.name || 'Unknown';
+  };
+
+  // Helper function to parse the flattened weeklyConfigs object back into a 2D array
+  const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
+    const weeklyConfigs = Array.from({ length: duration }, () =>
+      Array.from({ length: daysPerWeek }, () => ({ exercises: [] }))
+    );
+
+    for (let key in flattenedConfigs) {
+      if (flattenedConfigs.hasOwnProperty(key)) {
+        const match = key.match(/week(\d+)_day(\d+)_exercises/);
+        if (match) {
+          const weekIndex = parseInt(match[1], 10) - 1; // Convert to 0-based index
+          const dayIndex = parseInt(match[2], 10) - 1; // Convert to 0-based index
+          weeklyConfigs[weekIndex][dayIndex].exercises = flattenedConfigs[key];
+        }
+      }
+    }
+
+    return weeklyConfigs;
   };
 
   return (
@@ -79,7 +119,7 @@ function Programs() {
                               <ListGroup>
                                 {day.exercises.map((ex, exIndex) => (
                                   <ListGroup.Item key={exIndex} className="soft-list-group-item list-group-item">
-                                    <strong>{getExerciseName(ex.exerciseId)}</strong> - 
+                                    <strong>{getExerciseName(ex.exerciseId)}</strong> -
                                     {ex.sets} sets x {ex.reps} reps
                                   </ListGroup.Item>
                                 ))}
@@ -111,7 +151,7 @@ function Programs() {
                             <ListGroup>
                               {day.exercises.map((ex, exIndex) => (
                                 <ListGroup.Item key={exIndex} className="soft-list-group-item list-group-item">
-                                  <strong>{getExerciseName(ex.exerciseId)}</strong> - 
+                                  <strong>{getExerciseName(ex.exerciseId)}</strong> -
                                   {ex.sets} sets x {ex.reps} reps
                                 </ListGroup.Item>
                               ))}
