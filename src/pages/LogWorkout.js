@@ -74,7 +74,7 @@ function LogWorkout() {
             where("dayIndex", "==", selectedDay)
           );
           const logsSnapshot = await getDocs(logsQuery);
-
+          
           if (!logsSnapshot.empty) {
             const log = logsSnapshot.docs[0].data();
             const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
@@ -246,7 +246,7 @@ function LogWorkout() {
 
   const finishWorkout = async () => {
     if (!user || !selectedProgram || logData.length === 0) return;
-
+    
     // Check if all sets are completed
     const allSetsCompleted = logData.every(ex =>
       ex.completed.every(c => c === true)
@@ -393,7 +393,6 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.reps[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
-                                    placeholder={`Reps for Set ${setIndex + 1}`}
                                     className="soft-input"
                                     style={{ width: '80px', display: 'inline-block' }}
                                   />
@@ -403,7 +402,6 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.weights[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weight')}
-                                    placeholder={`Weight for Set ${setIndex + 1}`}
                                     className="soft-input"
                                     style={{ width: '100px', display: 'inline-block' }}
                                   />
