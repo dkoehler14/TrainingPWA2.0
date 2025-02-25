@@ -301,7 +301,7 @@ function CreateProgram() {
                                       style={{ width: '40px' }}
                                       ref={setsRef}
                                     />
-                                    <InputGroup.Text className="soft-text">x</InputGroup.Text>
+                                    <InputGroup.Text className="soft-text" style={{ height: '38px' }}>x</InputGroup.Text>
                                     <Form.Control
                                       type="number"
                                       value={ex.reps}
