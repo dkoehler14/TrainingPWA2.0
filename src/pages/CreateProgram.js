@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Form, Button, Container, Row, Col, ListGroup, InputGroup, Accordion } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/CreateProgram.css';
 
 function CreateProgram() {
@@ -16,6 +17,18 @@ function CreateProgram() {
   const [predefinedPrograms, setPredefinedPrograms] = useState([]);
   const [activeWeek, setActiveWeek] = useState(null);
   const user = auth.currentUser;
+
+  // Refs for number inputs
+  const durationRef = useRef(null);
+  const daysPerWeekRef = useRef(null);
+  const setsRef = useRef(null); // Example for sets in exercise config
+  const repsRef = useRef(null); // Example for reps in exercise config
+
+  // Use the hook for double-click selection
+  useNumberInput(durationRef);
+  useNumberInput(daysPerWeekRef);
+  useNumberInput(setsRef);
+  useNumberInput(repsRef);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -188,6 +201,7 @@ function CreateProgram() {
                     onChange={e => handleDurationChange(Number(e.target.value))}
                     min="1"
                     className="soft-input create-program-input-wide duration-input"
+                    ref={durationRef}
                   />
                 </div>
                 <div className="flex-grow-1">
@@ -199,6 +213,7 @@ function CreateProgram() {
                     min="1"
                     max="7"
                     className="soft-input create-program-input-wide days-input"
+                    ref={daysPerWeekRef}
                   />
                 </div>
               </Form.Group>
@@ -284,6 +299,7 @@ function CreateProgram() {
                                       min="1"
                                       className="soft-input create-program-input"
                                       style={{ width: '40px' }}
+                                      ref={setsRef}
                                     />
                                     <InputGroup.Text className="soft-text">x</InputGroup.Text>
                                     <Form.Control
@@ -294,6 +310,7 @@ function CreateProgram() {
                                       min="1"
                                       className="soft-input create-program-input"
                                       style={{ width: '40px' }}
+                                      ref={repsRef}
                                     />
                                   </InputGroup>
                                   <div className="preset-buttons d-flex flex-wrap">

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner } from 'react-bootstrap';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
 import '../styles/LogWorkout.css';
 
 function LogWorkout() {
@@ -14,7 +15,19 @@ function LogWorkout() {
   const [isLoading, setIsLoading] = useState(true);
   const user = auth.currentUser;
 
+  // Refs for number inputs
+  const repsInputRef = useRef(null);
+  const weightInputRef = useRef(null);
+
+  // Use the hook for double-click selection
+  useNumberInput(repsInputRef);
+  useNumberInput(weightInputRef);
+
   useEffect(() => {
+    console.log('Refs initialized:', {
+      repsInputRef: repsInputRef.current,
+      weightInputRef: weightInputRef.current,
+    });
     const fetchData = async () => {
       if (user) {
         try {
@@ -321,7 +334,7 @@ function LogWorkout() {
             <h1 className="soft-title text-center">Log Workout</h1>
             {isLoading ? (
               <div className="text-center py-4">
-                <Spinner animation="border" variant="primary" />
+                <Spinner animation="border" className="spinner-blue" />
                 <p className="soft-text mt-2">Loading...</p>
               </div>
             ) : (
@@ -395,6 +408,7 @@ function LogWorkout() {
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
                                     className="soft-input"
                                     style={{ width: '80px', display: 'inline-block' }}
+                                    ref={repsInputRef} // Attach ref for double-click
                                   />
                                 </td>
                                 <td className="text-center">
@@ -404,6 +418,7 @@ function LogWorkout() {
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weight')}
                                     className="soft-input"
                                     style={{ width: '100px', display: 'inline-block' }}
+                                    ref={weightInputRef} // Attach ref for double-click
                                   />
                                 </td>
                                 <td className="text-center">
