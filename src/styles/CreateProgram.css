@@ -23,11 +23,19 @@
   color: #67748e;
 }
 
+/* CreateProgram.css (optional adjustments) */
 .create-program-input {
   border-radius: 10px;
   border: 1px solid #e9ecef;
-  width: 40px;
-  /* Default narrow width for sets/reps */
+  padding: 6px 12px;
+  font-size: 1rem;
+  font-family: 'Roboto', sans-serif;
+}
+
+.create-program-input:focus {
+  outline: none;
+  border-color: #0056D2;
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
 }
 
 .create-program-input-wide {
@@ -106,6 +114,13 @@
 }
 
 /* Preset button alignment */
+.preset-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 5px;
+}
+
 .preset-btn {
   height: 38px;
   padding: 6px 12px;
@@ -117,13 +132,46 @@
   border-color: #344767;
 }
 
+/* Exercise display styling */
+.exercise-display {
+  font-size: 1rem;
+  font-family: 'Roboto', sans-serif;
+  color: #344767;
+  margin-left: 10px;
+  align-self: center;
+}
+
 /* Desktop-specific row styling */
 .desktop-row {
   flex-wrap: wrap;
 }
 
+.soft-button.create-program-button {
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 /* Responsive adjustments */
 @media (max-width: 767px) {
+  .soft-button.create-program-button {
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+
+  .d-flex.align-items-center {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .soft-input,
+  .react-select-container .react-select__control {
+    min-height: 34px;
+    padding: 4px 8px;
+  }
+
   .create-program-container {
     padding: 0 !important;
   }
@@ -158,7 +206,6 @@
     gap: 5px;
     width: 100%;
     margin-top: 10px;
-    /* Space below inputs */
   }
 
   .preset-btn {
@@ -172,32 +219,62 @@
     width: 100% !important;
   }
 
-  /* .create-program-input-wide {
-    max-width: 70%;
-  } */
-
-  .create-program-form-group.d-flex.flex-row {
-    flex-direction: column !important;
-  }
-
-  @media (min-width: 350px) and (max-width: 767px) {
-    .create-program-form-group.d-flex.flex-row {
-      flex-direction: row !important;
-    }
-
-    .duration-input,
-    .days-input {
-      width: 50% !important;
-      margin-right: 5px;
-    }
-  }
-
   .create-program-input {
     width: 40px !important;
-    /* Narrow but usable for sets/reps */
   }
 
   .week-header {
     padding: 15px 20px;
   }
+
+  .exercise-display {
+    margin-left: 0;
+    margin-top: 5px;
+  }
+.create-program-table {
+  border-collapse: separate;
+  border-spacing: 0 15px;
+}
+
+.create-program-table thead th {
+  border: none;
+  background-color: #f8f9fa;
+  padding: 10px;
+}
+
+.create-program-table tbody td {
+  border: none;
+  padding: 10px;
+}
+
+.create-program-table tbody tr:not(:last-child) {
+  border-bottom: 1px solid #e9ecef;
+}
+
+.create-program-table .day-header {
+  background-color: #f1f3f5;
+  font-weight: bold;
+}
+
+.create-program-table .exercise-row td {
+  vertical-align: middle;
+}
+
+.create-program-table .preset-buttons {
+  display: flex;
+  gap: 5px;
+}
+}.create-program-table input[type="number"],
+.create-program-table input[type="text"] {
+  width: 60px;
+}
+
+.create-program-table th,
+.create-program-table td {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.create-program-table td:first-child {
+  text-align: left;
 }
