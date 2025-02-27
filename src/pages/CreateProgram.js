@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, ListGroup, Spinner, Table } from 'react-bootstrap';
+import { Trash } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
@@ -8,7 +9,7 @@ import '../styles/CreateProgram.css';
 
 function CreateProgram() {
   const [programName, setProgramName] = useState('');
-  const [weeks, setWeeks] = useState([{ days: [{ exercises: [{exerciseId: '', sets: 3, reps: 8,}] }] }]); // Start with Week 1, Day 1, and one empty exercise
+  const [weeks, setWeeks] = useState([{ days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }]); // Start with Week 1, Day 1, and one empty exercise
   const [exercises, setExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = auth.currentUser;
@@ -156,7 +157,7 @@ function CreateProgram() {
       });
       alert('Program created successfully!');
       setProgramName('');
-      setWeeks([{ days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8 }] }] }]); // Reset to Week 1, Day 1, and one empty exercise
+      const [weeks, setWeeks] = useState([{ days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }]); // Start with Week 1, Day 1, and one empty exercise
     } catch (error) {
       console.error("Error saving program: ", error);
     } finally {
@@ -239,19 +240,19 @@ function CreateProgram() {
           <th></th>
           {weeks.map((_, index) => (
             <React.Fragment key={index}>
-              <th key={index} colSpan="2">Week {index + 1}</th>
+              <th key={index} colSpan="2" style={{"text-align": "center"}}>Week {index + 1}</th>
             </React.Fragment>
           ))}
           <th>
             <Button
               onClick={addWeek}
-              className="soft-button create-program-button gradient"
+              className="soft-button gradient"
             >
               Add Week
             </Button>
           </th>
         </tr>
-        <tr>
+        {/* <tr>
           <th></th>
           {weeks.map((_, index) => (
             <React.Fragment key={index}>
@@ -260,7 +261,7 @@ function CreateProgram() {
             </React.Fragment>
           ))}
           <th></th>
-        </tr>
+        </tr> */}
       </thead>
       <tbody>
         {weeks[0].days.map((day, dayIndex) => (
@@ -270,10 +271,10 @@ function CreateProgram() {
                 Day {dayIndex + 1}
                 <Button
                   onClick={() => removeDay(dayIndex)}
-                  className="soft-button create-program-button gradient float-end"
-                  size="sm"
+                  className="ms-2 preset-btn delete-btn float-end"
+                  variant="outline-danger"
                 >
-                  <i className="bi bi-trash"></i>
+                  <Trash/>
                 </Button>
               </td>
             </tr>

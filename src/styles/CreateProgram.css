@@ -113,6 +113,11 @@
   text-align: center;
 }
 
+.delete-btn {
+  padding: 12px !important;
+  padding-top: 10px !important;
+}
+
 /* Preset button alignment */
 .preset-buttons {
   display: flex;
