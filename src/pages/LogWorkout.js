@@ -209,9 +209,9 @@ function LogWorkout() {
         where("userId", "==", user.uid),
         where("programId", "==", selectedProgram.id),
         where("weekIndex", "==", selectedWeek),
-        where("dayIndex", "==", selectedDay),
-        where("date", ">=", Timestamp.fromDate(new Date(currentDate.setHours(0, 0, 0, 0)))),
-        where("date", "<", Timestamp.fromDate(new Date(currentDate.setHours(23, 59, 59, 999))))
+        where("dayIndex", "==", selectedDay)
+        //where("date", ">=", Timestamp.fromDate(new Date(currentDate.setHours(0, 0, 0, 0)))),
+        //where("date", "<", Timestamp.fromDate(new Date(currentDate.setHours(23, 59, 59, 999))))
       );
       const logsSnapshot = await getDocs(logsQuery);
 

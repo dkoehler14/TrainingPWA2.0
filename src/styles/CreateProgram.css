@@ -27,7 +27,7 @@
 .create-program-input {
   border-radius: 10px;
   border: 1px solid #e9ecef;
-  padding: 6px 12px;
+  padding: 6px 6px !important;
   font-size: 1rem;
   font-family: 'Roboto', sans-serif;
 }
@@ -158,6 +158,10 @@
   font-weight: 500;
 }
 
+tbody, td, tfoot, th, thead, tr {
+  border: 0 !important;
+}
+
 /* Responsive adjustments */
 @media (max-width: 767px) {
   .soft-button.create-program-button {
@@ -175,10 +179,6 @@
   .react-select-container .react-select__control {
     min-height: 34px;
     padding: 4px 8px;
-  }
-
-  .create-program-container {
-    padding: 0 !important;
   }
 
   .create-program-card {
@@ -224,9 +224,9 @@
     width: 100% !important;
   }
 
-  .create-program-input {
+  /* .create-program-input {
     width: 40px !important;
-  }
+  } */
 
   .week-header {
     padding: 15px 20px;
