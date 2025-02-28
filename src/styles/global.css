@@ -70,7 +70,7 @@ body {
   border: none;
   color: #fff;
   box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); /* Blue shadow */
-  height: 38px; /* Explicit height for buttons */
+  min-height: 38px; /* Explicit height for buttons */
 }
 
 .soft-button:focus {

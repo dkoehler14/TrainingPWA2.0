@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, ListGroup, Spinner, Table } from 'react-bootstrap';
-import { Trash } from 'react-bootstrap-icons'
+import { Trash, ChevronDown, ChevronUp } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
@@ -18,6 +18,8 @@ function CreateProgram() {
   ]); // Start with Day 1, 4 weeks, and 1 empty exercise
   const [exercises, setExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
+  const [expandedExercise, setExpandedExercise] = useState(null); // Track which exercise is expanded in mobile view
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -27,6 +29,16 @@ function CreateProgram() {
   // Use the hook for double-click selection
   useNumberInput(setsRef);
   useNumberInput(repsRef);
+
+  // Check window size on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 767);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     console.log('Refs initialized:', {
@@ -111,6 +123,10 @@ function CreateProgram() {
       )
     }));
     setWeeks(newWeeks);
+    // If removing an expanded exercise, reset expandedExercise
+    if (expandedExercise && expandedExercise.dayIndex === dayIndex && expandedExercise.exIndex === exIndex) {
+      setExpandedExercise(null);
+    }
   };
 
   const applyPreset = (weekIndex, dayIndex, exIndex, preset) => {
@@ -264,31 +280,236 @@ function CreateProgram() {
     }),
   };
 
+  // Toggle expanded exercise in mobile view
+  const toggleExerciseExpand = (dayIndex, exIndex) => {
+    if (expandedExercise && expandedExercise.dayIndex === dayIndex && expandedExercise.exIndex === exIndex) {
+      setExpandedExercise(null);
+    } else {
+      setExpandedExercise({ dayIndex, exIndex });
+    }
+  };
+
+  // Function to check if an exercise is expanded
+  const isExerciseExpanded = (dayIndex, exIndex) => {
+    return expandedExercise &&
+      expandedExercise.dayIndex === dayIndex &&
+      expandedExercise.exIndex === exIndex;
+  };
+
+  // Render mobile view for exercise rows
+  const renderMobileExerciseRow = (day, dayIndex, exercise, exIndex) => {
+    const isExpanded = isExerciseExpanded(dayIndex, exIndex);
+    const selectedExercise = exercises.find(opt => opt.value === exercise.exerciseId);
+  
+    return (
+      <div key={exIndex} className="mb-3 p-2 rounded" style={{ border: '1px solid #e9ecef' }}>
+        <div 
+          className="d-flex justify-content-between align-items-center"
+          onClick={() => toggleExerciseExpand(dayIndex, exIndex)}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className="d-flex align-items-center" style={{ width: '80%' }}>
+            {selectedExercise ? (
+              <div className="text-truncate">{selectedExercise.label}</div>
+            ) : (
+              <div className="text-muted">Select Exercise</div>
+            )}
+          </div>
+          <div className="d-flex">
+            <div className="p-1">
+              {isExpanded ? <ChevronUp /> : <ChevronDown />}
+            </div>
+            <Button
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent expansion when clicking remove button
+                removeExercise(0, dayIndex, exIndex);
+              }}
+              className="p-1"
+              variant="link"
+              size="sm"
+            >
+              <Trash className="text-danger" />
+            </Button>
+          </div>
+        </div>
+  
+        {isExpanded && (
+          <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3">
+              <Form.Label>Exercise</Form.Label>
+              <Select
+                options={exercises}
+                value={selectedExercise || null}
+                onChange={(selectedOption) => updateExercise(0, dayIndex, exIndex, 'exerciseId', selectedOption)}
+                className="soft-input create-program-input"
+                styles={customStyles}
+                placeholder="Select Exercise"
+                isSearchable
+              />
+            </div>
+  
+            <div className="mb-3">
+              <Form.Label>Presets</Form.Label>
+              <div className="d-flex flex-wrap gap-2">
+                <Button
+                  onClick={() => applyPreset(0, dayIndex, exIndex, '3x8')}
+                  className="soft-button gradient preset-btn"
+                  size="sm"
+                >
+                  3x8
+                </Button>
+                <Button
+                  onClick={() => applyPreset(0, dayIndex, exIndex, '5x5')}
+                  className="soft-button gradient preset-btn"
+                  size="sm"
+                >
+                  5x5
+                </Button>
+                <Button
+                  onClick={() => applyPreset(0, dayIndex, exIndex, '3x5/3/1')}
+                  className="soft-button gradient preset-btn"
+                  size="sm"
+                >
+                  3x5/3/1
+                </Button>
+              </div>
+            </div>
+  
+            <div>
+              <Form.Label>Sets & Reps by Week</Form.Label>
+              {weeks.map((week, weekIndex) => (
+                <div key={weekIndex} className="d-flex align-items-center mb-2">
+                  <div className="me-2" style={{ width: '70px' }}>Week {weekIndex + 1}:</div>
+                  <div className="d-flex align-items-center">
+                    <Form.Control
+                      type="number"
+                      value={week.days[dayIndex].exercises[exIndex]?.sets || ''}
+                      onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'sets', e.target.value)}
+                      className="soft-input create-program-input me-1"
+                      placeholder="Sets"
+                      min="1"
+                      style={{ width: '50px', textAlign: 'center' }}
+                    />
+                    <span className="mx-1">x</span>
+                    <Form.Control
+                      type="text"
+                      value={week.days[dayIndex].exercises[exIndex]?.reps || ''}
+                      onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'reps', e.target.value)}
+                      className="soft-input create-program-input"
+                      placeholder="Reps"
+                      style={{ width: '50px', textAlign: 'center' }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Desktop view for exercise rows (original format)
+  const renderDesktopExerciseRow = (day, dayIndex, exercise, exIndex) => {
+    return (
+      <div key={exIndex} className="d-flex exercise-row mb-3 align-items-center">
+        <div style={{ width: '250px', paddingRight: '10px' }}>
+          <Select
+            options={exercises}
+            value={exercises.find(opt => opt.value === exercise.exerciseId) || null}
+            onChange={(selectedOption) => updateExercise(0, dayIndex, exIndex, 'exerciseId', selectedOption)}
+            className="soft-input create-program-input"
+            styles={customStyles}
+            placeholder="Select Exercise"
+            isSearchable
+          />
+        </div>
+        <div className="d-flex align-items-center">
+          {weeks.map((week, weekIndex) => (
+            <div key={weekIndex} style={{ width: '120px', textAlign: 'center' }}>
+              <div className="d-flex align-items-center justify-content-center">
+                <Form.Control
+                  type="number"
+                  value={week.days[dayIndex].exercises[exIndex]?.sets || ''}
+                  onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'sets', e.target.value)}
+                  className="soft-input create-program-input"
+                  placeholder="Sets"
+                  min="1"
+                  style={{ width: '40px', textAlign: 'center' }}
+                />
+                <span className="mx-1">x</span>
+                <Form.Control
+                  type="text"
+                  value={week.days[dayIndex].exercises[exIndex]?.reps || ''}
+                  onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'reps', e.target.value)}
+                  className="soft-input create-program-input"
+                  placeholder="Reps"
+                  style={{ width: '40px', textAlign: 'center' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ width: '250px' }} className="preset-buttons d-flex flex-wrap">
+          <Button
+            onClick={() => applyPreset(0, dayIndex, exIndex, '3x8')}
+            className="soft-button gradient preset-btn me-1 mb-1"
+            size="sm"
+          >
+            3x8
+          </Button>
+          <Button
+            onClick={() => applyPreset(0, dayIndex, exIndex, '5x5')}
+            className="soft-button gradient preset-btn me-1 mb-1"
+            size="sm"
+          >
+            5x5
+          </Button>
+          <Button
+            onClick={() => applyPreset(0, dayIndex, exIndex, '3x5/3/1')}
+            className="soft-button gradient preset-btn mb-1"
+            size="sm"
+          >
+            3x5/3/1
+          </Button>
+          <Button
+            onClick={() => removeExercise(0, dayIndex, exIndex)}
+            className="soft-button preset-btn delete-btn ms-1"
+            variant="outline-danger"
+            size="sm"
+          >
+            <Trash />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Container fluid className="soft-container create-program-container">
       {/* Program Name and Weight Unit inputs */}
       <Row className="mb-4 program-misc-input">
-        <Col md={3}>
-          <Form.Group className="mb-3">
+        <Col xs={12} md={6} className="mb-3 mb-md-0">
+          <Form.Group>
             <Form.Label>Program Name</Form.Label>
             <Form.Control
               type="text"
               value={programName}
               onChange={(e) => setProgramName(e.target.value)}
-              className="soft-input program-name-input"
-              style={{ width: '400px'}}
+              className="soft-input"
+              //style={{ width: '400px'}}
               placeholder="Enter program name"
               required
             />
           </Form.Group>
         </Col>
-        <Col md={1}>
-          <Form.Group className="mb-3">
+        <Col xs={12} md={6}>
+          <Form.Group>
             <Form.Label>Units</Form.Label>
             <Form.Select
               value={weightUnit}
               onChange={(e) => setWeightUnit(e.target.value)}
-              className="soft-inpu"
+              className="soft-input"
               style={{ width: '70px'}}
             >
               <option value="LB">LB</option>
@@ -297,8 +518,62 @@ function CreateProgram() {
           </Form.Group>
         </Col>
       </Row>
-      <div>
-        <div style={{ width: `${tableWidth}px`, maxWidth: '100%' }}>
+      {/* Week indicators and Add Week button */}
+      <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
+        <div className="d-flex flex-wrap">
+          {weeks.map((_, index) => (
+            <div key={index} className="me-2 mb-2">
+              <span className="badge bg-secondary">Week {index + 1}</span>
+            </div>
+          ))}
+        </div>
+        <Button onClick={addWeek} className="soft-button gradient">
+          Add Week
+        </Button>
+        <div></div>
+      </div>
+
+      {/* Day accordions with exercises */}
+      {isMobile ? (
+        // Mobile view
+        <div>
+          <Accordion defaultActiveKey="0" className="mb-4">
+            {weeks[0].days.map((day, dayIndex) => (
+              <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
+                <Accordion.Header className="d-flex justify-content-between">
+                  <span className="me-3">Day {dayIndex + 1}</span>
+                  <div onClick={(e) => e.stopPropagation()} className="me-3">
+                    <Button
+                      onClick={(e) => removeDay(dayIndex)}
+                      className="preset-btn delete-btn"
+                      variant="outline-danger"
+                      size="sm"
+                    >
+                      <Trash />
+                    </Button>
+                  </div>
+                </Accordion.Header>
+                <Accordion.Body>
+                  {day.exercises.map((exercise, exIndex) => (
+                    renderMobileExerciseRow(day, dayIndex, exercise, exIndex)
+                  ))}
+                  <div className="text-center mt-3">
+                    <Button
+                      onClick={() => addExercise(0, dayIndex)}
+                      className="soft-button gradient"
+                      size="sm"
+                    >
+                      Add Exercise
+                    </Button>
+                  </div>
+                </Accordion.Body>
+              </Accordion.Item>
+            ))}
+          </Accordion>
+        </div>
+      ) : (
+        // Desktop view (original table)
+        <div style={{ width: `${tableWidth}px`, maxWidth: '100%', overflowX: 'auto' }}>
           <Table responsive className="program-table">
             <thead>
               <tr>
@@ -308,11 +583,7 @@ function CreateProgram() {
                     <th key={index} style={{ "textAlign": "center", width: '100px' }}>Week {index + 1}</th>
                   </React.Fragment>
                 ))}
-                <th style={{ width: '235px' }}>
-                  <Button onClick={addWeek} className="soft-button gradient">
-                    Add Week
-                  </Button>
-                </th>
+                <th style={{ width: '235px' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -337,68 +608,7 @@ function CreateProgram() {
                         </Accordion.Header>
                         <Accordion.Body>
                           {day.exercises.map((exercise, exIndex) => (
-                            <div key={exIndex} className="d-flex exercise-row mb-3 align-items-center">
-                              <div style={{ width: '250px', paddingRight: '10px' }}>
-                                <Select
-                                  options={exercises}
-                                  value={exercises.find(opt => opt.value === exercise.exerciseId) || null}
-                                  onChange={(selectedOption) => updateExercise(0, dayIndex, exIndex, 'exerciseId', selectedOption)}
-                                  className="soft-input create-program-input"
-                                  styles={customStyles}
-                                  placeholder="Select Exercise"
-                                  isSearchable
-                                />
-                              </div>
-                              <div className="d-flex align-items-center">
-                                {weeks.map((week, weekIndex) => (
-                                  <div key={weekIndex} style={{ width: '120px', textAlign: 'center' }}>
-                                    <div className="d-flex align-items-center justify-content-center">
-                                      <Form.Control
-                                        type="number"
-                                        value={week.days[dayIndex].exercises[exIndex]?.sets || ''}
-                                        onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'sets', e.target.value)}
-                                        className="soft-input create-program-input"
-                                        placeholder="Sets"
-                                        min="1"
-                                        style={{ width: '40px', textAlign: 'center' }}
-                                      />
-                                      <span className="mx-1">x</span>
-                                      <Form.Control
-                                        type="text"
-                                        value={week.days[dayIndex].exercises[exIndex]?.reps || ''}
-                                        onChange={(e) => handleSetsRepsChange(weekIndex, dayIndex, exIndex, 'reps', e.target.value)}
-                                        className="soft-input create-program-input"
-                                        placeholder="Reps"
-                                        style={{ width: '40px', textAlign: 'center' }}
-                                      />
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                              <div style={{ width: '250px' }} className="preset-buttons d-flex flex-wrap">
-                                <Button
-                                  onClick={() => applyPreset(0, dayIndex, exIndex, '3x8')}
-                                  className="soft-button gradient preset-btn me-1 mb-1"
-                                  size="sm"
-                                >
-                                  3x8
-                                </Button>
-                                <Button
-                                  onClick={() => applyPreset(0, dayIndex, exIndex, '5x5')}
-                                  className="soft-button gradient preset-btn me-1 mb-1"
-                                  size="sm"
-                                >
-                                  5x5
-                                </Button>
-                                <Button
-                                  onClick={() => applyPreset(0, dayIndex, exIndex, '3x5/3/1')}
-                                  className="soft-button gradient preset-btn mb-1"
-                                  size="sm"
-                                >
-                                  3x5/3/1
-                                </Button>
-                              </div>
-                            </div>
+                            renderDesktopExerciseRow(day, dayIndex, exercise, exIndex)
                           ))}
                           <div className="text-center">
                             <Button
@@ -418,19 +628,18 @@ function CreateProgram() {
             </tbody>
           </Table>
         </div>
-      </div>
+      )}
 
-      <div className="d-flex justify-content-between mt-3">
-        <Button onClick={addDay} className="soft-button create-program-button gradient mt-3">
+      {/* Add Day and Save Program buttons */}
+      <div className={`d-flex ${isMobile ? 'flex-column program-misc-input' : 'justify-content-between'} mt-3`}>
+        <Button onClick={addDay} className={`soft-button create-program-button gradient ${isMobile ? 'mb-3 w-100' : ''}`}>
           Add Day
         </Button>
-      </div>
-      <div className="d-flex justify-content-center mt-3">
         <Button
           onClick={saveProgram}
-          className="soft-button create-program-button gradient mt-3"
-          disabled={isSubmitting}
-          style={{ float: 'right' }}
+          className={`soft-button create-program-button gradient ${isMobile ? 'w-100' : ''}`}
+          disabled={isSubmitting || !programName}
+        //style={{ float: 'right' }}
         >
           Save Program
         </Button>
