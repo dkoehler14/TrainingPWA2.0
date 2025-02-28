@@ -37,3 +37,14 @@
   font-weight: 500;
   font-family: 'Roboto', sans-serif !important;
 }
+
+/* Responsive adjustments */
+@media (max-width: 767px) {
+  .navbar-brand {
+    padding: 0.5rem; 
+  }
+
+  .soft-logout-button {
+    padding: 0.5rem;
+  }
+}

@@ -392,9 +392,9 @@ function LogWorkout() {
                         <Table responsive className="workout-log-table">
                           <thead>
                             <tr>
-                              <th>Set #</th>
+                              <th>Set</th>
                               <th>Reps</th>
-                              <th>Weight (lbs)</th>
+                              <th>Weight</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -406,8 +406,8 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.reps[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
-                                    className="soft-input"
-                                    style={{ width: '80px', display: 'inline-block' }}
+                                    className="soft-input center-input"
+                                    style={{ width: '50px', display: 'inline-block' }}
                                     ref={repsInputRef} // Attach ref for double-click
                                   />
                                 </td>
@@ -416,8 +416,8 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.weights[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weight')}
-                                    className="soft-input"
-                                    style={{ width: '100px', display: 'inline-block' }}
+                                    className="soft-input center-input"
+                                    style={{ width: '80px', display: 'inline-block' }}
                                     ref={weightInputRef} // Attach ref for double-click
                                   />
                                 </td>

@@ -120,3 +120,7 @@
   box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
   /* Subtle green glow for focus */
 }
+
+.center-input {
+  text-align: center;
+}

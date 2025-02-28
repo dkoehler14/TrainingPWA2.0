@@ -9,12 +9,13 @@ import '../styles/CreateProgram.css';
 
 function CreateProgram() {
   const [programName, setProgramName] = useState('');
+  const [weightUnit, setWeightUnit] = useState('LB');
   const [weeks, setWeeks] = useState([
     { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
     { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
     { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
     { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }
-  ]); // Start with Week 1, Day 1, and one empty exercise
+  ]); // Start with Day 1, 4 weeks, and 1 empty exercise
   const [exercises, setExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const user = auth.currentUser;
@@ -155,6 +156,7 @@ function CreateProgram() {
         userId: user.uid,
         isPredefined: false,
         name: programName,
+        weightUnit: weightUnit,
         duration: weeks.length,
         daysPerWeek: weeks[0].days.length,
         weeklyConfigs: flattenedConfigs,
@@ -162,6 +164,7 @@ function CreateProgram() {
       });
       alert('Program created successfully!');
       setProgramName('');
+      setWeightUnit('LB');
       setWeeks([{ days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }]); // Start with Week 1, Day 1, and one empty exercise
     } catch (error) {
       console.error("Error saving program: ", error);
@@ -263,6 +266,37 @@ function CreateProgram() {
 
   return (
     <Container fluid className="soft-container create-program-container">
+      {/* Program Name and Weight Unit inputs */}
+      <Row className="mb-4 program-misc-input">
+        <Col md={3}>
+          <Form.Group className="mb-3">
+            <Form.Label>Program Name</Form.Label>
+            <Form.Control
+              type="text"
+              value={programName}
+              onChange={(e) => setProgramName(e.target.value)}
+              className="soft-input program-name-input"
+              style={{ width: '400px'}}
+              placeholder="Enter program name"
+              required
+            />
+          </Form.Group>
+        </Col>
+        <Col md={1}>
+          <Form.Group className="mb-3">
+            <Form.Label>Units</Form.Label>
+            <Form.Select
+              value={weightUnit}
+              onChange={(e) => setWeightUnit(e.target.value)}
+              className="soft-inpu"
+              style={{ width: '70px'}}
+            >
+              <option value="LB">LB</option>
+              <option value="KG">KG</option>
+            </Form.Select>
+          </Form.Group>
+        </Col>
+      </Row>
       <div>
         <div style={{ width: `${tableWidth}px`, maxWidth: '100%' }}>
           <Table responsive className="program-table">

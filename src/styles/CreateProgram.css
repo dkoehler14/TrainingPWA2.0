@@ -224,6 +224,10 @@ tbody, td, tfoot, th, thead, tr {
     width: 100% !important;
   }
 
+  .program-misc-input {
+    padding: 0.5rem;
+  }
+
   /* .create-program-input {
     width: 40px !important;
   } */
