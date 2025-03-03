@@ -49,11 +49,14 @@ function LogWorkout() {
           const exercisesSnapshot = await getDocs(collection(db, "exercises"));
           setExercisesList(exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
+          // Check for a current program first, then fall back to most recent if none is marked current
+          const currentProgram = programsData.find(program => program.isCurrent === true);
+          const programToSelect = currentProgram || (programsData.length > 0 ? programsData[0] : null);
+
           // Autopopulate the most recent program
-          if (programsData.length > 0) {
-            const mostRecentProgram = programsData[0];
-            setSelectedProgram(mostRecentProgram);
-            const uncompletedDay = await findEarliestUncompletedDay(mostRecentProgram);
+          if (programToSelect) {
+            setSelectedProgram(programToSelect);
+            const uncompletedDay = await findEarliestUncompletedDay(programToSelect);
             if (uncompletedDay) {
               setSelectedWeek(uncompletedDay.week);
               setSelectedDay(uncompletedDay.day);
@@ -349,7 +352,9 @@ function LogWorkout() {
                   >
                     <option value="">Select a program</option>
                     {programs.map(program => (
-                      <option key={program.id} value={program.id}>{program.name}</option>
+                      <option key={program.id} value={program.id}>
+                        {program.name} {program.isCurrent ? "(Current)" : ""}
+                      </option>
                     ))}
                   </Form.Control>
                 </Form.Group>
