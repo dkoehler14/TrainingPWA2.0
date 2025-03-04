@@ -45,7 +45,7 @@ function ProgressTracker() {
         const fetchedExercises = exercisesSnapshot.docs.map(doc => ({
             value: doc.id,
             label: doc.data().name,
-            bodyPart: doc.data().bodyPart || 'Other'
+            primaryMuscleGroup: doc.data().primaryMuscleGroup || 'Other'
         }));
         setExercises(fetchedExercises);
         if (fetchedExercises.length > 0) {
@@ -253,7 +253,7 @@ function ProgressTracker() {
                 stats[exercise.label] = {
                     maxWeight,
                     frequency: exerciseLogs.length,
-                    bodyPart: exercise.bodyPart,
+                    bodyPart: exercise.primaryMuscleGroup,
                     volumeTrend
                 };
             }
@@ -270,8 +270,8 @@ function ProgressTracker() {
             log.exercises.forEach(exercise => {
                 const exerciseInfo = exercises.find(e => e.value === exercise.exerciseId);
                 if (exerciseInfo) {
-                    const bodyPart = exerciseInfo.bodyPart || 'Other';
-                    bodyPartCount[bodyPart] = (bodyPartCount[bodyPart] || 0) + 1;
+                    const muscleGroup = exerciseInfo.primaryMuscleGroup || 'Other';
+                    bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
                 }
             });
         });

@@ -16,6 +16,11 @@
 
 .progress-tracker .card {
   margin-bottom: 20px;
+  font-family: 'Roboto', sans-serif !important;
+}
+
+.progress-tracker .card-body {
+  font-family: 'Roboto', sans-serif !important;
 }
 
 .progress-tracker .react-datepicker-wrapper {

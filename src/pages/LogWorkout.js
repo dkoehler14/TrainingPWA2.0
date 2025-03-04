@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Form, Button, Table, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Form, Button, Table, Spinner, Modal } from 'react-bootstrap';
 import { db, auth } from '../firebase';
-import { collection, getDocs, query, where, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
 import '../styles/LogWorkout.css';
 
@@ -13,6 +13,10 @@ function LogWorkout() {
   const [exercisesList, setExercisesList] = useState([]);
   const [logData, setLogData] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [alternativeExercises, setAlternativeExercises] = useState([]);
+  const [showReplaceModal, setShowReplaceModal] = useState(false);
+  const [exerciseToReplace, setExerciseToReplace] = useState(null);
+  const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false); // For adding a spinner while fetching alternatives
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -24,10 +28,6 @@ function LogWorkout() {
   useNumberInput(weightInputRef);
 
   useEffect(() => {
-    console.log('Refs initialized:', {
-      repsInputRef: repsInputRef.current,
-      weightInputRef: weightInputRef.current,
-    });
     const fetchData = async () => {
       if (user) {
         try {
@@ -90,7 +90,7 @@ function LogWorkout() {
             where("dayIndex", "==", selectedDay)
           );
           const logsSnapshot = await getDocs(logsQuery);
-          
+
           if (!logsSnapshot.empty) {
             const log = logsSnapshot.docs[0].data();
             const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
@@ -119,6 +119,60 @@ function LogWorkout() {
     };
     fetchWorkoutLog();
   }, [user, selectedProgram, selectedWeek, selectedDay]);
+
+  const openReplaceExerciseModal = async (exercise) => {
+    setExerciseToReplace(exercise);
+    setIsLoadingAlternatives(true);
+    setShowReplaceModal(true);
+
+    try {
+      // Find the original exercise to get its primary muscle groups
+      const originalExercise = exercisesList.find(ex => ex.id === exercise.exerciseId);
+      
+      if (originalExercise && originalExercise.primaryMuscleGroups) {
+        const exercisesQuery = query(
+          collection(db, "exercises"),
+          where("primaryMuscleGroups", "array-contains-any", originalExercise.primaryMuscleGroups),
+          where(documentId(), "!=", exercise.exerciseId)
+        );
+        
+        const alternativesSnapshot = await getDocs(exercisesQuery);
+        const alternatives = alternativesSnapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          // Remove duplicates
+          .filter((ex, index, self) => 
+            self.findIndex(t => t.id === ex.id) === index
+          );
+        
+        setAlternativeExercises(alternatives);
+      }
+    }
+    catch (error) {
+      console.error("Error fetching alternative exercises: ", error);
+      setAlternativeExercises([]);
+    } finally {
+      setIsLoadingAlternatives(false);
+    }
+  };
+
+  const replaceExercise = (alternativeExercise) => {
+    if (!exerciseToReplace) return;
+    console.log("Replacing exercise:", exerciseToReplace, "with:", alternativeExercise);
+
+    const newLogData = logData.map(ex =>
+      ex.exerciseId === exerciseToReplace.exerciseId
+        ? {
+          ...ex,
+          exerciseId: alternativeExercise.id,
+        }
+        : ex
+    );
+
+    setLogData(newLogData);
+    setShowReplaceModal(false);
+    setExerciseToReplace(null);
+    setAlternativeExercises([]);
+  };
 
   const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
     const weeklyConfigs = Array.from({ length: duration }, () =>
@@ -262,7 +316,7 @@ function LogWorkout() {
 
   const finishWorkout = async () => {
     if (!user || !selectedProgram || logData.length === 0) return;
-    
+
     // Check if all sets are completed
     const allSetsCompleted = logData.every(ex =>
       ex.completed.every(c => c === true)
@@ -393,7 +447,16 @@ function LogWorkout() {
 
                     {logData.map((ex, exIndex) => (
                       <div key={exIndex} className="mb-4">
-                        <h5 className="soft-label">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                        <div className="d-flex justify-content-between align-items-center">
+                          <h5 className="soft-label">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => openReplaceExerciseModal(ex)}
+                          >
+                            Replace Exercise
+                          </Button>
+                        </div>
                         <Table responsive className="workout-log-table">
                           <thead>
                             <tr>
@@ -441,6 +504,35 @@ function LogWorkout() {
                         </Table>
                       </div>
                     ))}
+
+                    {/* Modal for replacing exercises */}
+                    <Modal show={showReplaceModal} onHide={() => setShowReplaceModal(false)}>
+                      <Modal.Header closeButton>
+                        <Modal.Title>Replace Exercise</Modal.Title>
+                      </Modal.Header>
+                      <Modal.Body>
+                        <h6>Select an Alternative Exercise:</h6>
+                        {alternativeExercises.length > 0 ? (
+                          <div className="d-grid gap-2">
+                            {alternativeExercises.map(alt => (
+                              <Button
+                                key={alt.id}
+                                variant="outline-primary"
+                                onClick={() => replaceExercise(alt)}
+                              >
+                                {alt.name}
+                                <small className="text-muted d-block">
+                                  {(alt.primaryMuscleGroups || []).join(', ')}
+                                </small>
+                              </Button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p>No alternative exercises found.</p>
+                        )}
+                      </Modal.Body>
+                    </Modal>
+
                     <Button onClick={saveLog} className="soft-button gradient mb-2">Save Workout Log</Button>
                     <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
                   </>
