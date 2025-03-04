@@ -7,6 +7,7 @@ function Home() {
   const tiles = [
     { title: 'Current Workout', path: '/log-workout', description: 'Track your workout weights' },
     { title: 'Programs', path: '/programs', description: 'View your programs' },
+    { title: 'Progress', path: '/progress-tracker', description: 'View your progress'},
     { title: 'Create Program', path: '/create-program', description: 'Design a fitness program' },
     { title: 'Profile', path: '/profile', description: 'Manage your profile' },
     { title: 'Exercises', path: '/exercises', description: 'View and add exercises' },

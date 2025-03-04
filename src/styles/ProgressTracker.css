@@ -1,0 +1,27 @@
+.progress-tracker {
+  padding: 20px;
+}
+
+.progress-tracker h1, .progress-tracker h2 {
+  margin-bottom: 20px;
+}
+
+.progress-tracker .form-group {
+  margin-bottom: 15px;
+}
+
+.progress-tracker .table {
+  margin-top: 20px;
+}
+
+.progress-tracker .card {
+  margin-bottom: 20px;
+}
+
+.progress-tracker .react-datepicker-wrapper {
+  width: 100%;
+}
+
+.progress-tracker .react-datepicker-wrapper input {
+  width: 100%;
+}

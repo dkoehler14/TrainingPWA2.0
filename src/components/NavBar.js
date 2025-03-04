@@ -19,6 +19,7 @@ function NavBar({ user }) {
             <Nav.Link href="/" className="nav-link">Home</Nav.Link>
             {user && <Nav.Link href="/log-workout" className="nav-link">Current Workout</Nav.Link>}
             <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>
+            {user && <Nav.Link href="/progress-tracker" className="nav-link">Progress</Nav.Link>}
             <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
             <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}

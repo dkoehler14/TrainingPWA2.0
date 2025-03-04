@@ -7,6 +7,7 @@ import CreateProgram from './pages/CreateProgram';
 import Programs from './pages/Programs';
 import UserProfile from './pages/UserProfile';
 import LogWorkout from './pages/LogWorkout';
+import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -37,6 +38,7 @@ function App() {
         <Route path="/programs" element={user ? <Programs /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
+        <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
       </Routes>
     </Router>
