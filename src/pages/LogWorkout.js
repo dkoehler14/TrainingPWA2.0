@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal } from 'react-bootstrap';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
 import '../styles/LogWorkout.css';
+import { debounce } from 'lodash';
 
 function LogWorkout() {
   const [programs, setPrograms] = useState([]);
@@ -26,6 +27,61 @@ function LogWorkout() {
   // Use the hook for double-click selection
   useNumberInput(repsInputRef);
   useNumberInput(weightInputRef);
+
+  // Create a debounced save function
+  const debouncedSaveLog = useCallback(
+    debounce(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
+      if (!userData || !programData || exerciseData.length === 0) return;
+      try {
+        const currentDate = new Date();
+        const logsQuery = query(
+          collection(db, "workoutLogs"),
+          where("userId", "==", userData.uid),
+          where("programId", "==", programData.id),
+          where("weekIndex", "==", weekIndex),
+          where("dayIndex", "==", dayIndex)
+        );
+        const logsSnapshot = await getDocs(logsQuery);
+
+        if (!logsSnapshot.empty) {
+          // Update existing log
+          const logDoc = logsSnapshot.docs[0];
+          await updateDoc(doc(db, "workoutLogs", logDoc.id), {
+            exercises: exerciseData.map(ex => ({
+              exerciseId: ex.exerciseId,
+              sets: ex.sets,
+              reps: ex.reps,
+              weights: ex.weights,
+              completed: ex.completed
+            })),
+            date: Timestamp.fromDate(new Date()),
+            isWorkoutFinished: logsSnapshot.docs[0].data().isWorkoutFinished || false
+          });
+        } else {
+          // Create new log if none exists
+          await addDoc(collection(db, "workoutLogs"), {
+            userId: userData.uid,
+            programId: programData.id,
+            weekIndex: weekIndex,
+            dayIndex: dayIndex,
+            exercises: exerciseData.map(ex => ({
+              exerciseId: ex.exerciseId,
+              sets: ex.sets,
+              reps: ex.reps,
+              weights: ex.weights,
+              completed: ex.completed
+            })),
+            date: Timestamp.fromDate(new Date()),
+            isWorkoutFinished: false
+          });
+        }
+        console.log('Workout log auto-saved');
+      } catch (error) {
+        console.error("Error auto-saving workout log: ", error);
+      }
+    }, 1000), // 1 second debounce
+    [] // Empty dependency array ensures this is only created once
+  );
 
   useEffect(() => {
     const fetchData = async () => {
@@ -255,6 +311,11 @@ function LogWorkout() {
       newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex]; // Toggle completion
     }
     setLogData(newLogData);
+
+    // Trigger auto-save
+    if (user && selectedProgram) {
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    }
   };
 
   const saveLog = async () => {
@@ -336,8 +397,6 @@ function LogWorkout() {
         where("programId", "==", selectedProgram.id),
         where("weekIndex", "==", selectedWeek),
         where("dayIndex", "==", selectedDay),
-        where("date", ">=", Timestamp.fromDate(new Date(currentDate.setHours(0, 0, 0, 0)))),
-        where("date", "<", Timestamp.fromDate(new Date(currentDate.setHours(23, 59, 59, 999))))
       );
       const logsSnapshot = await getDocs(logsQuery);
 
@@ -533,8 +592,10 @@ function LogWorkout() {
                       </Modal.Body>
                     </Modal>
 
-                    <Button onClick={saveLog} className="soft-button gradient mb-2">Save Workout Log</Button>
-                    <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
+                    {/* <Button onClick={saveLog} className="soft-button gradient mb-2">Save Workout Log</Button> */}
+                    <div className="text-center mt-3">
+                      <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
+                    </div>
                   </>
                 )}
               </Form>
