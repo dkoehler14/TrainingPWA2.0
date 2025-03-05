@@ -185,10 +185,10 @@ function LogWorkout() {
       // Find the original exercise to get its primary muscle groups
       const originalExercise = exercisesList.find(ex => ex.id === exercise.exerciseId);
       
-      if (originalExercise && originalExercise.primaryMuscleGroups) {
+      if (originalExercise && originalExercise.primaryMuscleGroup) {
         const exercisesQuery = query(
           collection(db, "exercises"),
-          where("primaryMuscleGroups", "array-contains-any", originalExercise.primaryMuscleGroups),
+          where("primaryMuscleGroup", "==", originalExercise.primaryMuscleGroup),
           where(documentId(), "!=", exercise.exerciseId)
         );
         
