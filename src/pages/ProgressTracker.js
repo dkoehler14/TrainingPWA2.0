@@ -71,9 +71,23 @@ function ProgressTracker() {
                 exercises: data.exercises.filter(ex => ex.exerciseId === selectedExercise.value)
             };
         }).filter(log => log.exercises.length > 0);
+
         setLogs(fetchedLogs);
-        updateChartData(fetchedLogs);
-        calculateStats(fetchedLogs);
+
+        // Reset charts if no logs found for this exercise
+        if (fetchedLogs.length === 0) {
+            setChartData(null);
+            setVolumeChartData(null);
+            setRestTimeTrends(null);
+            setPR(null);
+            setFrequency(0);
+            setEstimatedOneRepMax(0);
+            setExerciseProgress([]);
+        } else {
+            updateChartData(fetchedLogs);
+            calculateStats(fetchedLogs);
+        }
+
         analyzeBodyPartFocus(logsSnapshot.docs);
         calculateConsistencyScore(logsSnapshot.docs);
     };
