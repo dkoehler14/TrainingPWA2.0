@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Form, Button, Accordion, ListGroup, Spinner, Table } from 'react-bootstrap';
-import { Trash, ChevronDown, ChevronUp } from 'react-bootstrap-icons'
+import { Container, Row, Col, Form, Button, Accordion, ListGroup, Spinner, Table, Modal, Dropdown } from 'react-bootstrap';
+import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
@@ -11,15 +11,17 @@ function CreateProgram() {
   const [programName, setProgramName] = useState('');
   const [weightUnit, setWeightUnit] = useState('LB');
   const [weeks, setWeeks] = useState([
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }
+    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
   ]); // Start with Day 1, 4 weeks, and 1 empty exercise
   const [exercises, setExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
   const [expandedExercise, setExpandedExercise] = useState(null); // Track which exercise is expanded in mobile view
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [currentNoteExercise, setCurrentNoteExercise] = useState({ weekIndex: 0, dayIndex: 0, exIndex: 0, tempNotes: '' });
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -62,6 +64,22 @@ function CreateProgram() {
     };
     fetchData();
   }, [user]);
+
+  const openNotesModal = (weekIndex, dayIndex, exIndex) => {
+    const currentNotes = weeks[0].days[dayIndex]?.exercises[exIndex]?.notes || '';
+    setCurrentNoteExercise({ weekIndex, dayIndex, exIndex, tempNotes: currentNotes });
+    setShowNotesModal(true);
+  };
+
+  const saveNotes = (notes) => {
+    const { weekIndex, dayIndex, exIndex, tempNotes } = currentNoteExercise;
+    const newWeeks = [...weeks];
+    newWeeks.forEach(week => {
+      week.days[dayIndex].exercises[exIndex].notes = tempNotes || '';
+    });
+    setWeeks(newWeeks);
+    setShowNotesModal(false);
+  };
 
   const removeDay = (dayIndex) => {
     const newWeeks = weeks.map(week => ({
@@ -164,6 +182,7 @@ function CreateProgram() {
             exerciseId: ex.exerciseId,
             sets: ex.sets,
             reps: ex.reps,
+            notes: ex.notes || '',
           }));
         });
       });
@@ -181,7 +200,12 @@ function CreateProgram() {
       alert('Program created successfully!');
       setProgramName('');
       setWeightUnit('LB');
-      setWeeks([{ days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }, { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, }] }] }]); // Start with Week 1, Day 1, and one empty exercise
+      setWeeks([
+        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+      ]); // Start with Week 1, Day 1, and one empty exercise
     } catch (error) {
       console.error("Error saving program: ", error);
     } finally {
@@ -194,6 +218,13 @@ function CreateProgram() {
     const newWeeks = [...weeks];
     newWeeks[weekIndex].days[dayIndex].exercises[exIndex][field] = value;
     setWeeks(newWeeks);
+  };
+
+  // Helper function to check if exercise has notes
+  const hasNotes = (dayIndex, exIndex) => {
+    return weeks[0].days[dayIndex]?.exercises[exIndex]?.notes && 
+           typeof weeks[0].days[dayIndex].exercises[exIndex].notes === 'string' && 
+           weeks[0].days[dayIndex].exercises[exIndex].notes.trim().length > 0;
   };
 
   // Calculate table width based on number of weeks
@@ -300,6 +331,7 @@ function CreateProgram() {
   const renderMobileExerciseRow = (day, dayIndex, exercise, exIndex) => {
     const isExpanded = isExerciseExpanded(dayIndex, exIndex);
     const selectedExercise = exercises.find(opt => opt.value === exercise.exerciseId);
+    const hasExerciseNotes = hasNotes(dayIndex, exIndex);
   
     return (
       <div key={exIndex} className="mb-3 p-2 rounded" style={{ border: '1px solid #e9ecef' }}>
@@ -403,6 +435,27 @@ function CreateProgram() {
                 </div>
               ))}
             </div>
+
+            <div className="mt-3">
+              <Button
+                onClick={() => openNotesModal(0, dayIndex, exIndex)}
+                className="soft-button w-100"
+                variant={hasExerciseNotes ? "outline-primary" : "outline-secondary"}
+                size="sm"
+              >
+                <Pencil className="me-1" />
+                {hasExerciseNotes ? 'Edit Notes' : 'Add Notes'}
+              </Button>
+              
+              {/* Preview notes if they exist */}
+              {hasExerciseNotes && (
+                <div className="mt-2 p-2 bg-light rounded">
+                  <small className="text-muted">
+                    {exercise.notes.length > 50 ? exercise.notes.substring(0, 50) + '...' : exercise.notes}
+                  </small>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -411,9 +464,43 @@ function CreateProgram() {
 
   // Desktop view for exercise rows (original format)
   const renderDesktopExerciseRow = (day, dayIndex, exercise, exIndex) => {
+    const hasExerciseNotes = hasNotes(dayIndex, exIndex);
+
     return (
       <div key={exIndex} className="d-flex exercise-row mb-3 align-items-center">
-        <div style={{ width: '250px', paddingRight: '10px' }}>
+        {/* 3-dots dropdown menu */}
+        <div style={{ width: '40px' }}>
+          <Dropdown>
+            <Dropdown.Toggle 
+              variant="light" 
+              id={`dropdown-exercise-${dayIndex}-${exIndex}`}
+              className="border-0 bg-transparent three-dots-vert"
+              style={{ padding: '0.25rem' }}
+            >
+              <ThreeDotsVertical size={18} className="three-dots-vert"/>
+            </Dropdown.Toggle>
+
+            <Dropdown.Menu>
+              <Dropdown.Item 
+                onClick={() => openNotesModal(0, dayIndex, exIndex)}
+                className="d-flex align-items-center"
+              >
+                <Pencil className="me-2" />
+                {hasExerciseNotes ? 'Edit Notes' : 'Add Notes'}
+                {hasExerciseNotes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
+              </Dropdown.Item>
+              <Dropdown.Item 
+                onClick={() => removeExercise(0, dayIndex, exIndex)}
+                className="d-flex align-items-center text-danger"
+              >
+                <Trash className="me-2" />
+                Delete Exercise
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
+        </div>
+
+        <div style={{ width: '230px', paddingRight: '10px' }}>
           <Select
             options={exercises}
             value={exercises.find(opt => opt.value === exercise.exerciseId) || null}
@@ -471,14 +558,6 @@ function CreateProgram() {
             size="sm"
           >
             3x5/3/1
-          </Button>
-          <Button
-            onClick={() => removeExercise(0, dayIndex, exIndex)}
-            className="soft-button preset-btn delete-btn ms-1"
-            variant="outline-danger"
-            size="sm"
-          >
-            <Trash />
           </Button>
         </div>
       </div>
@@ -644,6 +723,43 @@ function CreateProgram() {
           Save Program
         </Button>
       </div>
+
+      {/* Notes Modal */}
+      <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            Exercise Notes
+            {currentNoteExercise.dayIndex !== null && (
+              <div className="text-muted fs-6">
+                {exercises.find(e => e.value === weeks[0].days[currentNoteExercise.dayIndex]?.exercises[currentNoteExercise.exIndex]?.exerciseId)?.label || 'Exercise'}
+              </div>
+            )}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Control
+            as="textarea"
+            rows={5}
+            value={currentNoteExercise.tempNotes || ''}
+            onChange={(e) => {
+              setCurrentNoteExercise(prev => ({ ...prev, tempNotes: e.target.value }));
+            }}
+            className="soft-input notes-input"
+            placeholder="Add notes about weight, form cues, or any other details for this exercise"
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowNotesModal(false)}>
+            Cancel
+          </Button>
+          <Button 
+            className="soft-button gradient" 
+            onClick={saveNotes}
+          >
+            Add Note
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }

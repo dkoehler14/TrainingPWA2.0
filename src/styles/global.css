@@ -109,3 +109,15 @@ body {
 .spinner-blue {
   color: #0056D2 !important;
 }
+
+.three-dots-vert {
+  margin-bottom: 0 !important;
+}
+
+.three-dots-vert::after {
+  content: none !important;
+}
+
+.notes-input {
+  height: auto !important;
+}
