@@ -8,7 +8,7 @@ const TILES = [
   { 
     title: 'Current Workout', 
     path: '/log-workout', 
-    description: 'Track your workout weights',
+    description: 'Log your workout',
     icon: 'fitness-icon' // Optional: add icon classes
   },
   { 
@@ -26,7 +26,7 @@ const TILES = [
   { 
     title: 'Create Program', 
     path: '/create-program', 
-    description: 'Design a fitness program',
+    description: 'Design your next program',
     icon: 'create-icon'
   },
   { 
