@@ -211,23 +211,60 @@ function LogWorkout() {
     }
   };
 
-  const replaceExercise = (alternativeExercise) => {
-    if (!exerciseToReplace) return;
+  const replaceExercise = async (alternativeExercise) => {
+    if (!exerciseToReplace || !selectedProgram) return;
     console.log("Replacing exercise:", exerciseToReplace, "with:", alternativeExercise);
 
-    const newLogData = logData.map(ex =>
-      ex.exerciseId === exerciseToReplace.exerciseId
-        ? {
-          ...ex,
-          exerciseId: alternativeExercise.id,
-        }
-        : ex
-    );
+    try {
+      // Update local state first
+      const newLogData = logData.map(ex =>
+        ex.exerciseId === exerciseToReplace.exerciseId
+          ? {
+            ...ex,
+            exerciseId: alternativeExercise.id,
+          }
+          : ex
+      );
+      setLogData(newLogData);
 
-    setLogData(newLogData);
-    setShowReplaceModal(false);
-    setExerciseToReplace(null);
-    setAlternativeExercises([]);
+      // Now update the program's weeklyConfigs in Firestore
+      const programRef = doc(db, "programs", selectedProgram.id);
+
+      // Create a copy of the program's weeklyConfigs
+      const updatedWeeklyConfigs = { ...selectedProgram.weeklyConfigs };
+    
+      // Create the key in the format the program uses
+      const configKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
+    
+      // Get the current exercises for this week/day
+      const currentExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises;
+
+      // Create an updated exercises array with the replacement
+      const updatedExercises = currentExercises.map(ex => 
+        ex.exerciseId === exerciseToReplace.exerciseId
+          ? { ...ex, exerciseId: alternativeExercise.id }
+          : ex
+      );
+
+      // Update the weekly configs with the new exercise list
+      await updateDoc(programRef, {
+        [`weeklyConfigs.${configKey}`]: updatedExercises
+      });
+
+      console.log(`Updated program config for ${configKey}`);
+
+      // Update the local program state to reflect the changes
+      const updatedProgram = { ...selectedProgram };
+      updatedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises = updatedExercises;
+      setSelectedProgram(updatedProgram);
+
+      setShowReplaceModal(false);
+      setExerciseToReplace(null);
+      setAlternativeExercises([]);
+    } catch (error) {
+      console.error("Error replacing exercise: ", error);
+      alert("Failed to update program with replaced exercise.");
+    }
   };
 
   const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
