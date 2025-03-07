@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Container, Row, Col, Form, Button, Table, Spinner, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
+import { Pencil, ThreeDotsVertical } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
@@ -18,6 +19,10 @@ function LogWorkout() {
   const [showReplaceModal, setShowReplaceModal] = useState(false);
   const [exerciseToReplace, setExerciseToReplace] = useState(null);
   const [isLoadingAlternatives, setIsLoadingAlternatives] = useState(false); // For adding a spinner while fetching alternatives
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [currentExerciseIndex, setCurrentExerciseIndex] = useState(null);
+  const [exerciseNotes, setExerciseNotes] = useState('');
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -27,6 +32,16 @@ function LogWorkout() {
   // Use the hook for double-click selection
   useNumberInput(repsInputRef);
   useNumberInput(weightInputRef);
+
+  // Check window size on resize
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 767);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Create a debounced save function
   const debouncedSaveLog = useCallback(
@@ -52,7 +67,8 @@ function LogWorkout() {
               sets: ex.sets,
               reps: ex.reps,
               weights: ex.weights,
-              completed: ex.completed
+              completed: ex.completed,
+              notes: ex.notes || '' // Include the notes field
             })),
             date: Timestamp.fromDate(new Date()),
             isWorkoutFinished: logsSnapshot.docs[0].data().isWorkoutFinished || false
@@ -69,7 +85,8 @@ function LogWorkout() {
               sets: ex.sets,
               reps: ex.reps,
               weights: ex.weights,
-              completed: ex.completed
+              completed: ex.completed,
+              notes: ex.notes || '' // Include the notes field
             })),
             date: Timestamp.fromDate(new Date()),
             isWorkoutFinished: false
@@ -149,12 +166,16 @@ function LogWorkout() {
 
           if (!logsSnapshot.empty) {
             const log = logsSnapshot.docs[0].data();
-            const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
-              ...ex,
-              reps: log.exercises.find(e => e.exerciseId === ex.exerciseId)?.reps || Array(ex.sets).fill(ex.reps),
-              weights: log.exercises.find(e => e.exerciseId === ex.exerciseId)?.weights || Array(ex.sets).fill(''),
-              completed: log.exercises.find(e => e.exerciseId === ex.exerciseId)?.completed || Array(ex.sets).fill(false)
-            }));
+            const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
+              const logExercise = log.exercises.find(e => e.exerciseId === ex.exerciseId);
+              return {
+                ...ex,
+                reps: logExercise?.reps || Array(ex.sets).fill(ex.reps),
+                weights: logExercise?.weights || Array(ex.sets).fill(''),
+                completed: logExercise?.completed || Array(ex.sets).fill(false),
+                notes: logExercise?.notes || ex.notes || '' // Include both exercise notes from program and any previously saved in log
+              }
+            });
             setLogData(dayExercises);
           } else {
             // If no log exists, initialize with program data
@@ -162,9 +183,16 @@ function LogWorkout() {
               ...ex,
               reps: Array(ex.sets).fill(ex.reps), // Initialize editable reps per set
               weights: Array(ex.sets).fill(''),
-              completed: Array(ex.sets).fill(false) // Initialize completion status per set
+              completed: Array(ex.sets).fill(false), // Initialize completion status per set
+              notes: ex.notes || '' // Include any existing notes from the program
             }));
+            console.log('dayExercises', dayExercises);
             setLogData(dayExercises);
+
+            // Trigger auto-save
+            if (user && selectedProgram) {
+              debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData);
+            }
           }
         } catch (error) {
           console.error("Error fetching workout log: ", error);
@@ -176,6 +204,27 @@ function LogWorkout() {
     fetchWorkoutLog();
   }, [user, selectedProgram, selectedWeek, selectedDay]);
 
+  const openNotesModal = (exerciseIndex) => {
+    setCurrentExerciseIndex(exerciseIndex);
+    setExerciseNotes(logData[exerciseIndex].notes || '');
+    setShowNotesModal(true);
+  };
+
+  const saveNote = () => {
+    if (currentExerciseIndex === null) return;
+
+    const newLogData = [...logData];
+    newLogData[currentExerciseIndex].notes = exerciseNotes;
+    setLogData(newLogData);
+
+    // Trigger auto-save
+    if (user && selectedProgram) {
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    }
+
+    setShowNotesModal(false);
+  };
+
   const openReplaceExerciseModal = async (exercise) => {
     setExerciseToReplace(exercise);
     setIsLoadingAlternatives(true);
@@ -184,22 +233,22 @@ function LogWorkout() {
     try {
       // Find the original exercise to get its primary muscle groups
       const originalExercise = exercisesList.find(ex => ex.id === exercise.exerciseId);
-      
+
       if (originalExercise && originalExercise.primaryMuscleGroup) {
         const exercisesQuery = query(
           collection(db, "exercises"),
           where("primaryMuscleGroup", "==", originalExercise.primaryMuscleGroup),
           where(documentId(), "!=", exercise.exerciseId)
         );
-        
+
         const alternativesSnapshot = await getDocs(exercisesQuery);
         const alternatives = alternativesSnapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
           // Remove duplicates
-          .filter((ex, index, self) => 
+          .filter((ex, index, self) =>
             self.findIndex(t => t.id === ex.id) === index
           );
-        
+
         setAlternativeExercises(alternatives);
       }
     }
@@ -232,15 +281,15 @@ function LogWorkout() {
 
       // Create a copy of the program's weeklyConfigs
       const updatedWeeklyConfigs = { ...selectedProgram.weeklyConfigs };
-    
+
       // Create the key in the format the program uses
       const configKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
-    
+
       // Get the current exercises for this week/day
       const currentExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises;
 
       // Create an updated exercises array with the replacement
-      const updatedExercises = currentExercises.map(ex => 
+      const updatedExercises = currentExercises.map(ex =>
         ex.exerciseId === exerciseToReplace.exerciseId
           ? { ...ex, exerciseId: alternativeExercise.id }
           : ex
@@ -282,6 +331,8 @@ function LogWorkout() {
         }
       }
     }
+
+    console.log("parsed weekly configs:", weeklyConfigs);
 
     return weeklyConfigs;
   };
@@ -379,7 +430,8 @@ function LogWorkout() {
             sets: ex.sets,
             reps: ex.reps, // Save the edited reps per set
             weights: ex.weights,
-            completed: ex.completed // Save completion status as is
+            completed: ex.completed, // Save completion status as is
+            notes: ex.notes || '' // Save exercise notes
           })),
           date: Timestamp.fromDate(new Date()),
           isWorkoutFinished: logsSnapshot.docs[0].data().isWorkoutFinished || false // Preserve existing finish status
@@ -396,7 +448,8 @@ function LogWorkout() {
             sets: ex.sets,
             reps: ex.reps, // Save the edited reps per set
             weights: ex.weights,
-            completed: ex.completed // Save completion status as is
+            completed: ex.completed, // Save completion status as is
+            notes: ex.notes || '' // Save exercise notes
           })),
           date: Timestamp.fromDate(new Date()),
           isWorkoutFinished: false // Default to unfinished
@@ -446,7 +499,8 @@ function LogWorkout() {
             sets: ex.sets,
             reps: ex.reps, // Save the edited reps per set
             weights: ex.weights,
-            completed: ex.completed // Preserve user-selected completion status
+            completed: ex.completed, // Preserve user-selected completion status
+            notes: ex.notes || '' // Save exercise notes
           })),
           date: Timestamp.fromDate(new Date()),
           isWorkoutFinished: true // Mark the workout as finished
@@ -463,7 +517,8 @@ function LogWorkout() {
             sets: ex.sets,
             reps: ex.reps, // Save the edited reps per set
             weights: ex.weights,
-            completed: ex.completed // Preserve user-selected completion status
+            completed: ex.completed, // Preserve user-selected completion status
+            notes: ex.notes || '' // Save exercise notes
           })),
           date: Timestamp.fromDate(new Date()),
           isWorkoutFinished: true // Mark the workout as finished
@@ -544,15 +599,71 @@ function LogWorkout() {
                     {logData.map((ex, exIndex) => (
                       <div key={exIndex} className="mb-4">
                         <div className="d-flex justify-content-between align-items-center">
-                          <h5 className="soft-label">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
-                          <Button
-                            variant="outline-secondary"
-                            size="sm"
-                            onClick={() => openReplaceExerciseModal(ex)}
-                          >
-                            Replace Exercise
-                          </Button>
+                          {/* Replace buttons with a dropdown in mobile view */}
+                          {isMobile ? (
+                            <div className="d-flex align-items-center">
+                              <Dropdown>
+                                <Dropdown.Toggle
+                                  variant="light"
+                                  id={`dropdown-${exIndex}`}
+                                  className="border-0 bg-transparent three-dots-vert"
+                                  style={{ padding: '0.25rem' }}
+                                >
+                                  <ThreeDotsVertical size={20} className="three-dots-vert" />
+                                </Dropdown.Toggle>
+
+                                <Dropdown.Menu>
+                                  <Dropdown.Item
+                                    onClick={() => openNotesModal(exIndex)}
+                                    className="d-flex align-items-center"
+                                  >
+                                    <Pencil />
+                                    {ex.notes ? 'Edit Notes' : 'Add Notes'}
+                                    {ex.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
+                                  </Dropdown.Item>
+                                  <Dropdown.Item
+                                    onClick={() => openReplaceExerciseModal(ex)}
+                                    className="d-flex align-items-center"
+                                  >
+                                    Replace Exercise
+                                  </Dropdown.Item>
+                                </Dropdown.Menu>
+                              </Dropdown>
+                              <h5 className="soft-label mb-0">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                            </div>
+                          ) : (
+                            <>
+                              <h5 className="soft-label">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                              <div>
+                                <Button
+                                  variant="outline-info"
+                                  size="sm"
+                                  onClick={() => openNotesModal(exIndex)}
+                                  className="me-2"
+                                >
+                                  {ex.notes ? 'View/Edit Notes' : 'Add Notes'}
+                                </Button>
+                                <Button
+                                  variant="outline-secondary"
+                                  size="sm"
+                                  onClick={() => openReplaceExerciseModal(ex)}
+                                >
+                                  Replace Exercise
+                                </Button>
+                              </div>
+                            </>
+                          )}
                         </div>
+
+                        {/* Display notes preview if there is a note */}
+                        {ex.notes && (
+                          <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-2 bg-light border rounded`}>
+                            <small className="text-muted">
+                              <strong>Note:</strong> {ex.notes.length > 50 ? `${ex.notes.substring(0, 50)}...` : ex.notes}
+                            </small>
+                          </div>
+                        )}
+
                         <Table responsive className="workout-log-table">
                           <thead>
                             <tr>
@@ -627,6 +738,38 @@ function LogWorkout() {
                           <p>No alternative exercises found.</p>
                         )}
                       </Modal.Body>
+                    </Modal>
+
+                    {/* Modal for exercise notes */}
+                    <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
+                      <Modal.Header closeButton>
+                        <Modal.Title>
+                          {currentExerciseIndex !== null && exercisesList.find(
+                            e => e.id === logData[currentExerciseIndex]?.exerciseId
+                          )?.name || 'Exercise'} Notes
+                        </Modal.Title>
+                      </Modal.Header>
+                      <Modal.Body>
+                        <Form.Group>
+                          <Form.Label>Notes for this exercise:</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={4}
+                            value={exerciseNotes}
+                            onChange={(e) => setExerciseNotes(e.target.value)}
+                            placeholder="Enter form cues, reminders, or personal notes about this exercise..."
+                            className="soft-input notes-input"
+                          />
+                        </Form.Group>
+                      </Modal.Body>
+                      <Modal.Footer>
+                        <Button variant="secondary" onClick={() => setShowNotesModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button variant="primary" onClick={saveNote}>
+                          Save Notes
+                        </Button>
+                      </Modal.Footer>
                     </Modal>
 
                     {/* <Button onClick={saveLog} className="soft-button gradient mb-2">Save Workout Log</Button> */}
