@@ -45,6 +45,7 @@ function Auth() {
               <Form.Control
                 type="email"
                 value={email}
+                className="soft-input"
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter email"
               />
@@ -55,6 +56,7 @@ function Auth() {
               <Form.Control
                 type="password"
                 value={password}
+                className="soft-input"
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Password"
               />
@@ -66,7 +68,7 @@ function Auth() {
             <Button
               variant="link"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="mt-3"
+              className="mt-3 soft-button"
             >
               {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
             </Button>
