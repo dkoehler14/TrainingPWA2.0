@@ -62,13 +62,13 @@ function Auth() {
               />
             </Form.Group>
 
-            <Button variant="primary" type="submit" className="mt-3">
+            <Button variant="primary" type="submit" className="soft-button mt-3">
               {isSignUp ? 'Sign Up' : 'Sign In'}
             </Button>
             <Button
               variant="link"
               onClick={() => setIsSignUp(!isSignUp)}
-              className="mt-3 soft-button"
+              className="mt-3"
             >
               {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}
             </Button>

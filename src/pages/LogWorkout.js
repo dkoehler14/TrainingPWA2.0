@@ -188,11 +188,6 @@ function LogWorkout() {
             }));
             console.log('dayExercises', dayExercises);
             setLogData(dayExercises);
-
-            // Trigger auto-save
-            if (user && selectedProgram) {
-              debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData);
-            }
           }
         } catch (error) {
           console.error("Error fetching workout log: ", error);
@@ -331,8 +326,6 @@ function LogWorkout() {
         }
       }
     }
-
-    console.log("parsed weekly configs:", weeklyConfigs);
 
     return weeklyConfigs;
   };
