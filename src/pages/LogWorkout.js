@@ -168,8 +168,10 @@ function LogWorkout() {
             const log = logsSnapshot.docs[0].data();
             const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
               const logExercise = log.exercises.find(e => e.exerciseId === ex.exerciseId);
+              console.log('logExercise', logExercise);
               return {
                 ...ex,
+                sets: logExercise?.sets || ex.sets, // Use sets from log if available
                 reps: logExercise?.reps || Array(ex.sets).fill(ex.reps),
                 weights: logExercise?.weights || Array(ex.sets).fill(''),
                 completed: logExercise?.completed || Array(ex.sets).fill(false),
@@ -399,6 +401,36 @@ function LogWorkout() {
     }
   };
 
+  const handleAddSet = (exerciseIndex) => {
+    const originalExercise = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.find(
+      e => e.exerciseId === logData[exerciseIndex].exerciseId
+    );
+    if (!originalExercise) {
+      console.error("Original exercise not found");
+      return;
+    }
+
+    const newLogData = logData.map((ex, idx) => {
+      if (idx === exerciseIndex) {
+        return {
+          ...ex,
+          sets: ex.sets + 1,
+          reps: [...ex.reps, originalExercise.reps],
+          weights: [...ex.weights, ''],
+          completed: [...ex.completed, false],
+        };
+      }
+      return ex;
+    });
+
+    setLogData(newLogData);
+
+    // Trigger auto-save
+    if (user && selectedProgram) {
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    }
+  }
+
   const saveLog = async () => {
     if (!user || !selectedProgram || logData.length === 0) return;
     try {
@@ -620,6 +652,12 @@ function LogWorkout() {
                                   >
                                     Replace Exercise
                                   </Dropdown.Item>
+                                  <Dropdown.Item
+                                    onClick={() => handleAddSet(exIndex)}
+                                    className="d-flex align-items-center"
+                                  >
+                                    Add Set
+                                  </Dropdown.Item>
                                 </Dropdown.Menu>
                               </Dropdown>
                               <h5 className="soft-label mb-0">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
@@ -640,8 +678,16 @@ function LogWorkout() {
                                   variant="outline-secondary"
                                   size="sm"
                                   onClick={() => openReplaceExerciseModal(ex)}
+                                  className="me-2"
                                 >
                                   Replace Exercise
+                                </Button>
+                                <Button
+                                  variant="outline-success"
+                                  size="sm"
+                                  onClick={() => handleAddSet(exIndex)}
+                                >
+                                  Add Set
                                 </Button>
                               </div>
                             </>
@@ -650,7 +696,7 @@ function LogWorkout() {
 
                         {/* Display notes preview if there is a note */}
                         {ex.notes && (
-                          <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-2 bg-light border rounded`}>
+                          <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-1 bg-light border rounded`}>
                             <small className="text-muted">
                               <strong>Note:</strong> {ex.notes.length > 50 ? `${ex.notes.substring(0, 50)}...` : ex.notes}
                             </small>
