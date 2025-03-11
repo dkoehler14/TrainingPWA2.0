@@ -48,7 +48,7 @@ function Home() {
     <Container fluid className="soft-container home-container">
       <Row className="justify-content-center">
         <Col md={10}>
-          <h1 className="soft-title home-title text-center mb-4">Welcome to Exercise Tracker</h1>
+          <h1 className="soft-title home-title text-center mb-4">Welcome to Workout Tracker</h1>
           <Row xs={1} sm={2} md={3} lg={4} className="tile-row g-3">
             {TILES.map((tile) => (
               <Col key={tile.path}>

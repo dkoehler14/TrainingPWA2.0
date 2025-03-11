@@ -12,7 +12,7 @@ function NavBar({ user }) {
   return (
     <Navbar expand="lg" className="navbar mb-4">
       <Container fluid className="soft-container">
-        <Navbar.Brand href="/" className="navbar-brand">Exercise Tracker</Navbar.Brand>
+        <Navbar.Brand href="/" className="navbar-brand">Workout Tracker</Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" className="navbar-toggler" />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">

@@ -106,6 +106,15 @@ function CreateProgram() {
     setWeeks([...weeks, newWeek]);
   };
 
+  const removeWeek = () => {
+    if (weeks.length <= 1) {
+      alert("Cannot remove the last week. A program must have at least one week.");
+      return;
+    }
+    const newWeeks = weeks.slice(0, -1);  // Remove the last week
+    setWeeks(newWeeks);
+  };
+
   const addExercise = (weekIndex, dayIndex) => {
     const newWeeks = [...weeks];
     const exercise = {
@@ -599,16 +608,21 @@ function CreateProgram() {
       </Row>
       {/* Week indicators and Add Week button */}
       <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
-        <div className="d-flex flex-wrap">
+        <div className="d-flex flex-wrap week-indicators">
           {weeks.map((_, index) => (
             <div key={index} className="me-2 mb-2">
               <span className="badge bg-secondary">Week {index + 1}</span>
             </div>
           ))}
         </div>
-        <Button onClick={addWeek} className="soft-button gradient">
-          Add Week
-        </Button>
+        <div className={`d-flex ${isMobile ? 'flex-column w-100 button-container' : ''}`}>
+          <Button onClick={addWeek} className={`soft-button gradient ${isMobile ? 'mb-2 w-100' : 'me-2'}`}>
+            Add Week
+          </Button>
+          <Button onClick={removeWeek} className={`soft-button gradient ${isMobile ? 'w-100' : ''}`} disabled={weeks.length <= 1}>
+            Remove Week
+          </Button>
+        </div>
         <div></div>
       </div>
 

@@ -158,7 +158,12 @@
   font-weight: 500;
 }
 
-tbody, td, tfoot, th, thead, tr {
+tbody,
+td,
+tfoot,
+th,
+thead,
+tr {
   border: 0 !important;
 }
 
@@ -239,40 +244,53 @@ tbody, td, tfoot, th, thead, tr {
     margin-left: 0;
     margin-top: 5px;
   }
-.create-program-table {
-  border-collapse: separate;
-  border-spacing: 0 15px;
+
+  .create-program-table {
+    border-collapse: separate;
+    border-spacing: 0 15px;
+  }
+
+  .create-program-table thead th {
+    border: none;
+    background-color: #f8f9fa;
+    padding: 10px;
+  }
+
+  .create-program-table tbody td {
+    border: none;
+    padding: 10px;
+  }
+
+  .create-program-table tbody tr:not(:last-child) {
+    border-bottom: 1px solid #e9ecef;
+  }
+
+  .create-program-table .day-header {
+    background-color: #f1f3f5;
+    font-weight: bold;
+  }
+
+  .create-program-table .exercise-row td {
+    vertical-align: middle;
+  }
+
+  .create-program-table .preset-buttons {
+    display: flex;
+    gap: 5px;
+  }
+
+  .program-misc-input .button-container {
+    max-width: 40%;
+    /* On mobile, limit to 80% of screen width */
+  }
+
+  .program-misc-input .week-indicators {
+    max-width: 60%;
+    /* On mobile, limit to 80% of screen width */
+  }
 }
 
-.create-program-table thead th {
-  border: none;
-  background-color: #f8f9fa;
-  padding: 10px;
-}
-
-.create-program-table tbody td {
-  border: none;
-  padding: 10px;
-}
-
-.create-program-table tbody tr:not(:last-child) {
-  border-bottom: 1px solid #e9ecef;
-}
-
-.create-program-table .day-header {
-  background-color: #f1f3f5;
-  font-weight: bold;
-}
-
-.create-program-table .exercise-row td {
-  vertical-align: middle;
-}
-
-.create-program-table .preset-buttons {
-  display: flex;
-  gap: 5px;
-}
-}.create-program-table input[type="number"],
+.create-program-table input[type="number"],
 .create-program-table input[type="text"] {
   width: 60px;
 }
