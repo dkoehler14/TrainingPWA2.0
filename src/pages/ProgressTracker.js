@@ -59,18 +59,25 @@ function ProgressTracker() {
             where("userId", "==", auth.currentUser.uid),
             where("date", ">=", startDate),
             where("date", "<=", endDate),
+            where("isWorkoutFinished", "==", true),
             orderBy("date", "asc") // Changed to ascending to better show progress over time
         );
         const logsSnapshot = await getDocs(logsQuery);
-        const fetchedLogs = logsSnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                ...data,
-                date: data.date.toDate(),
-                exercises: data.exercises.filter(ex => ex.exerciseId === selectedExercise.value)
-            };
-        }).filter(log => log.exercises.length > 0);
+
+        const fetchedLogs = logsSnapshot.docs
+            .map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    date: data.date.toDate(),
+                    exercises: data.exercises.filter(ex => ex.exerciseId === selectedExercise.value),
+                };
+            })
+            .filter(log =>
+                log.exercises.length > 0 &&
+                log.exercises[0].completed.some(c => c === true) // Only include logs with at least one completed set
+            );
 
         setLogs(fetchedLogs);
 
@@ -100,7 +107,11 @@ function ProgressTracker() {
             labels: logs.map(log => log.date.toLocaleDateString()),
             datasets: [{
                 label: 'Max Weight (lbs)',
-                data: logs.map(log => Math.max(...log.exercises[0].weights)),
+                data: logs.map(log => {
+                    const exercise = log.exercises[0];
+                    const completedWeights = exercise.weights.filter((_, index) => exercise.completed[index])
+                    return completedWeights.length > 0 ? Math.max(...completedWeights) : 0;
+                }),
                 fill: false,
                 borderColor: 'rgb(75, 192, 192)',
                 tension: 0.1
@@ -116,7 +127,10 @@ function ProgressTracker() {
                 data: logs.map(log => {
                     const exercise = log.exercises[0];
                     return exercise.weights.reduce((sum, weight, index) => {
-                        return sum + weight * exercise.reps[index];
+                        if (exercise.completed[index]) {
+                            return sum + weight * exercise.reps[index];
+                        }
+                        return sum;
                     }, 0);
                 }),
                 fill: false,
@@ -170,26 +184,20 @@ function ProgressTracker() {
 
         logs.forEach(log => {
             const exercise = log.exercises[0];
-            const maxWeightForLog = Math.max(...exercise.weights);
-
-            if (maxWeightForLog > maxWeight) {
-                maxWeight = maxWeightForLog;
-                maxWeightDate = log.date;
-            }
-
-            // Calculate volume
-            const logVolume = exercise.weights.reduce((sum, weight, index) => {
-                return sum + weight * exercise.reps[index];
-            }, 0);
-            totalVolume += logVolume;
-
-            // Estimate 1RM for each set and take the highest
-            exercise.weights.forEach((weight, idx) => {
-                const reps = exercise.reps[idx];
-                if (reps <= 10) { // Brzycki formula is most accurate for reps ≤ 10
-                    // Brzycki formula: 1RM = weight × (36 / (37 - reps))
-                    const oneRM = weight * (36 / (37 - reps));
-                    oneRepMaxes.push(oneRM);
+            exercise.weights.forEach((weight, index) => {
+                if (exercise.completed[index]) {
+                    // Update max weight and date
+                    if (weight > maxWeight) {
+                        maxWeight = weight;
+                        maxWeightDate = log.date;
+                    }
+                    // Add to total volume
+                    totalVolume += weight * exercise.reps[index];
+                    // Calculate 1RM for completed sets with reps <= 10
+                    if (exercise.reps[index] <= 10) {
+                        const oneRM = weight * (36 / (37 - exercise.reps[index]));
+                        oneRepMaxes.push(oneRM);
+                    }
                 }
             });
         });
@@ -197,11 +205,7 @@ function ProgressTracker() {
         setPR({ weight: maxWeight, date: maxWeightDate });
         setVolume(totalVolume);
         setFrequency(workoutCount / ((endDate - startDate) / (1000 * 60 * 60 * 24 * 7)));
-
-        // Set estimated 1RM (take the highest calculated value)
-        if (oneRepMaxes.length > 0) {
-            setEstimatedOneRepMax(Math.max(...oneRepMaxes));
-        }
+        setEstimatedOneRepMax(oneRepMaxes.length > 0 ? Math.max(...oneRepMaxes) : 0);
 
         calculateSummaryStats();
     };
@@ -213,6 +217,7 @@ function ProgressTracker() {
             where("userId", "==", auth.currentUser.uid),
             where("date", ">=", startDate),
             where("date", "<=", endDate),
+            where("isWorkoutFinished", "==", true),
             orderBy("date", "desc")
         );
 
@@ -225,20 +230,18 @@ function ProgressTracker() {
 
         // Group exercises by type
         exercises.forEach(exercise => {
-            const exerciseLogs = allLogs.filter(log =>
-                log.exercises.some(ex => ex.exerciseId === exercise.value)
-            );
+            const exerciseLogs = allLogs.filter(log => {
+                const ex = log.exercises.find(e => e.exerciseId === exercise.value);
+                return ex && ex.completed.some(c => c === true); // Only logs with at least one completed set
+            });
 
             if (exerciseLogs.length > 0) {
-                // Find logs containing this exercise
-                const allWeights = exerciseLogs.flatMap(log => {
+                const allCompletedWeights = exerciseLogs.flatMap(log => {
                     const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-                    return ex ? ex.weights : [];
+                    return ex ? ex.weights.filter((_, index) => ex.completed[index]) : [];
                 });
+                const maxWeight = allCompletedWeights.length > 0 ? Math.max(...allCompletedWeights) : 0;
 
-                const maxWeight = Math.max(...allWeights);
-
-                // Calculate volume trend (is it increasing or decreasing?)
                 let volumeTrend = 'stable';
                 if (exerciseLogs.length >= 2) {
                     const sortedLogs = [...exerciseLogs].sort((a, b) => a.date - b.date);
@@ -247,13 +250,23 @@ function ProgressTracker() {
 
                     const firstHalfAvgVolume = firstHalf.reduce((sum, log) => {
                         const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-                        const setVolume = ex ? ex.weights.reduce((s, w, i) => s + w * ex.reps[i], 0) : 0;
+                        const setVolume = ex ? ex.weights.reduce((s, w, i) => {
+                            if (ex.completed[i]) {
+                                return s + w * ex.reps[i];
+                            }
+                            return s;
+                        }, 0) : 0;
                         return sum + setVolume;
                     }, 0) / firstHalf.length;
 
                     const secondHalfAvgVolume = secondHalf.reduce((sum, log) => {
                         const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-                        const setVolume = ex ? ex.weights.reduce((s, w, i) => s + w * ex.reps[i], 0) : 0;
+                        const setVolume = ex ? ex.weights.reduce((s, w, i) => {
+                            if (ex.completed[i]) {
+                                return s + w * ex.reps[i];
+                            }
+                            return s;
+                        }, 0) : 0;
                         return sum + setVolume;
                     }, 0) / secondHalf.length;
 
@@ -282,10 +295,12 @@ function ProgressTracker() {
         logs.forEach(doc => {
             const log = doc.data();
             log.exercises.forEach(exercise => {
-                const exerciseInfo = exercises.find(e => e.value === exercise.exerciseId);
-                if (exerciseInfo) {
-                    const muscleGroup = exerciseInfo.primaryMuscleGroup || 'Other';
-                    bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
+                if (exercise.completed.some(c => c === true)) { // Only count exercises with at least one completed set
+                    const exerciseInfo = exercises.find(e => e.value === exercise.exerciseId);
+                    if (exerciseInfo) {
+                        const muscleGroup = exerciseInfo.primaryMuscleGroup || 'Other';
+                        bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
+                    }
                 }
             });
         });
@@ -606,7 +621,7 @@ function ProgressTracker() {
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Sets</th>
+                                    <th>Sets (Completed/Total)</th>
                                     <th>Reps</th>
                                     <th>Weights (lbs)</th>
                                     <th>Total Volume</th>
@@ -616,15 +631,20 @@ function ProgressTracker() {
                                 {logs.map(log => {
                                     const exercise = log.exercises[0];
                                     const totalVolume = exercise.weights.reduce((sum, weight, index) => {
-                                        return sum + weight * exercise.reps[index];
+                                        if (exercise.completed[index]) {
+                                            return sum + weight * exercise.reps[index];
+                                        }
+                                        return sum;
                                     }, 0);
 
                                     return (
                                         <tr key={log.id}>
                                             <td>{log.date.toLocaleDateString()}</td>
-                                            <td>{exercise.sets}</td>
-                                            <td>{exercise.reps.join(', ')}</td>
-                                            <td>{exercise.weights.join(', ')}</td>
+                                            <td>{exercise.completed.filter(c => c).length} / {exercise.completed.length}</td>
+                                            <td>{exercise.reps.map((rep, index) =>
+                                                exercise.completed[index] ? rep : `(${rep})`).join(', ')}</td>
+                                            <td>{exercise.weights.map((weight, index) =>
+                                                exercise.completed[index] ? weight : `(${weight})`).join(', ')}</td>
                                             <td>{totalVolume.toFixed(0)}</td>
                                         </tr>
                                     );
