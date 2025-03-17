@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
-import { Pencil, ThreeDotsVertical } from 'react-bootstrap-icons'
+import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
@@ -23,6 +23,10 @@ function LogWorkout() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(null);
   const [exerciseNotes, setExerciseNotes] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
+  const [exerciseHistoryData, setExerciseHistoryData] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -64,9 +68,9 @@ function LogWorkout() {
           await updateDoc(doc(db, "workoutLogs", logDoc.id), {
             exercises: exerciseData.map(ex => ({
               exerciseId: ex.exerciseId,
-              sets: ex.sets,
-              reps: ex.reps,
-              weights: ex.weights,
+              sets: Number(ex.sets),
+              reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+              weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
               completed: ex.completed,
               notes: ex.notes || '' // Include the notes field
             })),
@@ -200,6 +204,100 @@ function LogWorkout() {
     };
     fetchWorkoutLog();
   }, [user, selectedProgram, selectedWeek, selectedDay]);
+
+  // Add this new function to fetch exercise history
+  const fetchExerciseHistory = async (exerciseId) => {
+    if (!user || !exerciseId) return;
+
+    setIsLoadingHistory(true);
+    try {
+      // Query for all workout logs that contain this exercise
+      const logsQuery = query(
+        collection(db, "workoutLogs"),
+        where("userId", "==", user.uid),
+        where("isWorkoutFinished", "==", true),
+        orderBy("date", "desc"),
+        limit(10) // Limit to recent 10 entries
+      );
+
+      const logsSnapshot = await getDocs(logsQuery);
+      console.log(`Found ${logsSnapshot.docs.length} workout logs`);
+
+      const historyData = [];
+
+      logsSnapshot.forEach(doc => {
+        const log = doc.data();
+        console.log(`Processing log from date: ${log.date.toDate().toLocaleDateString()}`);
+
+        // Find the exercise in this log
+        const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
+
+        if (exerciseInLog) {
+          console.log(`Found exercise in log. Sets: ${exerciseInLog.sets}, Weights array length: ${exerciseInLog.weights.length}, Reps array length: ${exerciseInLog.reps.length}`);
+
+          // For each set, create a history entry
+          if (exerciseInLog.sets && Array.isArray(exerciseInLog.weights) && Array.isArray(exerciseInLog.reps)) {
+            for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
+              const weight = exerciseInLog.weights[setIndex];
+              const reps = exerciseInLog.reps[setIndex];
+
+              // Explicitly convert to numbers and validate
+              const weightValue = weight === '' || weight === null ? 0 : Number(weight);
+              const repsValue = reps === '' || reps === null ? 0 : Number(reps);
+
+              // Skip entries with no weight or reps
+              if (weightValue === 0 && repsValue === 0) continue;
+
+              // Only add valid entries
+              if (!isNaN(weightValue) && !isNaN(repsValue)) {
+                historyData.push({
+                  date: log.date.toDate(),
+                  week: log.weekIndex + 1,
+                  day: log.dayIndex + 1,
+                  set: setIndex + 1,
+                  weight: weightValue,
+                  reps: repsValue,
+                  completed: exerciseInLog.completed && exerciseInLog.completed[setIndex] ? true : false
+                });
+              }
+            }
+          }
+        }
+      });
+
+      // Sort by date (most recent first)
+      historyData.sort((a, b) => b.date - a.date);
+      console.log("Final history data:", historyData);
+
+      // Calculate stats for debugging
+      if (historyData.length > 0) {
+        const allReps = historyData.map(e => e.reps);
+        console.log("All reps values:", allReps);
+        console.log("Max reps:", Math.max(...allReps));
+        console.log("Min reps:", Math.min(...allReps));
+
+        const repSum = historyData.reduce((sum, e) => {
+          console.log(`Adding ${e.reps} to current sum ${sum}`);
+          return sum + e.reps;
+        }, 0);
+
+        console.log(`Total reps sum: ${repSum}, Count: ${historyData.length}, Average: ${repSum / historyData.length}`);
+      }
+
+      setExerciseHistoryData(historyData);
+    } catch (error) {
+      console.error("Error fetching exercise history:", error);
+      setExerciseHistoryData([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const openHistoryModal = (exercise) => {
+    setSelectedExerciseHistory(exercise);
+    setShowHistoryModal(true);
+    fetchExerciseHistory(exercise.exerciseId);
+  };
 
   const openNotesModal = (exerciseIndex) => {
     setCurrentExerciseIndex(exerciseIndex);
@@ -387,11 +485,13 @@ function LogWorkout() {
   const handleChange = (exerciseIndex, setIndex, value, field) => {
     const newLogData = [...logData];
     if (field === 'weight') {
-      newLogData[exerciseIndex].weights[setIndex] = Number(value) || '';
+      // Always store as numbers, but allow empty strings
+      newLogData[exerciseIndex].weights[setIndex] = value === '' ? '' : Number(value);
     } else if (field === 'reps') {
-      newLogData[exerciseIndex].reps[setIndex] = Number(value) || ''; // Update reps for the specific set
+      // Always store as numbers, but allow empty strings
+      newLogData[exerciseIndex].reps[setIndex] = value === '' ? '' : Number(value);
     } else if (field === 'completed') {
-      newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex]; // Toggle completion
+      newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex];
     }
     setLogData(newLogData);
 
@@ -452,9 +552,9 @@ function LogWorkout() {
         await updateDoc(doc(db, "workoutLogs", logDoc.id), {
           exercises: logData.map(ex => ({
             exerciseId: ex.exerciseId,
-            sets: ex.sets,
-            reps: ex.reps, // Save the edited reps per set
-            weights: ex.weights,
+            sets: Number(ex.sets),
+            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
             completed: ex.completed, // Save completion status as is
             notes: ex.notes || '' // Save exercise notes
           })),
@@ -521,9 +621,9 @@ function LogWorkout() {
         await updateDoc(doc(db, "workoutLogs", logDoc.id), {
           exercises: logData.map(ex => ({
             exerciseId: ex.exerciseId,
-            sets: ex.sets,
-            reps: ex.reps, // Save the edited reps per set
-            weights: ex.weights,
+            sets: Number(ex.sets),
+            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
             completed: ex.completed, // Preserve user-selected completion status
             notes: ex.notes || '' // Save exercise notes
           })),
@@ -650,13 +750,22 @@ function LogWorkout() {
                                     onClick={() => openReplaceExerciseModal(ex)}
                                     className="d-flex align-items-center"
                                   >
+                                    <ArrowLeftRight />
                                     Replace Exercise
                                   </Dropdown.Item>
                                   <Dropdown.Item
                                     onClick={() => handleAddSet(exIndex)}
                                     className="d-flex align-items-center"
                                   >
+                                    <Plus />
                                     Add Set
+                                  </Dropdown.Item>
+                                  <Dropdown.Item
+                                    onClick={() => openHistoryModal(ex)}
+                                    className="d-flex align-items-center"
+                                  >
+                                    <BarChart className="me-2" />
+                                    View History
                                   </Dropdown.Item>
                                 </Dropdown.Menu>
                               </Dropdown>
@@ -686,8 +795,16 @@ function LogWorkout() {
                                   variant="outline-success"
                                   size="sm"
                                   onClick={() => handleAddSet(exIndex)}
+                                  className="me-2"
                                 >
                                   Add Set
+                                </Button>
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={() => openHistoryModal(ex)}
+                                >
+                                  View History
                                 </Button>
                               </div>
                             </>
@@ -807,6 +924,87 @@ function LogWorkout() {
                         </Button>
                         <Button variant="primary" onClick={saveNote}>
                           Save Notes
+                        </Button>
+                      </Modal.Footer>
+                    </Modal>
+
+                    <Modal
+                      show={showHistoryModal}
+                      onHide={() => setShowHistoryModal(false)}
+                      size="lg"
+                    >
+                      <Modal.Header closeButton>
+                        <Modal.Title>
+                          {selectedExerciseHistory && exercisesList.find(
+                            e => e.id === selectedExerciseHistory?.exerciseId
+                          )?.name || 'Exercise'} History
+                        </Modal.Title>
+                      </Modal.Header>
+                      <Modal.Body>
+                        {isLoadingHistory ? (
+                          <div className="text-center py-3">
+                            <Spinner animation="border" className="spinner-blue" />
+                            <p className="mt-2">Loading history...</p>
+                          </div>
+                        ) : exerciseHistoryData.length > 0 ? (
+                          <Table responsive className="history-table">
+                            <thead>
+                              <tr>
+                                <th>Date</th>
+                                <th>Week/Day</th>
+                                <th>Set</th>
+                                <th>Weight</th>
+                                <th>Reps</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exerciseHistoryData.map((entry, index) => (
+                                <tr key={index}>
+                                  <td>{entry.date.toLocaleDateString()}</td>
+                                  <td>W{entry.week} D{entry.day}</td>
+                                  <td>{entry.set}</td>
+                                  <td>{entry.weight}</td>
+                                  <td>{entry.reps}</td>
+                                  <td>
+                                    <span className={`badge ${entry.completed ? 'bg-success' : 'bg-secondary'}`}>
+                                      {entry.completed ? 'Completed' : 'Incomplete'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        ) : (
+                          <p className="text-center">No history found for this exercise.</p>
+                        )}
+
+                        {exerciseHistoryData.length > 0 && (
+                          <div className="mt-3">
+                            <h6>Recent Performance Summary:</h6>
+                            <ul>
+                              <li>
+                                <strong>Highest Weight:</strong> {Math.max(...exerciseHistoryData.map(e => e.weight))}
+                              </li>
+                              <li>
+                                <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
+                              </li>
+                              <li>
+                                <strong>Average Weight:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.length).toFixed(1)}
+                              </li>
+                              <li>
+                                <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
+                              </li>
+                              <li>
+                                <strong>Completion Rate:</strong> {((exerciseHistoryData.filter(e => e.completed).length / exerciseHistoryData.length) * 100).toFixed(0)}%
+                              </li>
+                            </ul>
+                          </div>
+                        )}
+                      </Modal.Body>
+                      <Modal.Footer>
+                        <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
+                          Close
                         </Button>
                       </Modal.Footer>
                     </Modal>
