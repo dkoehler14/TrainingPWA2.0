@@ -301,6 +301,7 @@ function Programs() {
         show={showProgramDetails} 
         onHide={() => setShowProgramDetails(false)}
         size="lg"
+        centered
       >
         <Modal.Header closeButton>
           <Modal.Title>{selectedProgram.name}</Modal.Title>

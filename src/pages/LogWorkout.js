@@ -869,7 +869,7 @@ function LogWorkout() {
                     ))}
 
                     {/* Modal for replacing exercises */}
-                    <Modal show={showReplaceModal} onHide={() => setShowReplaceModal(false)}>
+                    <Modal show={showReplaceModal} onHide={() => setShowReplaceModal(false)} centered>
                       <Modal.Header closeButton>
                         <Modal.Title>Replace Exercise</Modal.Title>
                       </Modal.Header>
@@ -897,7 +897,7 @@ function LogWorkout() {
                     </Modal>
 
                     {/* Modal for exercise notes */}
-                    <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
+                    <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)} centered>
                       <Modal.Header closeButton>
                         <Modal.Title>
                           {currentExerciseIndex !== null && exercisesList.find(
@@ -932,6 +932,7 @@ function LogWorkout() {
                       show={showHistoryModal}
                       onHide={() => setShowHistoryModal(false)}
                       size="lg"
+                      centered
                     >
                       <Modal.Header closeButton>
                         <Modal.Title>
