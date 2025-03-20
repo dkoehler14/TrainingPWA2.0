@@ -1,6 +1,6 @@
 {
-  "short_name": "Exercise Tracker",
-  "name": "Simple Exercise Tracker",
+  "short_name": "Workout Tracker",
+  "name": "AI Workout Tracker",
   "icons": [],
   "start_url": ".",
   "display": "standalone",
