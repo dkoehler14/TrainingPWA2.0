@@ -9,6 +9,7 @@ import UserProfile from './pages/UserProfile';
 import LogWorkout from './pages/LogWorkout';
 import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
+import ProgressTracker2 from './pages/ProgressTracker2';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -40,6 +41,7 @@ function App() {
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
+        <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
       </Routes>
     </Router>
   );

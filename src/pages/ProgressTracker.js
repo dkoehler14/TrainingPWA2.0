@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button } from 'react-bootstrap';
+import { useNavigate } from'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import { db, auth } from '../firebase';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
@@ -64,6 +65,9 @@ function ProgressTracker() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isExercisesLoading, setIsExercisesLoading] = useState(false);
 	const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+
+	// Temporary
+	const navigate = useNavigate();
 
 	// Combined metrics state to reduce re-renders
 	const [metrics, setMetrics] = useState({
@@ -678,6 +682,13 @@ function ProgressTracker() {
 	return (
 		<Container className="progress-tracker">
 			<h1>Progress Tracker</h1>
+			<Button 
+                variant="primary" 
+                size="lg" 
+                onClick={() => navigate('/progress-tracker-2')}
+            >
+                Progress Tracker v2.0
+            </Button>
 			<Row>
 				<Col md={6}>
 					<Form.Group>
