@@ -316,3 +316,7 @@ tr {
   background-color: #e9ecef !important;
   /* Override inline style on hover */
 }
+
+.select-exercise-btn {
+  margin-bottom: 0 !important;
+}

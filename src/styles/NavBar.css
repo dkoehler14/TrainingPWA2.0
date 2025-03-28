@@ -36,6 +36,7 @@
   padding: 8px 16px;
   font-weight: 500;
   font-family: 'Roboto', sans-serif !important;
+  margin-bottom: 0 !important;
 }
 
 /* Responsive adjustments */

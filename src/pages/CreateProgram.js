@@ -358,7 +358,7 @@ function CreateProgram() {
               <Form.Label>Exercise</Form.Label>
               <Button
                 onClick={() => openExerciseModal(0, dayIndex, exIndex)}
-                className="soft-button w-100 text-start"
+                className="w-100 text-start"
                 variant="outline-primary"
               >
                 {selectedExercise ? selectedExercise.label : 'Select Exercise'}
@@ -454,7 +454,7 @@ function CreateProgram() {
         <div style={{ width: '230px', paddingRight: '10px' }}>
           <Button
             onClick={() => openExerciseModal(0, dayIndex, exIndex)}
-            className="soft-button w-100 text-start"
+            className="w-100 text-start select-exercise-btn"
             variant="outline-primary"
           >
             {selectedExercise ? selectedExercise.label : 'Select Exercise'}
