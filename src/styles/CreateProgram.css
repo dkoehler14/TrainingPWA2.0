@@ -304,3 +304,15 @@ tr {
 .create-program-table td:first-child {
   text-align: left;
 }
+
+.exercise-card {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  font-family: 'Roboto', sans-serif;
+  color: #344767;
+}
+
+.exercise-card:hover {
+  background-color: #e9ecef !important;
+  /* Override inline style on hover */
+}
