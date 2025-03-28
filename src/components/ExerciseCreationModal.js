@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert, InputGroup } from 'react-bootstrap';
 import { Trash } from 'react-bootstrap-icons';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 
 const MUSCLE_GROUPS = [
     'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
@@ -14,20 +14,44 @@ function ExerciseCreationModal({
     show,
     onHide,
     onExerciseAdded,  // Callback when exercise is successfully added
-    initialName = '',  // Optional pre-filled name
+    onExerciseUpdated,    // Callback for editing (optional)
+    isEditMode = false,   // Add or edit mode
+    exerciseId,           // Required if isEditMode is true
+    initialData,          // Optional object with name, primaryMuscleGroup, secondaryMuscleGroups
 }) {
     const [formData, setFormData] = useState({
-        name: initialName,
+        name: '',
         primaryMuscleGroup: '',
         secondaryMuscleGroups: [{ group: '' }]
     });
+
+    useEffect(() => {
+        if (show) {
+            if (isEditMode && initialData) {
+                const secondaryGroups = initialData.secondaryMuscleGroups?.length > 0
+                    ? initialData.secondaryMuscleGroups.map(group => ({ group }))
+                    : [{ group: '' }];
+                setFormData({
+                    name: initialData.name || '',
+                    primaryMuscleGroup: initialData?.primaryMuscleGroup || '',
+                    secondaryMuscleGroups: secondaryGroups
+                });
+            } else {
+                setFormData({
+                    name: '',
+                    primaryMuscleGroup: '',
+                    secondaryMuscleGroups: [{ group: '' }]
+                });
+            }
+        }
+    }, [show, isEditMode, initialData]);
 
     const [validationError, setValidationError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const resetForm = () => {
         setFormData({
-            name: initialName,
+            name: '',
             primaryMuscleGroup: '',
             secondaryMuscleGroups: [{ group: '' }]
         });
@@ -45,7 +69,12 @@ function ExerciseCreationModal({
         }
 
         // Check for duplicate exercise name
-        const exerciseQuery = query(collection(db, "exercises"), where("name", "==", formData.name.trim()));
+        let exerciseQuery;
+        if (isEditMode) {
+            exerciseQuery = query(collection(db, "exercises"), where("name", "==", formData.name.trim()), where("__name__", "!=", exerciseId));
+        } else {
+            exerciseQuery = query(collection(db, "exercises"), where("name", "==", formData.name.trim()));
+        }
         const querySnapshot = await getDocs(exerciseQuery);
 
         if (!querySnapshot.empty) {
@@ -80,7 +109,7 @@ function ExerciseCreationModal({
         return true;
     };
 
-    const handleAddExercise = async () => {
+    const handleSubmit = async () => {
         if (isSubmitting) return;
 
         try {
@@ -99,17 +128,25 @@ function ExerciseCreationModal({
                     .filter(Boolean),
             };
 
-            // Add to Firestore
-            const docRef = await addDoc(collection(db, "exercises"), exerciseData);
-
-            // Call the callback with the new exercise data
-            if (onExerciseAdded) {
-                onExerciseAdded({
-                    id: docRef.id,
-                    ...exerciseData,
-                    label: exerciseData.name,
-                    value: docRef.id,
-                });
+            if (isEditMode) {
+                // Update in Firestore
+                const exerciseRef = doc(db, "exercises", exerciseId);
+                await updateDoc(exerciseRef, exerciseData);
+                if (onExerciseUpdated) {
+                    onExerciseUpdated({ id: exerciseId, ...exerciseData });
+                }
+            } else {
+                // Add to Firestore
+                const docRef = await addDoc(collection(db, "exercises"), exerciseData);
+                // Call the callback with the new exercise data
+                if (onExerciseAdded) {
+                    onExerciseAdded({
+                        id: docRef.id,
+                        ...exerciseData,
+                        label: exerciseData.name,
+                        value: docRef.id,
+                    });
+                }
             }
 
             // Reset form and close modal
@@ -155,7 +192,7 @@ function ExerciseCreationModal({
     return (
         <Modal show={show} onHide={onHide} centered>
             <Modal.Header closeButton>
-                <Modal.Title>Add New Exercise</Modal.Title>
+                <Modal.Title>{isEditMode ? 'Edit Exercise' : 'Add New Exercise'}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
                 {validationError && (
@@ -232,10 +269,10 @@ function ExerciseCreationModal({
                 </Button>
                 <Button
                     variant="primary"
-                    onClick={handleAddExercise}
+                    onClick={handleSubmit}
                     disabled={isSubmitting}
                 >
-                    {isSubmitting ? 'Adding...' : 'Add Exercise'}
+                    {isSubmitting ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Exercise' : 'Add Exercise')}
                 </Button>
             </Modal.Footer>
         </Modal>

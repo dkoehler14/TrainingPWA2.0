@@ -3,6 +3,7 @@ import { Container, Row, Col, Form, Button, ListGroup, Accordion, InputGroup, Al
 import { Trash, PencilSquare, PlusLg } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import '../styles/Exercises.css';
 
 function Exercises() {
@@ -17,24 +18,28 @@ function Exercises() {
   // State for validation and feedback
   const [validationError, setValidationError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  //const [isSubmitting, setIsSubmitting] = useState(false);
   
   // State for add modal
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addFormData, setAddFormData] = useState({
-    name: '',
-    primaryMuscleGroup: '',
-    secondaryMuscleGroups: [{ group: '' }]
-  });
+  // const [showAddModal, setShowAddModal] = useState(false);
+  // const [addFormData, setAddFormData] = useState({
+  //   name: '',
+  //   primaryMuscleGroup: '',
+  //   secondaryMuscleGroups: [{ group: '' }]
+  // });
   
   // State for edit modal
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editExerciseId, setEditExerciseId] = useState(null);
-  const [editFormData, setEditFormData] = useState({
-    name: '',
-    primaryMuscleGroup: '',
-    secondaryMuscleGroups: [{ group: '' }]
-  });
+  // const [showEditModal, setShowEditModal] = useState(false);
+  // const [editExerciseId, setEditExerciseId] = useState(null);
+  // const [editFormData, setEditFormData] = useState({
+  //   name: '',
+  //   primaryMuscleGroup: '',
+  //   secondaryMuscleGroups: [{ group: '' }]
+  // });
+
+  const [showModal, setShowModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [currentExercise, setCurrentExercise] = useState(null);
 
   useEffect(() => {
     fetchExercises();
@@ -54,77 +59,97 @@ function Exercises() {
     }
   };
 
-  const resetAddForm = () => {
-    setAddFormData({
-      name: '',
-      primaryMuscleGroup: '',
-      secondaryMuscleGroups: [{ group: '' }]
-    });
-  };
+  // const resetAddForm = () => {
+  //   setAddFormData({
+  //     name: '',
+  //     primaryMuscleGroup: '',
+  //     secondaryMuscleGroups: [{ group: '' }]
+  //   });
+  // };
 
   const openAddModal = () => {
-    resetAddForm();
+    //resetAddForm();
     setValidationError('');
-    setShowAddModal(true);
+    //setShowAddModal(true);
+    setIsEditMode(false);
+    setCurrentExercise(null);
+    setShowModal(true);
   };
 
   const openEditModal = (exercise) => {
-    // Transform array of strings to array of objects for the form
-    const secondaryGroupsForForm = exercise.secondaryMuscleGroups.length > 0 
-      ? exercise.secondaryMuscleGroups.map(group => ({ group }))
-      : [{ group: '' }];
+    // // Transform array of strings to array of objects for the form
+    // const secondaryGroupsForForm = exercise.secondaryMuscleGroups.length > 0 
+    //   ? exercise.secondaryMuscleGroups.map(group => ({ group }))
+    //   : [{ group: '' }];
 
-    setEditFormData({
-      name: exercise.name,
-      primaryMuscleGroup: exercise.primaryMuscleGroup,
-      secondaryMuscleGroups: secondaryGroupsForForm
-    });
-    setEditExerciseId(exercise.id);
+    // setEditFormData({
+    //   name: exercise.name,
+    //   primaryMuscleGroup: exercise.primaryMuscleGroup,
+    //   secondaryMuscleGroups: secondaryGroupsForForm
+    // });
+    // setEditExerciseId(exercise.id);
     setValidationError('');
-    setShowEditModal(true);
+    // setShowEditModal(true);
+    setIsEditMode(true);
+    setCurrentExercise(exercise);
+    setShowModal(true);
   };
 
-  const addSecondaryMuscleGroup = (isEditForm = false) => {
-    // Get the correct form data and setter based on which form we're working with
-    const formData = isEditForm ? editFormData : addFormData;
-    const setFormData = isEditForm ? setEditFormData : setAddFormData;
-    
-    // Prevent adding more secondary muscle groups than available
-    if (formData.secondaryMuscleGroups.length < MUSCLE_GROUPS.length - 1) {
-      setFormData({
-        ...formData,
-        secondaryMuscleGroups: [...formData.secondaryMuscleGroups, { group: '' }]
-      });
-    }
+  // Callback for when a new exercise is added
+  const handleExerciseAdded = (newExercise) => {
+    setExercises(prev => [...prev, newExercise]);
+    setSuccessMessage(`Exercise "${newExercise.name}" added successfully!`);
+    setShowModal(false);
   };
 
-  const handleSecondaryMuscleGroupChange = (index, value, isEditForm = false) => {
-    // Get the correct form data and setter based on which form we're working with
-    const formData = isEditForm ? editFormData : addFormData;
-    const setFormData = isEditForm ? setEditFormData : setAddFormData;
-    
-    const updated = [...formData.secondaryMuscleGroups];
-    updated[index] = { group: value };
-    
-    setFormData({
-      ...formData,
-      secondaryMuscleGroups: updated
-    });
+  // Callback for when an exercise is updated
+  const handleExerciseUpdated = (updatedExercise) => {
+    setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex));
+    setSuccessMessage(`Exercise "${updatedExercise.name}" updated successfully!`);
+    setShowModal(false);
   };
 
-  const removeSecondaryMuscleGroup = (index, isEditForm = false) => {
-    // Get the correct form data and setter based on which form we're working with
-    const formData = isEditForm ? editFormData : addFormData;
-    const setFormData = isEditForm ? setEditFormData : setAddFormData;
+  // const addSecondaryMuscleGroup = (isEditForm = false) => {
+  //   // Get the correct form data and setter based on which form we're working with
+  //   const formData = isEditForm ? editFormData : addFormData;
+  //   const setFormData = isEditForm ? setEditFormData : setAddFormData;
     
-    const updated = [...formData.secondaryMuscleGroups];
-    updated.splice(index, 1);
+  //   // Prevent adding more secondary muscle groups than available
+  //   if (formData.secondaryMuscleGroups.length < MUSCLE_GROUPS.length - 1) {
+  //     setFormData({
+  //       ...formData,
+  //       secondaryMuscleGroups: [...formData.secondaryMuscleGroups, { group: '' }]
+  //     });
+  //   }
+  // };
+
+  // const handleSecondaryMuscleGroupChange = (index, value, isEditForm = false) => {
+  //   // Get the correct form data and setter based on which form we're working with
+  //   const formData = isEditForm ? editFormData : addFormData;
+  //   const setFormData = isEditForm ? setEditFormData : setAddFormData;
     
-    setFormData({
-      ...formData,
-      secondaryMuscleGroups: updated
-    });
-  };
+  //   const updated = [...formData.secondaryMuscleGroups];
+  //   updated[index] = { group: value };
+    
+  //   setFormData({
+  //     ...formData,
+  //     secondaryMuscleGroups: updated
+  //   });
+  // };
+
+  // const removeSecondaryMuscleGroup = (index, isEditForm = false) => {
+  //   // Get the correct form data and setter based on which form we're working with
+  //   const formData = isEditForm ? editFormData : addFormData;
+  //   const setFormData = isEditForm ? setEditFormData : setAddFormData;
+    
+  //   const updated = [...formData.secondaryMuscleGroups];
+  //   updated.splice(index, 1);
+    
+  //   setFormData({
+  //     ...formData,
+  //     secondaryMuscleGroups: updated
+  //   });
+  // };
 
   const validateExercise = async (exerciseName, primaryGroup, secondaryGroups, checkingExistingId = null) => {
     // Reset previous error message
@@ -185,92 +210,92 @@ function Exercises() {
     return true;
   };
 
-  const handleAddExercise = async () => {
-    // Prevent multiple submissions
-    if (isSubmitting) return;
+  // const handleAddExercise = async () => {
+  //   // Prevent multiple submissions
+  //   if (isSubmitting) return;
     
-    try {
-      // Validate before submission
-      const isValid = await validateExercise(
-        addFormData.name, 
-        addFormData.primaryMuscleGroup, 
-        addFormData.secondaryMuscleGroups
-      );
-      if (!isValid) return;
+  //   try {
+  //     // Validate before submission
+  //     const isValid = await validateExercise(
+  //       addFormData.name, 
+  //       addFormData.primaryMuscleGroup, 
+  //       addFormData.secondaryMuscleGroups
+  //     );
+  //     if (!isValid) return;
 
-      setIsSubmitting(true);
+  //     setIsSubmitting(true);
 
-      // Prepare exercise data
-      const exerciseData = {
-        name: addFormData.name.trim(),
-        primaryMuscleGroup: addFormData.primaryMuscleGroup,
-        secondaryMuscleGroups: addFormData.secondaryMuscleGroups
-         .map(mg => mg.group)
-         .filter(Boolean),
-      };
+  //     // Prepare exercise data
+  //     const exerciseData = {
+  //       name: addFormData.name.trim(),
+  //       primaryMuscleGroup: addFormData.primaryMuscleGroup,
+  //       secondaryMuscleGroups: addFormData.secondaryMuscleGroups
+  //        .map(mg => mg.group)
+  //        .filter(Boolean),
+  //     };
 
-      // Add to Firestore
-      await addDoc(collection(db, "exercises"), exerciseData);
+  //     // Add to Firestore
+  //     await addDoc(collection(db, "exercises"), exerciseData);
 
-      // Reset form and show success message
-      setSuccessMessage(`Exercise "${addFormData.name}" added successfully!`);
-      resetAddForm();
-      setShowAddModal(false);
+  //     // Reset form and show success message
+  //     setSuccessMessage(`Exercise "${addFormData.name}" added successfully!`);
+  //     resetAddForm();
+  //     setShowAddModal(false);
 
-      // Refresh exercises
-      await fetchExercises();
-    } catch (error) {
-      console.error("Error adding exercise: ", error);
-      setValidationError("Failed to add exercise. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  //     // Refresh exercises
+  //     await fetchExercises();
+  //   } catch (error) {
+  //     console.error("Error adding exercise: ", error);
+  //     setValidationError("Failed to add exercise. Please try again.");
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
 
-  const handleEditExercise = async () => {
-    if (isSubmitting) return;
+  // const handleEditExercise = async () => {
+  //   if (isSubmitting) return;
     
-    try {
-      // Validate the edit form data
-      const isValid = await validateExercise(
-        editFormData.name, 
-        editFormData.primaryMuscleGroup, 
-        editFormData.secondaryMuscleGroups,
-        editExerciseId
-      );
-      if (!isValid) return;
+  //   try {
+  //     // Validate the edit form data
+  //     const isValid = await validateExercise(
+  //       editFormData.name, 
+  //       editFormData.primaryMuscleGroup, 
+  //       editFormData.secondaryMuscleGroups,
+  //       editExerciseId
+  //     );
+  //     if (!isValid) return;
 
-      setIsSubmitting(true);
+  //     setIsSubmitting(true);
 
-      // Prepare exercise data
-      const exerciseData = {
-        name: editFormData.name.trim(),
-        primaryMuscleGroup: editFormData.primaryMuscleGroup,
-        secondaryMuscleGroups: editFormData.secondaryMuscleGroups
-          .map(mg => mg.group)
-          .filter(Boolean),
-      };
+  //     // Prepare exercise data
+  //     const exerciseData = {
+  //       name: editFormData.name.trim(),
+  //       primaryMuscleGroup: editFormData.primaryMuscleGroup,
+  //       secondaryMuscleGroups: editFormData.secondaryMuscleGroups
+  //         .map(mg => mg.group)
+  //         .filter(Boolean),
+  //     };
 
-      // Update in Firestore
-      const exerciseRef = doc(db, "exercises", editExerciseId);
-      await updateDoc(exerciseRef, exerciseData);
+  //     // Update in Firestore
+  //     const exerciseRef = doc(db, "exercises", editExerciseId);
+  //     await updateDoc(exerciseRef, exerciseData);
 
-      // Show success message
-      setSuccessMessage(`Exercise "${editFormData.name}" updated successfully!`);
+  //     // Show success message
+  //     setSuccessMessage(`Exercise "${editFormData.name}" updated successfully!`);
       
-      // Close modal and reset edit form
-      setShowEditModal(false);
-      setEditExerciseId(null);
+  //     // Close modal and reset edit form
+  //     setShowEditModal(false);
+  //     setEditExerciseId(null);
 
-      // Refresh exercises
-      await fetchExercises();
-    } catch (error) {
-      console.error("Error updating exercise: ", error);
-      setValidationError("Failed to update exercise. Please try again.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  //     // Refresh exercises
+  //     await fetchExercises();
+  //   } catch (error) {
+  //     console.error("Error updating exercise: ", error);
+  //     setValidationError("Failed to update exercise. Please try again.");
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
 
   const groupByPrimaryMuscle = () => {
     return exercises.reduce((acc, exercise) => {
@@ -284,69 +309,69 @@ function Exercises() {
   const groupedExercises = groupByPrimaryMuscle();
 
   // Reusable form fields component for both add and edit modals
-  const ExerciseFormFields = ({ formData, setFormData, isEditForm }) => (
-    <>
-      <Form.Group controlId={`${isEditForm ? 'edit' : 'add'}FormExerciseName`} className="mb-3">
-        <Form.Label>Exercise Name</Form.Label>
-        <Form.Control
-          type="text"
-          value={formData.name}
-          onChange={e => setFormData({...formData, name: e.target.value})}
-          placeholder="Enter exercise name"
-          className="soft-input"
-        />
-      </Form.Group>
+  // const ExerciseFormFields = ({ formData, setFormData, isEditForm }) => (
+  //   <>
+  //     <Form.Group controlId={`${isEditForm ? 'edit' : 'add'}FormExerciseName`} className="mb-3">
+  //       <Form.Label>Exercise Name</Form.Label>
+  //       <Form.Control
+  //         type="text"
+  //         value={formData.name}
+  //         onChange={e => setFormData({...formData, name: e.target.value})}
+  //         placeholder="Enter exercise name"
+  //         className="soft-input"
+  //       />
+  //     </Form.Group>
 
-      <Form.Group controlId={`${isEditForm ? 'edit' : 'add'}FormPrimaryMuscleGroup`} className="mb-3">
-        <Form.Label>Primary Muscle Group</Form.Label>
-        <Form.Control
-          as="select"
-          value={formData.primaryMuscleGroup}
-          onChange={e => setFormData({...formData, primaryMuscleGroup: e.target.value})}
-          className="soft-input"
-          required
-        >
-          <option value="">Select Primary Muscle Group</option>
-          {MUSCLE_GROUPS.map((group) => (
-            <option key={`${isEditForm ? 'edit' : 'add'}-primary-${group}`} value={group}>{group}</option>
-          ))}
-        </Form.Control>
-      </Form.Group>
+  //     <Form.Group controlId={`${isEditForm ? 'edit' : 'add'}FormPrimaryMuscleGroup`} className="mb-3">
+  //       <Form.Label>Primary Muscle Group</Form.Label>
+  //       <Form.Control
+  //         as="select"
+  //         value={formData.primaryMuscleGroup}
+  //         onChange={e => setFormData({...formData, primaryMuscleGroup: e.target.value})}
+  //         className="soft-input"
+  //         required
+  //       >
+  //         <option value="">Select Primary Muscle Group</option>
+  //         {MUSCLE_GROUPS.map((group) => (
+  //           <option key={`${isEditForm ? 'edit' : 'add'}-primary-${group}`} value={group}>{group}</option>
+  //         ))}
+  //       </Form.Control>
+  //     </Form.Group>
 
-      <Form.Label>Secondary Muscle Groups</Form.Label>
-      {formData.secondaryMuscleGroups.map((muscleGroup, index) => (
-        <InputGroup key={`${isEditForm ? 'edit' : 'add'}-secondary-${index}`} className="mb-3">
-          <Form.Control
-            as="select"
-            value={muscleGroup.group}
-            onChange={e => handleSecondaryMuscleGroupChange(index, e.target.value, isEditForm)}
-            className="soft-input"
-          >
-            <option value="">Select Secondary Muscle Group</option>
-            {MUSCLE_GROUPS.map((group) => (
-              <option key={`${isEditForm ? 'edit' : 'add'}-${group}-${index}`} value={group}>{group}</option>
-            ))}
-          </Form.Control>
-          <Button
-            variant="outline-secondary"
-            onClick={() => addSecondaryMuscleGroup(isEditForm)}
-            className="soft-button"
-          >
-            +
-          </Button>
-          {index !== 0 && (
-            <Button
-              variant="outline-danger"
-              onClick={() => removeSecondaryMuscleGroup(index, isEditForm)}
-              className="soft-button"
-            >
-              <Trash />
-            </Button>
-          )}
-        </InputGroup>
-      ))}
-    </>
-  );
+  //     <Form.Label>Secondary Muscle Groups</Form.Label>
+  //     {formData.secondaryMuscleGroups.map((muscleGroup, index) => (
+  //       <InputGroup key={`${isEditForm ? 'edit' : 'add'}-secondary-${index}`} className="mb-3">
+  //         <Form.Control
+  //           as="select"
+  //           value={muscleGroup.group}
+  //           onChange={e => handleSecondaryMuscleGroupChange(index, e.target.value, isEditForm)}
+  //           className="soft-input"
+  //         >
+  //           <option value="">Select Secondary Muscle Group</option>
+  //           {MUSCLE_GROUPS.map((group) => (
+  //             <option key={`${isEditForm ? 'edit' : 'add'}-${group}-${index}`} value={group}>{group}</option>
+  //           ))}
+  //         </Form.Control>
+  //         <Button
+  //           variant="outline-secondary"
+  //           onClick={() => addSecondaryMuscleGroup(isEditForm)}
+  //           className="soft-button"
+  //         >
+  //           +
+  //         </Button>
+  //         {index !== 0 && (
+  //           <Button
+  //             variant="outline-danger"
+  //             onClick={() => removeSecondaryMuscleGroup(index, isEditForm)}
+  //             className="soft-button"
+  //           >
+  //             <Trash />
+  //           </Button>
+  //         )}
+  //       </InputGroup>
+  //     ))}
+  //   </>
+  // );
 
   return (
     <Container fluid className="soft-container exercises-container">
@@ -355,12 +380,14 @@ function Exercises() {
           <div className="soft-card exercises-card shadow border-0">
             <h1 className="soft-title exercises-title text-center">Exercises</h1>
 
+            {/* Success message display */}
             {successMessage && (
               <Alert variant="success" onClose={() => setSuccessMessage('')} dismissible>
                 {successMessage}
               </Alert>
             )}
 
+            {/* Add exercise button */}
             <div className="d-flex justify-content-start mb-4">
               <Button 
                 onClick={openAddModal}
@@ -370,6 +397,7 @@ function Exercises() {
               </Button>
             </div>
 
+            {/* Accordion for grouped exercises */}
             <Accordion>
               {Object.keys(groupedExercises).map((muscleGroup, index) => (
                 <Accordion.Item key={index} eventKey={index.toString()} className="soft-accordion-item exercises-accordion-item">
@@ -409,8 +437,19 @@ function Exercises() {
         </Col>
       </Row>
 
+      {/* Single ExerciseCreationModal for both add and edit */}
+      <ExerciseCreationModal
+        show={showModal}
+        onHide={() => setShowModal(false)}
+        isEditMode={isEditMode}
+        exerciseId={isEditMode ? currentExercise?.id : null}
+        initialData={isEditMode ? currentExercise : null}
+        onExerciseAdded={handleExerciseAdded}
+        onExerciseUpdated={handleExerciseUpdated}
+      />
+
       {/* Add Exercise Modal */}
-      <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
+      {/* <Modal show={showAddModal} onHide={() => setShowAddModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Add New Exercise</Modal.Title>
         </Modal.Header>
@@ -441,10 +480,10 @@ function Exercises() {
             {isSubmitting ? 'Adding...' : 'Add Exercise'}
           </Button>
         </Modal.Footer>
-      </Modal>
+      </Modal> */}
 
       {/* Edit Exercise Modal */}
-      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
+      {/* <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered>
         <Modal.Header closeButton>
           <Modal.Title>Edit Exercise</Modal.Title>
         </Modal.Header>
@@ -475,7 +514,7 @@ function Exercises() {
             {isSubmitting ? 'Saving...' : 'Save Changes'}
           </Button>
         </Modal.Footer>
-      </Modal>
+      </Modal> */}
     </Container>
   );
 }
