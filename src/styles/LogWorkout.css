@@ -121,6 +121,11 @@
   /* Subtle green glow for focus */
 }
 
+.checkbox-enabled input[type="checkbox"] {
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
+  /* Subtle green glow, same as focus */
+}
+
 .center-input {
   text-align: center;
 }

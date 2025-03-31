@@ -501,6 +501,13 @@ function LogWorkout() {
     }
   };
 
+  // Helper function to check if a set can be marked as complete
+  const canMarkSetComplete = (exercise, setIndex) => {
+    const weightValue = exercise.weights[setIndex];
+    const repsValue = exercise.reps[setIndex];
+    return (weightValue !== '' && weightValue !== 0 && repsValue !== '' && repsValue !== 0);
+  };
+
   const handleAddSet = (exerciseIndex) => {
     const originalExercise = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.find(
       e => e.exerciseId === logData[exerciseIndex].exerciseId
@@ -838,8 +845,9 @@ function LogWorkout() {
                                     value={ex.reps[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
                                     className="soft-input center-input"
-                                    style={{ width: '50px', display: 'inline-block' }}
+                                    style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={repsInputRef} // Attach ref for double-click
+                                    disabled={ex.completed[setIndex]} // Disable when set is complete
                                   />
                                 </td>
                                 <td className="text-center">
@@ -848,8 +856,9 @@ function LogWorkout() {
                                     value={ex.weights[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weight')}
                                     className="soft-input center-input"
-                                    style={{ width: '80px', display: 'inline-block' }}
+                                    style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={weightInputRef} // Attach ref for double-click
+                                    disabled={ex.completed[setIndex]} // Disable when set is complete
                                   />
                                 </td>
                                 <td className="text-center">
@@ -857,8 +866,9 @@ function LogWorkout() {
                                     type="checkbox"
                                     checked={ex.completed[setIndex]}
                                     onChange={() => handleChange(exIndex, setIndex, null, 'completed')}
-                                    className="completed-checkbox"
+                                    className={`completed-checkbox ${canMarkSetComplete(ex, setIndex) ? 'checkbox-enabled' : ''}`}
                                     style={{ transform: 'scale(1.5)' }} // Larger checkbox for better touch interaction
+                                    disabled={!canMarkSetComplete(ex, setIndex)} // Disable if conditions not met
                                   />
                                 </td>
                               </tr>
