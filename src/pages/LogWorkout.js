@@ -27,6 +27,7 @@ function LogWorkout() {
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
   const [exerciseHistoryData, setExerciseHistoryData] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -170,6 +171,7 @@ function LogWorkout() {
 
           if (!logsSnapshot.empty) {
             const log = logsSnapshot.docs[0].data();
+            setIsWorkoutFinished(log.isWorkoutFinished || false);
             const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
               const logExercise = log.exercises.find(e => e.exerciseId === ex.exerciseId);
               console.log('logExercise', logExercise);
@@ -483,22 +485,16 @@ function LogWorkout() {
   };
 
   const handleChange = (exerciseIndex, setIndex, value, field) => {
+    if (isWorkoutFinished) return; // Don't allow changes if workout is finished
+    
     const newLogData = [...logData];
-    if (field === 'weight') {
-      // Always store as numbers, but allow empty strings
-      newLogData[exerciseIndex].weights[setIndex] = value === '' ? '' : Number(value);
-    } else if (field === 'reps') {
-      // Always store as numbers, but allow empty strings
-      newLogData[exerciseIndex].reps[setIndex] = value === '' ? '' : Number(value);
-    } else if (field === 'completed') {
-      newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex];
+    if (field === 'reps') {
+      newLogData[exerciseIndex].reps[setIndex] = value;
+    } else if (field === 'weights') {
+      newLogData[exerciseIndex].weights[setIndex] = value;
     }
     setLogData(newLogData);
-
-    // Trigger auto-save
-    if (user && selectedProgram) {
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
-    }
+    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
   // Helper function to check if a set can be marked as complete
@@ -509,52 +505,33 @@ function LogWorkout() {
   };
 
   const handleAddSet = (exerciseIndex) => {
-    const originalExercise = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.find(
-      e => e.exerciseId === logData[exerciseIndex].exerciseId
-    );
-    if (!originalExercise) {
-      console.error("Original exercise not found");
-      return;
-    }
-
-    const newLogData = logData.map((ex, idx) => {
-      if (idx === exerciseIndex) {
-        return {
-          ...ex,
-          sets: ex.sets + 1,
-          reps: [...ex.reps, originalExercise.reps],
-          weights: [...ex.weights, ''],
-          completed: [...ex.completed, false],
-        };
-      }
-      return ex;
-    });
-
+    if (isWorkoutFinished) return; // Don't allow adding sets if workout is finished
+    
+    const newLogData = [...logData];
+    newLogData[exerciseIndex].sets += 1;
+    newLogData[exerciseIndex].reps.push(newLogData[exerciseIndex].reps[0]);
+    newLogData[exerciseIndex].weights.push('');
+    newLogData[exerciseIndex].completed.push(false);
     setLogData(newLogData);
-
-    // Trigger auto-save
-    if (user && selectedProgram) {
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
-    }
-  }
+    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+  };
 
   const saveLog = async () => {
-    if (!user || !selectedProgram || logData.length === 0) return;
+    if (isWorkoutFinished) return; // Don't allow saving if workout is finished
+    
+    if (!user || !selectedProgram) return;
+    setIsLoading(true);
     try {
-      const currentDate = new Date();
       const logsQuery = query(
         collection(db, "workoutLogs"),
         where("userId", "==", user.uid),
         where("programId", "==", selectedProgram.id),
         where("weekIndex", "==", selectedWeek),
         where("dayIndex", "==", selectedDay)
-        //where("date", ">=", Timestamp.fromDate(new Date(currentDate.setHours(0, 0, 0, 0)))),
-        //where("date", "<", Timestamp.fromDate(new Date(currentDate.setHours(23, 59, 59, 999))))
       );
       const logsSnapshot = await getDocs(logsQuery);
 
       if (!logsSnapshot.empty) {
-        // Update existing log
         const logDoc = logsSnapshot.docs[0];
         await updateDoc(doc(db, "workoutLogs", logDoc.id), {
           exercises: logData.map(ex => ({
@@ -562,14 +539,13 @@ function LogWorkout() {
             sets: Number(ex.sets),
             reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
             weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed, // Save completion status as is
-            notes: ex.notes || '' // Save exercise notes
+            completed: ex.completed,
+            notes: ex.notes || ''
           })),
           date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: logsSnapshot.docs[0].data().isWorkoutFinished || false // Preserve existing finish status
+          isWorkoutFinished: false
         });
       } else {
-        // Create new log if none exists
         await addDoc(collection(db, "workoutLogs"), {
           userId: user.uid,
           programId: selectedProgram.id,
@@ -577,53 +553,41 @@ function LogWorkout() {
           dayIndex: selectedDay,
           exercises: logData.map(ex => ({
             exerciseId: ex.exerciseId,
-            sets: ex.sets,
-            reps: ex.reps, // Save the edited reps per set
-            weights: ex.weights,
-            completed: ex.completed, // Save completion status as is
-            notes: ex.notes || '' // Save exercise notes
+            sets: Number(ex.sets),
+            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+            completed: ex.completed,
+            notes: ex.notes || ''
           })),
           date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: false // Default to unfinished
+          isWorkoutFinished: false
         });
       }
-      alert('Workout logged successfully!');
-      setLogData([]);
-      setSelectedProgram(null);
-      setSelectedWeek(0);
-      setSelectedDay(0);
+      alert('Workout saved successfully!');
     } catch (error) {
       console.error("Error saving workout log: ", error);
+      alert('Error saving workout. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const finishWorkout = async () => {
-    if (!user || !selectedProgram || logData.length === 0) return;
-
-    // Check if all sets are completed
-    const allSetsCompleted = logData.every(ex =>
-      ex.completed.every(c => c === true)
-    );
-
-    if (!allSetsCompleted) {
-      // Show confirmation dialog if not all sets are completed
-      const confirmFinish = window.confirm("Not all sets are completed! Finish Anyway?");
-      if (!confirmFinish) return; // Exit if user cancels
-    }
-
+    if (isWorkoutFinished) return; // Don't allow finishing if already finished
+    
+    if (!user || !selectedProgram) return;
+    setIsLoading(true);
     try {
-      const currentDate = new Date();
       const logsQuery = query(
         collection(db, "workoutLogs"),
         where("userId", "==", user.uid),
         where("programId", "==", selectedProgram.id),
         where("weekIndex", "==", selectedWeek),
-        where("dayIndex", "==", selectedDay),
+        where("dayIndex", "==", selectedDay)
       );
       const logsSnapshot = await getDocs(logsQuery);
 
       if (!logsSnapshot.empty) {
-        // Update existing log with isWorkoutFinished: true, preserving completed statuses
         const logDoc = logsSnapshot.docs[0];
         await updateDoc(doc(db, "workoutLogs", logDoc.id), {
           exercises: logData.map(ex => ({
@@ -631,14 +595,13 @@ function LogWorkout() {
             sets: Number(ex.sets),
             reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
             weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed, // Preserve user-selected completion status
-            notes: ex.notes || '' // Save exercise notes
+            completed: ex.completed,
+            notes: ex.notes || ''
           })),
           date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: true // Mark the workout as finished
+          isWorkoutFinished: true
         });
       } else {
-        // Create new log if none exists, marking it as finished
         await addDoc(collection(db, "workoutLogs"), {
           userId: user.uid,
           programId: selectedProgram.id,
@@ -646,23 +609,23 @@ function LogWorkout() {
           dayIndex: selectedDay,
           exercises: logData.map(ex => ({
             exerciseId: ex.exerciseId,
-            sets: ex.sets,
-            reps: ex.reps, // Save the edited reps per set
-            weights: ex.weights,
-            completed: ex.completed, // Preserve user-selected completion status
-            notes: ex.notes || '' // Save exercise notes
+            sets: Number(ex.sets),
+            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+            completed: ex.completed,
+            notes: ex.notes || ''
           })),
           date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: true // Mark the workout as finished
+          isWorkoutFinished: true
         });
       }
+      setIsWorkoutFinished(true);
       alert('Workout finished successfully!');
-      setLogData([]);
-      setSelectedProgram(null);
-      setSelectedWeek(0);
-      setSelectedDay(0);
     } catch (error) {
-      console.error("Error finishing workout log: ", error);
+      console.error("Error finishing workout: ", error);
+      alert('Error finishing workout. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -847,18 +810,18 @@ function LogWorkout() {
                                     className="soft-input center-input"
                                     style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={repsInputRef} // Attach ref for double-click
-                                    disabled={ex.completed[setIndex]} // Disable when set is complete
+                                    disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
                                   />
                                 </td>
                                 <td className="text-center">
                                   <Form.Control
                                     type="number"
                                     value={ex.weights[setIndex] || ''}
-                                    onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weight')}
+                                    onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weights')}
                                     className="soft-input center-input"
                                     style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={weightInputRef} // Attach ref for double-click
-                                    disabled={ex.completed[setIndex]} // Disable when set is complete
+                                    disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
                                   />
                                 </td>
                                 <td className="text-center">
@@ -868,7 +831,7 @@ function LogWorkout() {
                                     onChange={() => handleChange(exIndex, setIndex, null, 'completed')}
                                     className={`completed-checkbox ${canMarkSetComplete(ex, setIndex) ? 'checkbox-enabled' : ''}`}
                                     style={{ transform: 'scale(1.5)' }} // Larger checkbox for better touch interaction
-                                    disabled={!canMarkSetComplete(ex, setIndex)} // Disable if conditions not met
+                                    disabled={!canMarkSetComplete(ex, setIndex) || isWorkoutFinished} // Disable if conditions not met or workout is finished
                                   />
                                 </td>
                               </tr>
@@ -1022,7 +985,11 @@ function LogWorkout() {
 
                     {/* <Button onClick={saveLog} className="soft-button gradient mb-2">Save Workout Log</Button> */}
                     <div className="text-center mt-3">
-                      <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
+                      {!isWorkoutFinished ? (
+                        <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
+                      ) : (
+                        <Button variant="secondary" disabled>Workout Completed</Button>
+                      )}
                     </div>
                   </>
                 )}
