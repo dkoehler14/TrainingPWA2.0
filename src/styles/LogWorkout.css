@@ -8,6 +8,12 @@
     padding: 0 !important;
     /* Remove padding on mobile */
   }
+  
+  .day-buttons button {
+    width: 50px; /* Even smaller buttons */
+    font-size: 12px; /* Slightly smaller text */
+  }
+  
 }
 
 .soft-card {
@@ -128,4 +134,33 @@
 
 .center-input {
   text-align: center;
+}
+
+.week-day-grid {
+  display: flex;
+  flex-direction: row;
+}
+
+.week-row {
+  margin-bottom: 20px;
+}
+
+.day-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.day-buttons button {
+  padding: 0.5rem !important;
+}
+
+.completed-day {
+  color: #28a745 !important;
+  border-color: #28a745 !important;
+}
+
+.completed-day:hover {
+  background-color: #28a745 !important;
+  color: #fff !important;
 }

@@ -10,6 +10,7 @@ import { debounce } from 'lodash';
 function LogWorkout() {
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [programLogs, setProgramLogs] = useState([]);
   const [selectedWeek, setSelectedWeek] = useState(0);
   const [selectedDay, setSelectedDay] = useState(0);
   const [exercisesList, setExercisesList] = useState([]);
@@ -28,6 +29,7 @@ function LogWorkout() {
   const [exerciseHistoryData, setExerciseHistoryData] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
+  const [showGridModal, setShowGridModal] = useState(false);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -154,58 +156,67 @@ function LogWorkout() {
     fetchData();
   }, [user]);
 
-  // Fetch existing workout log when program, week, or day changes
+  // Fetch workout logs when program changes
   useEffect(() => {
-    const fetchWorkoutLog = async () => {
-      if (user && selectedProgram && selectedWeek !== null && selectedDay !== null) {
-        setIsLoading(true);
-        try {
-          const logsQuery = query(
-            collection(db, "workoutLogs"),
-            where("userId", "==", user.uid),
-            where("programId", "==", selectedProgram.id),
-            where("weekIndex", "==", selectedWeek),
-            where("dayIndex", "==", selectedDay)
-          );
-          const logsSnapshot = await getDocs(logsQuery);
-
-          if (!logsSnapshot.empty) {
-            const log = logsSnapshot.docs[0].data();
-            setIsWorkoutFinished(log.isWorkoutFinished || false);
-            const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
-              const logExercise = log.exercises.find(e => e.exerciseId === ex.exerciseId);
-              console.log('logExercise', logExercise);
-              return {
-                ...ex,
-                sets: logExercise?.sets || ex.sets, // Use sets from log if available
-                reps: logExercise?.reps || Array(ex.sets).fill(ex.reps),
-                weights: logExercise?.weights || Array(ex.sets).fill(''),
-                completed: logExercise?.completed || Array(ex.sets).fill(false),
-                notes: logExercise?.notes || ex.notes || '' // Include both exercise notes from program and any previously saved in log
-              }
-            });
-            setLogData(dayExercises);
-          } else {
-            // If no log exists, initialize with program data
-            const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
+    const fetchProgramLogs = async () => {
+      if (!user || !selectedProgram) return;
+      setIsLoading(true);
+      try {
+        const logsQuery = query(
+          collection(db, "workoutLogs"),
+          where("userId", "==", user.uid),
+          where("programId", "==", selectedProgram.id)
+        );
+        const logsSnapshot = await getDocs(logsQuery);
+        const logsMap = {};
+        logsSnapshot.forEach(doc => {
+          const log = doc.data();
+          const key = `${log.weekIndex}_${log.dayIndex}`;
+          logsMap[key] = {
+            exercises: log.exercises.map(ex => ({
               ...ex,
-              reps: Array(ex.sets).fill(ex.reps), // Initialize editable reps per set
-              weights: Array(ex.sets).fill(''),
-              completed: Array(ex.sets).fill(false), // Initialize completion status per set
-              notes: ex.notes || '' // Include any existing notes from the program
-            }));
-            console.log('dayExercises', dayExercises);
-            setLogData(dayExercises);
-          }
-        } catch (error) {
-          console.error("Error fetching workout log: ", error);
-        } finally {
-          setIsLoading(false);
-        }
+              reps: ex.reps || Array(ex.sets).fill(ex.reps || 0),
+              weights: ex.weights || Array(ex.sets).fill(''),
+              completed: ex.completed || Array(ex.sets).fill(false),
+              notes: ex.notes || ''
+            })),
+            isWorkoutFinished: log.isWorkoutFinished || false
+          };
+        });
+        setProgramLogs(logsMap);
+        console.log('Program logs fetched:', logsMap);
+      } catch (error) {
+        console.error("Error fetching program logs: ", error);
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchWorkoutLog();
-  }, [user, selectedProgram, selectedWeek, selectedDay]);
+    fetchProgramLogs();
+  }, [user, selectedProgram]);
+
+  // Fetch existing workout log when program, week, or day changes
+  useEffect(() => {
+    if (!user || !selectedProgram || selectedWeek === null || selectedDay === null) return;
+    setIsLoading(true);
+    const  key = `${selectedWeek}_${selectedDay}`;
+    if (programLogs[key]) {
+      setLogData(programLogs[key].exercises);
+      setIsWorkoutFinished(programLogs[key].isWorkoutFinished);
+    } else {
+      setIsWorkoutFinished(false);
+      const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
+        ...ex,
+        reps: Array(ex.sets).fill(ex.reps),
+        weights: Array(ex.sets).fill(''),
+        completed: Array(ex.sets).fill(false),
+        notes: ex.notes || ''
+      }));
+      setLogData(dayExercises);
+      // Optionally pre-populate programLogs with initialized data
+      setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
+    }
+    setIsLoading(false);
+  }, [user, selectedProgram, selectedWeek, selectedDay, programLogs]);
 
   // Add this new function to fetch exercise history
   const fetchExerciseHistory = async (exerciseId) => {
@@ -486,14 +497,24 @@ function LogWorkout() {
 
   const handleChange = (exerciseIndex, setIndex, value, field) => {
     if (isWorkoutFinished) return; // Don't allow changes if workout is finished
-    
+
     const newLogData = [...logData];
     if (field === 'reps') {
       newLogData[exerciseIndex].reps[setIndex] = value;
     } else if (field === 'weights') {
       newLogData[exerciseIndex].weights[setIndex] = value;
+    } else if (field === 'completed') {
+      //console.log(`Before toggle - Exercise ${exerciseIndex}, Set ${setIndex}: completed = ${newLogData[exerciseIndex].completed[setIndex]}`);
+      newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex];
+      //console.log(`After toggle - Exercise ${exerciseIndex}, Set ${setIndex}: completed = ${newLogData[exerciseIndex].completed[setIndex]}`);
     }
     setLogData(newLogData);
+    const key = `${selectedWeek}_${selectedDay}`;
+    //console.log(`Updating programLogs for key ${key}:`, newLogData);
+    setProgramLogs(prev => ({
+      ...prev,
+      [key]: { exercises: newLogData, isWorkoutFinished: prev[key]?.isWorkoutFinished || false }
+    }));
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
@@ -506,7 +527,7 @@ function LogWorkout() {
 
   const handleAddSet = (exerciseIndex) => {
     if (isWorkoutFinished) return; // Don't allow adding sets if workout is finished
-    
+
     const newLogData = [...logData];
     newLogData[exerciseIndex].sets += 1;
     newLogData[exerciseIndex].reps.push(newLogData[exerciseIndex].reps[0]);
@@ -518,7 +539,7 @@ function LogWorkout() {
 
   const saveLog = async () => {
     if (isWorkoutFinished) return; // Don't allow saving if workout is finished
-    
+
     if (!user || !selectedProgram) return;
     setIsLoading(true);
     try {
@@ -574,7 +595,7 @@ function LogWorkout() {
 
   const finishWorkout = async () => {
     if (isWorkoutFinished) return; // Don't allow finishing if already finished
-    
+
     if (!user || !selectedProgram) return;
     setIsLoading(true);
     try {
@@ -661,7 +682,56 @@ function LogWorkout() {
 
                 {selectedProgram && (
                   <>
-                    <div className="d-flex flex-wrap gap-3 mb-3">
+                    <div className="mb-3">
+                      <h5 className="soft-text" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                        Week {selectedWeek + 1}, Day {selectedDay + 1}
+                        <Button onClick={() => setShowGridModal(true)} className="soft-button">
+                          Change Week/Day
+                        </Button>
+                      </h5>
+                      
+                    </div>
+
+                    {/* Modal containing the week and day grid */}
+                    <Modal show={showGridModal} onHide={() => setShowGridModal(false)} size="lg">
+                      <Modal.Header closeButton>
+                        <Modal.Title>Select Week and Day</Modal.Title>
+                      </Modal.Header>
+                      <Modal.Body>
+                        <div className="week-day-grid">
+                          {Array.from({ length: selectedProgram.duration }).map((_, weekIndex) => (
+                            <div key={weekIndex} className="week-row">
+                              <h5>Week {weekIndex + 1}</h5>
+                              <div className="day-buttons">
+                                {Array.from({ length: selectedProgram.daysPerWeek }).map((_, dayIndex) => {
+                                  const key = `${weekIndex}_${dayIndex}`;
+                                  const isCompleted = programLogs[key]?.isWorkoutFinished || false;
+                                  return (
+                                    <Button
+                                      key={dayIndex}
+                                      variant={
+                                        selectedWeek === weekIndex && selectedDay === dayIndex
+                                          ? "primary"
+                                          : "outline-primary"
+                                      }
+                                      onClick={() => {
+                                        setSelectedWeek(weekIndex);
+                                        setSelectedDay(dayIndex);
+                                        setShowGridModal(false);
+                                      }}
+                                      className={isCompleted ? "completed-day" : ""}
+                                    >
+                                      Day {dayIndex + 1} {isCompleted && <span>✓</span>}
+                                    </Button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Modal.Body>
+                    </Modal>
+                    {/* <div className="d-flex flex-wrap gap-3 mb-3">
                       <Form.Group className="flex-grow-1">
                         <Form.Label className="soft-label">Selected Week</Form.Label>
                         <Form.Control
@@ -689,7 +759,7 @@ function LogWorkout() {
                           ))}
                         </Form.Control>
                       </Form.Group>
-                    </div>
+                    </div> */}
 
                     {logData.map((ex, exIndex) => (
                       <div key={exIndex} className="mb-4">
