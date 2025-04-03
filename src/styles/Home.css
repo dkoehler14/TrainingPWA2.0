@@ -11,7 +11,7 @@
 
 .home-title {
   font-weight: 600;
-  color: #344767;
+  color: var(--text-primary);
   margin-bottom: 3rem;
 }
 
@@ -24,7 +24,8 @@
   padding: 20px;
   transition: transform 0.3s ease-in-out;
   font-family: 'Roboto', sans-serif !important;
-  /* Ensure Roboto */
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
 }
 
 .tile-card:hover {
@@ -32,18 +33,16 @@
 }
 
 .tile-title {
-  color: #344767;
+  color: var(--text-primary);
   font-size: 1.5rem;
   font-weight: 600;
   font-family: 'Roboto', sans-serif !important;
-  /* Ensure Roboto */
 }
 
 .tile-text {
-  color: #67748e;
+  color: var(--text-secondary);
   font-size: 1rem;
   font-family: 'Roboto', sans-serif !important;
-  /* Ensure Roboto */
 }
 
 .tile-button {
@@ -51,5 +50,4 @@
   padding: 10px 20px;
   font-weight: 500;
   font-family: 'Roboto', sans-serif !important;
-  /* Ensure Roboto */
 }

@@ -5,10 +5,12 @@
 .exercises-card {
   border-radius: 20px;
   padding: 2rem;
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
 }
 
 .exercises-title {
-  color: #344767;
+  color: var(--text-primary);
   font-weight: 600;
   margin-bottom: 2rem;
 }
@@ -18,29 +20,24 @@
 }
 
 .exercises-label {
-  color: #67748e;
+  color: var(--text-secondary);
 }
 
 .exercises-input {
   border-radius: 10px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-color);
+  background-color: var(--input-background);
+  color: var(--text-primary);
   height: 38px;
-  /* Match button height from .soft-button */
   padding: 6px 12px;
-  /* Match button padding for consistency */
   line-height: 1.5;
-  /* Ensure text aligns properly */
   font-size: 1rem;
-  /* Match button font size */
 }
 
 .exercises-input:focus {
   outline: none;
-  /* Remove default outline */
-  border-color: #0056D2;
-  /* Match global soft-input focus color from global.css */
-  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
-  /* Subtle blue glow for accessibility */
+  border-color: var(--border-color);
+  box-shadow: var(--card-shadow);
 }
 
 .exercises-button {
@@ -52,11 +49,16 @@
 .exercises-accordion-item {
   border-radius: 15px;
   margin-bottom: 10px;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
 }
 
 .exercises-list-group-item {
   border-radius: 10px;
   margin-bottom: 0.5rem;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .exercises-edit-button {

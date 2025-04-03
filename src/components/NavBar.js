@@ -2,15 +2,18 @@ import React from 'react';
 import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
+import { useTheme } from '../context/ThemeContext';
 import '../styles/Navbar.css';
 
 function NavBar({ user }) {
+  const { darkMode, toggleDarkMode } = useTheme();
+
   const handleLogout = () => {
     signOut(auth);
   };
 
   return (
-    <Navbar expand="lg" className="navbar mb-4">
+    <Navbar bg={darkMode ? 'dark' : 'light'} variant={darkMode ? 'dark' : 'light'} expand="lg" className="navbar mb-4">
       <Container fluid className="soft-container">
         <Navbar.Brand href="/" className="navbar-brand">Workout Tracker</Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" className="navbar-toggler" />
@@ -23,11 +26,24 @@ function NavBar({ user }) {
             <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
             <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
-            
           </Nav>
-          <Nav>
+          <Nav className="d-flex align-items-center">
+            <Button
+              variant={darkMode ? 'light' : 'dark'}
+              onClick={toggleDarkMode}
+              className="me-2"
+              style={{ marginBottom: 0 }}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </Button>
             {user ? (
-              <Button variant="outline-danger" onClick={handleLogout} className="soft-button soft-logout-button">Logout</Button>
+              <Button 
+                variant="outline-danger" 
+                onClick={handleLogout} 
+                className="soft-button soft-logout-button"
+              >
+                Logout
+              </Button>
             ) : (
               <Nav.Link href="/auth" className="nav-link">Sign In</Nav.Link>
             )}

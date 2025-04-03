@@ -1,10 +1,138 @@
+:root {
+  /* Light theme variables - based on Soft UI Design System */
+  --background-color: #f8f9fa;
+  --card-background: #ffffff;
+  --text-primary: #344767;
+  --text-secondary: #67748e;
+  --border-color: #e9ecef;
+  --input-background: #ffffff;
+  --input-border: #e9ecef;
+  --navbar-background: #ffffff;
+  --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.1), 0 6px 20px rgba(0, 0, 0, 0.05);
+  --gradient-primary: linear-gradient(90deg, #0056D2 0%, #0096D6 100%);
+  --button-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+
+}
+
+[data-theme='dark'] {
+  /* Dark theme variables - soft UI inspired dark mode */
+  --background-color: #1a1f2c;
+  --card-background: #252f40;
+  --text-primary: #ffffff;
+  --text-secondary: #b2b9c5;
+  --border-color: #344767;
+  --input-background: #2d3748;
+  --input-border: #344767;
+  --navbar-background: #252f40;
+  --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.2), 0 6px 20px rgba(0, 0, 0, 0.1);
+  --gradient-primary: linear-gradient(90deg, #3a7bd5 0%, #00d2ff 100%);
+  --button-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);
+}
+
+/* Global styles */
 body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* Soft UI Components */
+.soft-card {
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
+  border-color: var(--border-color);
+}
+
+.soft-title {
+  color: var(--text-primary);
+}
+
+.soft-text {
+  color: var(--text-secondary);
+}
+
+.soft-input {
+  background-color: var(--input-background);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+.soft-input:focus {
+  background-color: var(--input-background);
+  color: var(--text-primary);
+}
+
+.navbar {
+  background-color: var(--navbar-background);
+  border-color: var(--border-color);
+}
+
+.navbar-brand, .nav-link {
+  color: var(--text-primary) !important;
+}
+
+.nav-link:hover {
+  color: var(--text-secondary) !important;
+}
+
+/* Bootstrap overrides */
+.modal-content {
+  background-color: var(--card-background);
+  color: var(--text-primary);
+}
+
+.table {
+  color: var(--text-primary);
+}
+
+.accordion-button {
+  background-color: var(--card-background) !important;
+  color: var(--text-primary) !important;
+}
+
+.accordion-button:not(.collapsed) {
+  background-color: var(--input-background) !important;
+}
+
+/* Form controls */
+.form-control {
+  background-color: var(--input-background);
+  border-color: var(--input-border);
+  color: var(--text-primary);
+}
+
+.form-control:focus {
+  background-color: var(--input-background);
+  color: var(--text-primary);
+}
+
+/* Select components */
+.react-select__control {
+  background-color: var(--input-background) !important;
+  border-color: var(--input-border) !important;
+}
+
+.react-select__menu {
+  background-color: var(--card-background) !important;
+}
+
+.react-select__option {
+  background-color: var(--card-background) !important;
+  color: var(--text-primary) !important;
+}
+
+.react-select__option--is-focused {
+  background-color: var(--input-background) !important;
+}
+
+.react-select__single-value {
+  color: var(--text-primary) !important;
 }

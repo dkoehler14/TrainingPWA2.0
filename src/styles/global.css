@@ -1,8 +1,41 @@
 /* Shared Soft UI-inspired styles */
+:root {
+  /* Light theme variables */
+  --background-color: #f8f9fa;
+  --card-background: #ffffff;
+  --text-primary: #344767;
+  --text-secondary: #67748e;
+  --border-color: #e9ecef;
+  --input-background: #ffffff;
+  --input-border: #e9ecef;
+  --navbar-background: #ffffff;
+  --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.1), 0 6px 20px rgba(0, 0, 0, 0.05);
+  --gradient-primary: linear-gradient(90deg, #0056D2 0%, #0096D6 100%);
+  --button-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+[data-theme='dark'] {
+  /* Dark theme variables */
+  --background-color: #1a1f2c;
+  --card-background: #252f40;
+  --text-primary: #ffffff;
+  --text-secondary: #b2b9c5;
+  --border-color: #344767;
+  --input-background: #2d3748;
+  --input-border: #344767;
+  --navbar-background: #252f40;
+  --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.2), 0 6px 20px rgba(0, 0, 0, 0.1);
+  --gradient-primary: linear-gradient(90deg, #3a7bd5 0%, #00d2ff 100%);
+  --button-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);
+}
+
 body {
   font-family: 'Roboto', sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--background-color);
+  color: var(--text-primary);
+  transition: all 0.3s ease;
 }
 
 /* Container */
@@ -14,43 +47,50 @@ body {
 .soft-card {
   border-radius: 20px;
   padding: 2rem;
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
+  border-color: var(--border-color);
 }
 
 /* Title */
 .soft-title {
-  color: #344767;
+  color: var(--text-primary);
   font-weight: 600;
   margin-bottom: 2rem;
 }
 
 /* Subtitle */
 .soft-subtitle {
-  color: #344767;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 /* Label */
 .soft-label {
-  color: #67748e;
+  color: var(--text-secondary);
 }
 
 /* Input */
 .soft-input {
   border-radius: 10px;
-  border: 1px solid #e9ecef;
-  height: 38px; /* Match button height from .soft-button */
-  padding: 6px 12px; /* Match button padding for consistency */
-  line-height: 1.5; /* Ensure text aligns properly */
-  font-size: 1rem; /* Match button font size */
+  border: 1px solid var(--input-border);
+  height: 38px;
+  padding: 6px 12px;
+  line-height: 1.5;
+  font-size: 1rem;
+  background-color: var(--input-background);
+  color: var(--text-primary);
 }
 
 .soft-input:focus {
-  outline: none; /* Remove default outline */
-  border-color: #0056D2; /* Match button gradient blue */
-  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3); /* Subtle blue glow for accessibility */
+  outline: none;
+  border-color: #0056D2;
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
+  background-color: var(--input-background);
+  color: var(--text-primary);
 }
 
-/* Hide spinner buttons (up/down arrows) on number inputs */
+/* Hide spinner buttons on number inputs */
 .soft-input[type="number"]::-webkit-outer-spin-button,
 .soft-input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
@@ -58,52 +98,60 @@ body {
 }
 
 .soft-input[type="number"] {
-  -moz-appearance: textfield; /* Firefox */
+  -moz-appearance: textfield;
 }
 
 /* Button */
 .soft-button {
-  background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
+  background: var(--gradient-primary) !important;
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
   border: none;
   color: #fff;
-  box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3); /* Blue shadow */
-  min-height: 38px; /* Explicit height for buttons */
+  box-shadow: var(--button-shadow);
+  min-height: 38px;
 }
 
 .soft-button:focus {
-  outline: none; /* Remove default outline */
-  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3); /* Subtle blue glow matching inputs */
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 86, 210, 0.3);
 }
 
 /* Button Hover */
 .soft-button:hover {
-  background: linear-gradient(90deg, #0056D2 0%, #0096D6 100%) !important;
+  background: var(--gradient-primary) !important;
   color: #fff !important;
 }
 
 /* Alert */
 .soft-alert {
   border-radius: 10px;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 /* List Group Item */
 .soft-list-group-item {
   border-radius: 10px;
   margin-bottom: 0.5rem;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 /* Accordion Item */
 .soft-accordion-item {
   border-radius: 15px;
   margin-bottom: 10px;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
 }
 
 /* Text */
 .soft-text {
-  color: #67748e;
+  color: var(--text-secondary);
 }
 
 .spinner-blue {
@@ -120,18 +168,115 @@ body {
 
 .notes-input {
   height: auto !important;
+  background-color: var(--input-background);
+  color: var(--text-primary);
 }
 
 /* Override Soft UI Design System styles for btn-close */
 .modal-header .btn-close {
-  display: block !important;           /* Ensures the button is visible */
-  opacity: 1 !important;              /* Makes it fully opaque */
-  background-color: transparent !important; /* Keeps background clean */
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 011.414 0L8 6.586 14.293.293a1 1 0 111.414 1.414L9.414 8l6.293 6.293a1 1 0 01-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 01-1.414-1.414L6.586 8 .293 1.707a1 1 0 010-1.414z'/%3e%3c/svg%3e") !important; /* Adds the "X" icon */
+  display: block !important;
+  opacity: 1 !important;
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='currentColor'%3e%3cpath d='M.293.293a1 1 0 011.414 0L8 6.586 14.293.293a1 1 0 111.414 1.414L9.414 8l6.293 6.293a1 1 0 01-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 01-1.414-1.414L6.586 8 .293 1.707a1 1 0 010-1.414z'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: center !important;
-  background-size: 1.25rem !important; /* Sets icon size */
-  width: 1.25rem !important;          /* Ensures proper width */
-  height: 1.25rem !important;         /* Ensures proper height */
-  border: none !important;            /* Removes any unwanted borders */
+  background-size: 1.25rem !important;
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+  border: none !important;
+  filter: invert(var(--invert-close-button));
+}
+
+/* Additional dark mode specific overrides */
+[data-theme='dark'] {
+  --invert-close-button: 1;
+}
+
+/* Bootstrap component overrides */
+.modal-content {
+  background-color: var(--card-background);
+  color: var(--text-primary);
+}
+
+.modal-header {
+  border-bottom-color: var(--border-color);
+}
+
+.modal-footer {
+  border-top-color: var(--border-color);
+}
+
+.table {
+  color: var(--text-primary);
+}
+
+.table thead th {
+  background-color: var(--card-background);
+  color: var(--text-primary);
+}
+
+.table tbody td {
+  color: var(--text-primary);
+}
+
+/* React Select overrides */
+.react-select__control {
+  background-color: var(--input-background) !important;
+  border-color: var(--input-border) !important;
+}
+
+.react-select__menu {
+  background-color: var(--card-background) !important;
+}
+
+.react-select__option {
+  background-color: var(--card-background) !important;
+  color: var(--text-primary) !important;
+}
+
+.react-select__option--is-focused {
+  background-color: var(--input-background) !important;
+}
+
+.react-select__single-value {
+  color: var(--text-primary) !important;
+}
+
+.react-select__input {
+  color: var(--text-primary) !important;
+}
+
+/* Date picker overrides */
+.react-datepicker {
+  background-color: var(--card-background) !important;
+  border-color: var(--border-color) !important;
+}
+
+.react-datepicker__header {
+  background-color: var(--input-background) !important;
+  border-bottom-color: var(--border-color) !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name,
+.react-datepicker__day {
+  color: var(--text-primary) !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: var(--input-background) !important;
+}
+
+.react-datepicker__day--selected {
+  background-color: #0056D2 !important;
+  color: #ffffff !important;
+}
+
+/* Chart.js overrides */
+.chartjs-render-monitor {
+  filter: var(--chart-invert);
+}
+
+[data-theme='dark'] {
+  --chart-invert: invert(1) hue-rotate(180deg);
 }

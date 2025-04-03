@@ -19,6 +19,9 @@
 .soft-card {
   border-radius: 20px;
   padding: 2rem;
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
+  border-color: var(--border-color);
 }
 
 @media (max-width: 767px) {
@@ -31,33 +34,37 @@
 }
 
 .soft-title {
-  color: #344767;
+  color: var(--text-primary);
   font-weight: 600;
   margin-bottom: 2rem;
 }
 
 .soft-label {
-  color: #67748e;
+  color: var(--text-secondary);
 }
 
 .soft-input {
   border-radius: 10px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--border-color);
+  background-color: var(--input-background);
+  color: var(--text-primary);
 }
 
 .soft-button {
   border-radius: 10px;
   padding: 10px 20px;
   font-weight: 500;
+  background: var(--gradient-primary) !important;
 }
 
 .soft-text {
-  color: #67748e;
+  color: var(--text-secondary);
 }
 
 .workout-log-table {
   border-radius: 10px;
   overflow: hidden;
+  color: var(--text-primary);
 }
 
 .workout-log-table th,
@@ -65,23 +72,26 @@
   padding: 8px;
   text-align: center;
   vertical-align: middle;
+  color: var(--text-primary);
+  background-color: var(--card-background);
+  border-color: var(--border-color);
 }
 
 .workout-log-table th {
-  background-color: #f8f9fa;
-  color: #344767;
+  background-color: var(--input-background);
+  color: var(--text-primary);
   font-weight: 500;
   border-bottom: none;
   /* Remove border between header and body */
 }
 
 .workout-log-table tr {
-  background-color: #fff;
+  background-color: var(--card-background);
   /* Subtle row background for separation */
 }
 
 .workout-log-table tr:nth-child(even) {
-  background-color: #f8f9fa;
+  background-color: var(--input-background);
   /* Alternating row colors for readability */
 }
 
@@ -93,6 +103,15 @@
 /* Custom styling for React-Bootstrap checkbox for completion status */
 .completed-checkbox {
   cursor: pointer;
+}
+
+.completed-checkbox input[type="checkbox"] {
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-background);
+  width: 20px;
+  height: 20px;
+  position: relative;
 }
 
 .completed-checkbox input[type="checkbox"]:checked {
@@ -110,15 +129,6 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-}
-
-.completed-checkbox input[type="checkbox"] {
-  border: 2px solid #e9ecef;
-  border-radius: 4px;
-  background-color: #fff;
-  width: 20px;
-  height: 20px;
-  position: relative;
 }
 
 .completed-checkbox input[type="checkbox"]:focus {
@@ -153,6 +163,15 @@
 
 .day-buttons button {
   padding: 0.5rem !important;
+  background-color: var(--card-background);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.day-buttons button:hover {
+  background-color: var(--input-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
 }
 
 .completed-day {
@@ -163,4 +182,75 @@
 .completed-day:hover {
   background-color: #28a745 !important;
   color: #fff !important;
+}
+
+/* Modal styling */
+.modal-content {
+  background-color: var(--card-background);
+  color: var(--text-primary);
+}
+
+.modal-header {
+  border-bottom-color: var(--border-color);
+}
+
+.modal-footer {
+  border-top-color: var(--border-color);
+}
+
+/* Form controls */
+.form-control {
+  background-color: var(--input-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.form-control:focus {
+  background-color: var(--input-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Select styling */
+.react-select__control {
+  background-color: var(--input-background) !important;
+  border-color: var(--border-color) !important;
+}
+
+.react-select__menu {
+  background-color: var(--card-background) !important;
+}
+
+.react-select__option {
+  background-color: var(--card-background) !important;
+  color: var(--text-primary) !important;
+}
+
+.react-select__option--is-focused {
+  background-color: var(--input-background) !important;
+}
+
+.react-select__single-value {
+  color: var(--text-primary) !important;
+}
+
+.react-select__input {
+  color: var(--text-primary) !important;
+}
+
+/* Alert styling */
+.alert {
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+/* Transition for theme changes */
+.soft-card,
+.soft-input,
+.workout-log-table,
+.day-buttons button,
+.form-control,
+.modal-content {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }

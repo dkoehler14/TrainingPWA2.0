@@ -12,10 +12,20 @@ import Auth from './pages/Auth';
 import ProgressTracker2 from './pages/ProgressTracker2';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ThemeProvider, useTheme } from './context/ThemeContext';
 
 function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const { darkMode, toggleDarkMode } = useTheme();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {

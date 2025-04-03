@@ -5,39 +5,46 @@
   .programs-card {
     border-radius: 20px;
     padding: 2rem;
+    background-color: var(--card-background);
+    box-shadow: var(--card-shadow);
   }
   
   .programs-title {
-    color: #344767;
+    color: var(--text-primary);
     font-weight: 600;
     margin-bottom: 2rem;
   }
   
   .section-title {
-    color: #344767;
+    color: var(--text-primary);
     font-weight: 500;
   }
   
   .no-programs-text {
-    color: #67748e;
+    color: var(--text-secondary);
   }
   
   .accordion-item {
     border-radius: 15px;
     margin-bottom: 10px;
+    background-color: var(--card-background);
+    border-color: var(--border-color);
   }
   
   .accordion-header {
-    color: #344767;
+    color: var(--text-primary);
   }
   
   .week-title {
-    color: #67748e;
+    color: var(--text-secondary);
   }
   
   .list-group-item {
     border-radius: 10px;
     margin-bottom: 0.5rem;
+    background-color: var(--card-background);
+    border-color: var(--border-color);
+    color: var(--text-primary);
   }
   
   .adopt-button {
@@ -48,4 +55,5 @@
 
   .programs-container .card, .card-body {
     font-family: 'Roboto', sans-serif !important;
+    background-color: var(--card-background);
   }
