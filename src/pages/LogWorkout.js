@@ -695,13 +695,13 @@ function LogWorkout() {
                     {/* Modal containing the week and day grid */}
                     <Modal show={showGridModal} onHide={() => setShowGridModal(false)} size="lg">
                       <Modal.Header closeButton>
-                        <Modal.Title>Select Week and Day</Modal.Title>
+                        <Modal.Title className="modal-title">Select Week and Day</Modal.Title>
                       </Modal.Header>
                       <Modal.Body>
                         <div className="week-day-grid">
                           {Array.from({ length: selectedProgram.duration }).map((_, weekIndex) => (
                             <div key={weekIndex} className="week-row">
-                              <h5>Week {weekIndex + 1}</h5>
+                              <h5 className="modal-title">Week {weekIndex + 1}</h5>
                               <div className="day-buttons">
                                 {Array.from({ length: selectedProgram.daysPerWeek }).map((_, dayIndex) => {
                                   const key = `${weekIndex}_${dayIndex}`;

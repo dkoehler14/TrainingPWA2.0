@@ -166,12 +166,20 @@
   background-color: var(--card-background);
   color: var(--text-primary);
   border-color: var(--border-color);
+  transition: all 0.3s ease;
 }
 
 .day-buttons button:hover {
   background-color: var(--input-background);
   border-color: var(--border-color);
   color: var(--text-primary);
+}
+
+.day-buttons button.selected {
+  background-color: var(--card-background) !important;
+  border-color: var(--gradient-primary) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--card-shadow);
 }
 
 .completed-day {
@@ -182,6 +190,7 @@
 .completed-day:hover {
   background-color: #28a745 !important;
   color: #fff !important;
+  border-color: var(--border-color);
 }
 
 /* Modal styling */
@@ -192,6 +201,10 @@
 
 .modal-header {
   border-bottom-color: var(--border-color);
+}
+
+.modal-title {
+  color: var(--text-primary) !important;
 }
 
 .modal-footer {
@@ -253,4 +266,24 @@
 .form-control,
 .modal-content {
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Add or update these styles */
+.soft-input:disabled,
+.form-control:disabled {
+  background-color: var(--card-background) !important; /* Use card background instead of input background */
+  color: var(--text-secondary) !important; /* Use secondary text color for better visibility */
+  opacity: 0.8; /* Slight opacity to indicate disabled state */
+  cursor: not-allowed;
+  border-color: var(--border-color) !important;
+}
+
+/* If you're using React-Select, also add these styles */
+.react-select__control--is-disabled {
+  background-color: var(--card-background) !important;
+  opacity: 0.8;
+}
+
+.react-select__single-value--is-disabled {
+  color: var(--text-secondary) !important;
 }

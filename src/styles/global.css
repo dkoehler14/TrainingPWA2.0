@@ -21,7 +21,7 @@
   --text-primary: #ffffff;
   --text-secondary: #b2b9c5;
   --border-color: #344767;
-  --input-background: #2d3748;
+  --input-background: #313d4f;
   --input-border: #344767;
   --navbar-background: #252f40;
   --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.2), 0 6px 20px rgba(0, 0, 0, 0.1);
@@ -78,7 +78,7 @@ body {
   padding: 6px 12px;
   line-height: 1.5;
   font-size: 1rem;
-  background-color: var(--input-background);
+  background-color: var(--input-background) !important;
   color: var(--text-primary);
 }
 
@@ -222,11 +222,14 @@ body {
 /* React Select overrides */
 .react-select__control {
   background-color: var(--input-background) !important;
-  border-color: var(--input-border) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: var(--card-shadow) !important;
 }
 
 .react-select__menu {
   background-color: var(--card-background) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: var(--card-shadow) !important;
 }
 
 .react-select__option {
@@ -238,12 +241,55 @@ body {
   background-color: var(--input-background) !important;
 }
 
+.react-select__option--is-selected {
+  background-color: var(--input-background) !important;
+  color: var(--text-primary) !important;
+}
+
+.react-select__value-container {
+  background-color: var(--input-background) !important;
+}
+
 .react-select__single-value {
   color: var(--text-primary) !important;
 }
 
-.react-select__input {
+.react-select__input-container {
   color: var(--text-primary) !important;
+}
+
+.react-select__placeholder {
+  color: var(--text-secondary) !important;
+}
+
+.react-select__multi-value {
+  background-color: var(--input-background) !important;
+}
+
+.react-select__multi-value__label {
+  color: var(--text-primary) !important;
+}
+
+.react-select__control--is-disabled {
+  background-color: var(--card-background) !important;
+  opacity: 0.8;
+}
+
+.react-select__single-value--is-disabled {
+  color: var(--text-secondary) !important;
+}
+
+.react-select__indicator {
+  color: var(--text-secondary) !important;
+}
+
+.react-select__indicator:hover {
+  color: var(--text-primary) !important;
+}
+
+.react-select__menu-notice--no-options {
+  color: var(--text-secondary) !important;
+  background-color: var(--card-background) !important;
 }
 
 /* Date picker overrides */
