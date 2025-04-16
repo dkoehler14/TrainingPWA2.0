@@ -14,6 +14,7 @@ function Programs() {
   const [showProgramDetails, setShowProgramDetails] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [workoutLogs, setWorkoutLogs] = useState({});
+  const [activeTab, setActiveTab] = useState('overview');
   const user = auth.currentUser;
   const navigate = useNavigate();
 
@@ -206,23 +207,28 @@ function Programs() {
     setShowProgramDetails(true);
   };
 
-  const renderExerciseWorkoutDetails = (exercise, weekKey) => {
+  const renderWorkoutLogs = (exercise, weekKey) => {
     const log = workoutLogs[weekKey]?.exercises?.[exercise.exerciseId];
     
     if (!log) {
-      return <div className="text-muted">No workout logged</div>;
+      return null;
     }
 
     return (
-      <div className="workout-log-details">
-        {log.sets && log.reps && (
-          <div>
-            {log.weights && log.weights.map((weight, index) => (
-              <div key={index} className="mb-1 p-2 bg-light rounded d-flex justify-content-between align-items-center">
-                <span>
-                  <strong>Set {index + 1}:</strong> {log.reps[index]} reps @ {weight || 'N/A'} lbs
-                </span>
-                {log.completed?.[index] && <Check className="text-success" />}
+      <div className="workout-log-details mt-2">
+        {log.sets && log.reps && log.weights && (
+          <div className="sets-container">
+            {Array.from({ length: log.sets }).map((_, index) => (
+              <div key={index} className="set-item p-2 bg-light rounded mb-2">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong>Set {index + 1}:</strong>
+                    <span className="ms-2">
+                      {log.reps[index]} reps @ {log.weights[index] || 'N/A'} {selectedProgram.weightUnit || 'LB'}
+                    </span>
+                  </div>
+                  {log.completed?.[index] && <Check className="text-success" />}
+                </div>
               </div>
             ))}
           </div>
@@ -296,10 +302,36 @@ function Programs() {
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
 
+    const calculateProgramProgress = () => {
+      let totalWorkouts = 0;
+      let completedWorkouts = 0;
+
+      selectedProgram.weeklyConfigs.forEach((week, weekIndex) => {
+        week.forEach((day, dayIndex) => {
+          const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+          totalWorkouts++;
+          if (workoutLogs[weekKey]?.isWorkoutFinished) {
+            completedWorkouts++;
+          }
+        });
+      });
+
+      return {
+        totalWorkouts,
+        completedWorkouts,
+        percentage: Math.round((completedWorkouts / totalWorkouts) * 100)
+      };
+    };
+
+    const progress = calculateProgramProgress();
+
     return (
       <Modal 
         show={showProgramDetails} 
-        onHide={() => setShowProgramDetails(false)}
+        onHide={() => {
+          setShowProgramDetails(false);
+          setActiveTab('overview');
+        }}
         size="lg"
         centered
       >
@@ -307,50 +339,170 @@ function Programs() {
           <Modal.Title>{selectedProgram.name}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div className="mb-3">
-            <strong>Duration:</strong> {selectedProgram.duration} weeks
-            <br />
-            <strong>Days per Week:</strong> {selectedProgram.daysPerWeek}
-            <br />
-            <strong>Weight Unit:</strong> {selectedProgram.weightUnit || 'LB'}
-          </div>
-          
-          {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
-            <div key={weekIndex} className="mb-4">
-              <h5>Week {weekIndex + 1}</h5>
-              {week.map((day, dayIndex) => {
-                const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
-                const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
-                
-                return (
-                  <div key={dayIndex} className="mb-3">
-                    <div className="d-flex justify-content-between align-items-center">
-                      <h6>Day {dayIndex + 1}</h6>
-                      {isWorkoutFinished && (
-                        <span className="badge bg-success">Completed</span>
-                      )}
-                    </div>
-                    {day.exercises.map((ex, exIndex) => (
-                      <div key={exIndex} className="mb-2 program-exercise-details">
-                        <div className="d-flex justify-content-between align-items-center">
-                          <div>
-                            <strong>{getExerciseName(ex.exerciseId)}</strong>
-                            {' '}
-                            <span className="text-muted">
-                              {ex.sets} sets x {ex.reps} reps
-                            </span>
-                          </div>
+          <div className="mb-4">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <strong>Duration:</strong> {selectedProgram.duration} weeks
+                <br />
+                <strong>Days per Week:</strong> {selectedProgram.daysPerWeek}
+                <br />
+                <strong>Weight Unit:</strong> {selectedProgram.weightUnit || 'LB'}
+              </div>
+              <div className="text-center">
+                <div className="progress-circle" style={{ width: '80px', height: '80px' }}>
+                  <svg viewBox="0 0 36 36" className="circular-chart">
+                    <path
+                      className="circle-bg"
+                      d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className="circle"
+                      strokeDasharray={`${progress.percentage}, 100`}
+                      d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <div className="progress-text">{progress.percentage}%</div>
+                </div>
+                <div className="mt-2">
+                  {progress.completedWorkouts} of {progress.totalWorkouts} workouts completed
+                </div>
+              </div>
+            </div>
+
+            <ul className="nav nav-tabs mb-3">
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('overview')}
+                >
+                  Overview
+                </button>
+              </li>
+              <li className="nav-item">
+                <button
+                  className={`nav-link ${activeTab === 'schedule' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('schedule')}
+                >
+                  Schedule
+                </button>
+              </li>
+            </ul>
+
+            {activeTab === 'overview' && (
+              <div className="program-overview">
+                <div className="row">
+                  {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
+                    <div key={weekIndex} className="col-md-6 mb-4">
+                      <div className="card h-100">
+                        <div className="card-header">
+                          <h5 className="mb-0">Week {weekIndex + 1}</h5>
                         </div>
-                        <div className="mt-1">
-                          {renderExerciseWorkoutDetails(ex, weekKey)}
+                        <div className="card-body">
+                          {week.map((day, dayIndex) => {
+                            const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+                            const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+                            
+                            return (
+                              <div key={dayIndex} className="mb-3">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                  <h6 className="mb-0">Day {dayIndex + 1}</h6>
+                                  {isWorkoutFinished ? (
+                                    <span className="badge bg-success">Completed</span>
+                                  ) : (
+                                    <span className="badge bg-secondary">Pending</span>
+                                  )}
+                                </div>
+                                <div className="exercise-list">
+                                  {day.exercises.map((ex, exIndex) => (
+                                    <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
+                                      <div className="d-flex justify-content-between align-items-center">
+                                        <div>
+                                          <strong>{getExerciseName(ex.exerciseId)}</strong>
+                                          <div className="text-muted small">
+                                            {ex.sets} sets x {ex.reps} reps
+                                          </div>
+                                        </div>
+                                        {isWorkoutFinished && (
+                                          <Check className="text-success" />
+                                        )}
+                                      </div>
+                                      {renderWorkoutLogs(ex, weekKey)}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'schedule' && (
+              <div className="program-schedule">
+                <div className="table-responsive">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Week</th>
+                        <th>Day</th>
+                        <th>Exercises</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
+                        week.map((day, dayIndex) => {
+                          const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+                          const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+                          
+                          return (
+                            <tr key={`${weekIndex}-${dayIndex}`}>
+                              <td>Week {weekIndex + 1}</td>
+                              <td>Day {dayIndex + 1}</td>
+                              <td>
+                                <ul className="list-unstyled mb-0">
+                                  {day.exercises.map((ex, exIndex) => {
+                                    const log = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+                                    return (
+                                      <li key={exIndex}>
+                                        <div>
+                                          {getExerciseName(ex.exerciseId)} ({ex.sets}x{ex.reps})
+                                          {log && log.weights && (
+                                            <div className="text-muted small">
+                                              Last weights: {log.weights.join(', ')} {selectedProgram.weightUnit || 'LB'}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              </td>
+                              <td>
+                                {isWorkoutFinished ? (
+                                  <span className="badge bg-success">Completed</span>
+                                ) : (
+                                  <span className="badge bg-secondary">Pending</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </Modal.Body>
       </Modal>
     );
