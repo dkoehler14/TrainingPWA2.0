@@ -10,6 +10,12 @@ const MUSCLE_GROUPS = [
     'Traps', 'Forearms'
 ];
 
+const EXERCISE_TYPES = [
+    'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
+    'Bodyweight Only', 'Bodyweight Loadable', 'Swiss Bar', 'Kettlebell',
+    'Machine', 'Smith Machine', 'Camber Bar'
+];
+
 function ExerciseCreationModal({
     show,
     onHide,
@@ -22,7 +28,8 @@ function ExerciseCreationModal({
     const [formData, setFormData] = useState({
         name: '',
         primaryMuscleGroup: '',
-        secondaryMuscleGroups: [{ group: '' }]
+        secondaryMuscleGroups: [{ group: '' }],
+        exerciseType: ''
     });
 
     useEffect(() => {
@@ -34,13 +41,15 @@ function ExerciseCreationModal({
                 setFormData({
                     name: initialData.name || '',
                     primaryMuscleGroup: initialData?.primaryMuscleGroup || '',
-                    secondaryMuscleGroups: secondaryGroups
+                    secondaryMuscleGroups: secondaryGroups,
+                    exerciseType: initialData?.exerciseType || ''
                 });
             } else {
                 setFormData({
                     name: '',
                     primaryMuscleGroup: '',
-                    secondaryMuscleGroups: [{ group: '' }]
+                    secondaryMuscleGroups: [{ group: '' }],
+                    exerciseType: ''
                 });
             }
         }
@@ -53,7 +62,8 @@ function ExerciseCreationModal({
         setFormData({
             name: '',
             primaryMuscleGroup: '',
-            secondaryMuscleGroups: [{ group: '' }]
+            secondaryMuscleGroups: [{ group: '' }],
+            exerciseType: ''
         });
         setValidationError('');
     };
@@ -65,6 +75,12 @@ function ExerciseCreationModal({
         // Validate exercise name
         if (!formData.name.trim()) {
             setValidationError('Exercise name is required.');
+            return false;
+        }
+
+        // Validate exercise type
+        if (!formData.exerciseType) {
+            setValidationError('Exercise type is required.');
             return false;
         }
 
@@ -126,6 +142,7 @@ function ExerciseCreationModal({
                 secondaryMuscleGroups: formData.secondaryMuscleGroups
                     .map(mg => mg.group)
                     .filter(Boolean),
+                exerciseType: formData.exerciseType
             };
 
             if (isEditMode) {
@@ -211,6 +228,22 @@ function ExerciseCreationModal({
                             placeholder="Enter exercise name"
                             className="soft-input"
                         />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                        <Form.Label>Exercise Type</Form.Label>
+                        <Form.Control
+                            as="select"
+                            value={formData.exerciseType}
+                            onChange={e => setFormData({ ...formData, exerciseType: e.target.value })}
+                            className="soft-input"
+                            required
+                        >
+                            <option value="">Select Exercise Type</option>
+                            {EXERCISE_TYPES.map((type) => (
+                                <option key={`type-${type}`} value={type}>{type}</option>
+                            ))}
+                        </Form.Control>
                     </Form.Group>
 
                     <Form.Group className="mb-3">

@@ -1,0 +1,44 @@
+/* Workout Selector Styles */
+.workout-selector {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.week-grid {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.week-column {
+    height: 100%;
+    cursor: pointer;
+}
+
+.week-column.selected {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.week-header {
+    font-weight: 600;
+    background-color: #f8f9fa;
+}
+
+.day-cell {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.day-cell:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.day-cell.selected {
+    background-color: rgba(0, 123, 255, 0.1);
+    font-weight: 600;
+}
+
+.day-cell.completed {
+    background-color: #f8f9fa;
+}
