@@ -61,6 +61,8 @@ function ProgressTracker2() {
 	const [isExercisesLoading, setIsExercisesLoading] = useState(false);
 	const [showExerciseModal, setShowExerciseModal] = useState(false);
 	const [selectedExercise, setSelectedExercise] = useState(null);
+	const [exerciseTypes, setExerciseTypes] = useState(['All Types']);
+	const [selectedType, setSelectedType] = useState('All Types');
 
 	// Clean up expired cache
 	useEffect(() => {
