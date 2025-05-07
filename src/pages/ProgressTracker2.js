@@ -102,6 +102,8 @@ function ProgressTracker2() {
 					return acc;
 				}, {});
 				setMuscleGroups(groups);
+				const types = new Set(fetchedExercises.map(ex => ex.exerciseType || 'Unknown'));
+				setExerciseTypes(['All Types', ...Array.from(types)]);
 			} catch (error) {
 				console.error("Error fetching exercises:", error);
 			} finally {
@@ -179,7 +181,9 @@ function ProgressTracker2() {
 	const groupMetrics = useMemo(() => {
 		if (selectedGroup === 'All Muscle Groups' || allLogs.length === 0) return null;
 		const groupExercises = muscleGroups[selectedGroup] || [];
-		const exerciseIds = groupExercises.map(ex => ex.value);
+		const exerciseIds = groupExercises
+			.filter(ex => selectedType === 'All Types' || ex.exerciseType === selectedType)
+			.map(ex => ex.value);
 		const filteredLogs = allLogs.filter(log => log.exercises.some(ex => exerciseIds.includes(ex.exerciseId)));
 		const totalVolume = filteredLogs.reduce((sum, log) => {
 			return sum + log.exercises.reduce((logSum, ex) => {
@@ -194,7 +198,7 @@ function ProgressTracker2() {
 		}, 0);
 		const numWorkouts = new Set(filteredLogs.map(log => log.id)).size;
 		return { totalVolume, numWorkouts };
-	}, [allLogs, selectedGroup, muscleGroups]);
+	}, [allLogs, selectedGroup, muscleGroups, selectedType]);
 
 	// Exercise metrics
 	const calculateExerciseMetrics = (exerciseId) => {
@@ -236,14 +240,15 @@ function ProgressTracker2() {
 		const set = new Set();
 		allLogs.forEach(log => {
 			log.exercises.forEach(ex => {
-				// Only include exercises with at least one completed set
-				if (ex.completed.some(c => c)) {
+				const exercise = exercises.find(e => e.value === ex.exerciseId);
+				if (ex.completed.some(c => c) && 
+					(selectedType === 'All Types' || exercise?.exerciseType === selectedType)) {
 					set.add(ex.exerciseId);
 				}
 			});
 		});
 		return set;
-	}, [allLogs]);
+	}, [allLogs, selectedType, exercises]);
 
 	// Loading spinner
 	const renderLoadingSpinner = () => (
@@ -300,6 +305,18 @@ function ProgressTracker2() {
 								options={['All Muscle Groups', ...Object.keys(muscleGroups)].map(group => ({ value: group, label: group }))}
 								value={{ value: selectedGroup, label: selectedGroup }}
 								onChange={(selected) => setSelectedGroup(selected.value)}
+							/>
+						)}
+					</Form.Group>
+					<Form.Group className="mt-3">
+						<Form.Label>Exercise Type</Form.Label>
+						{isExercisesLoading ? (
+							<Spinner animation="border" size="sm" />
+						) : (
+							<Select
+								options={exerciseTypes.map(type => ({ value: type, label: type }))}
+								value={{ value: selectedType, label: selectedType }}
+								onChange={(selected) => setSelectedType(selected.value)}
 							/>
 						)}
 					</Form.Group>

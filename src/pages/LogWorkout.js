@@ -809,11 +809,25 @@ function LogWorkout() {
                                   </Dropdown.Item>
                                 </Dropdown.Menu>
                               </Dropdown>
-                              <h5 className="soft-label mb-0">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                              <h5 className="soft-label mb-0">
+                                {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
+                                {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
+                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                    {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
+                                  </span>
+                                )}
+                              </h5>
                             </div>
                           ) : (
                             <>
-                              <h5 className="soft-label">{exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}</h5>
+                              <h5 className="soft-label">
+                                {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
+                                {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
+                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                    {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
+                                  </span>
+                                )}
+                              </h5>
                               <div>
                                 <Button
                                   variant="outline-info"
@@ -927,6 +941,11 @@ function LogWorkout() {
                                 onClick={() => replaceExercise(alt)}
                               >
                                 {alt.name}
+                                {alt.exerciseType && (
+                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                    {alt.exerciseType}
+                                  </span>
+                                )}
                                 <small className="text-muted d-block">
                                   {(alt.primaryMuscleGroups || []).join(', ')}
                                 </small>

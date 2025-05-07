@@ -135,7 +135,8 @@ function ProgressTracker() {
 			const fetchedExercises = exercisesSnapshot.docs.map(doc => ({
 				value: doc.id,
 				label: doc.data().name,
-				primaryMuscleGroup: doc.data().primaryMuscleGroup || 'Other'
+				primaryMuscleGroup: doc.data().primaryMuscleGroup || 'Other',
+				exerciseType: doc.data().exerciseType || 'Unknown'
 			}));
 
 			// Store in cache
@@ -580,7 +581,7 @@ function ProgressTracker() {
 		exercises.forEach(exercise => {
 			const exerciseLogs = allLogs.filter(log => {
 				const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-				return ex && ex.completed.some(c => c === true); // Only logs with at least one completed set
+				return ex && ex.completed.some(c => c === true);
 			});
 
 			if (exerciseLogs.length > 0) {
@@ -642,6 +643,7 @@ function ProgressTracker() {
 							maxWeight,
 							frequency: exerciseLogs.length,
 							bodyPart: exercise.primaryMuscleGroup,
+							exerciseType: exercise.exerciseType,
 							volumeTrend,
 							trendConfidence: Math.round(rSquared * 100)
 						};
@@ -650,6 +652,7 @@ function ProgressTracker() {
 							maxWeight,
 							frequency: exerciseLogs.length,
 							bodyPart: exercise.primaryMuscleGroup,
+							exerciseType: exercise.exerciseType,
 							volumeTrend: 'insufficient data',
 							trendConfidence: 0
 						};
@@ -659,6 +662,7 @@ function ProgressTracker() {
 						maxWeight,
 						frequency: exerciseLogs.length,
 						bodyPart: exercise.primaryMuscleGroup,
+						exerciseType: exercise.exerciseType,
 						volumeTrend: 'insufficient data',
 						trendConfidence: 0
 					};
@@ -929,6 +933,7 @@ function ProgressTracker() {
 													<th>Max Weight</th>
 													<th>Volume Trend</th>
 													<th>Body Part</th>
+													<th>Exercise Type</th>
 												</tr>
 											</thead>
 											<tbody>
@@ -946,6 +951,7 @@ function ProgressTracker() {
 															</span>
 														</td>
 														<td>{stats.bodyPart}</td>
+														<td>{stats.exerciseType}</td>
 													</tr>
 												))}
 											</tbody>
