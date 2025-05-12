@@ -36,7 +36,7 @@ function Analytics() {
                     const logsData = logsSnapshot.docs.map(doc => ({
                         id: doc.id,
                         ...doc.data(),
-                        timestamp: doc.data().date.toDate()
+                        date: doc.data().date.toDate()
                     }));
                     setWorkoutLogs(logsData);
 
@@ -114,7 +114,7 @@ function Analytics() {
                 return logs;
         }
 
-        return logs.filter(log => log.timestamp >= startDate);
+        return logs.filter(log => log.date >= startDate);
     };
 
     const calculateVolumeByMuscleGroup = (logs) => {
@@ -180,7 +180,7 @@ function Analytics() {
         const dateMap = new Map();
 
         logs.forEach(log => {
-            const date = new Date(log.timestamp).toLocaleDateString();
+            const date = new Date(log.date).toLocaleDateString();
             log.exercises?.forEach(exercise => {
                 if (exercise.exerciseId === selectedExercise) {
                     if (exercise.weights && exercise.weights.length > 0 && exercise.reps && exercise.reps.length > 0) {
@@ -230,7 +230,7 @@ function Analytics() {
         const volumeByWeek = new Map();
 
         logs.forEach(log => {
-            const date = new Date(log.timestamp);
+            const date = new Date(log.date);
             const weekNumber = getWeekNumber(date);
             const weekLabel = `Week ${weekNumber}`;
 
@@ -276,7 +276,7 @@ function Analytics() {
                             exerciseId: exercise.exerciseId,
                             exerciseName: exerciseData.name,
                             weight: maxWeight,
-                            date: log.timestamp.toLocaleDateString()
+                            date: log.date.toLocaleDateString()
                         });
                     }
                 }
@@ -530,7 +530,7 @@ function Analytics() {
         // Group workout logs by weeks
         const logsByWeek = {};
         workoutLogs.forEach(log => {
-            const date = new Date(log.timestamp);
+            const date = new Date(log.date);
             const weekNumber = getWeekNumber(date);
             const weekLabel = `Week ${weekNumber}`;
 
