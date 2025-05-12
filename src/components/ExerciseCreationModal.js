@@ -23,32 +23,26 @@ function ExerciseCreationModal({
     onExerciseUpdated,    // Callback for editing (optional)
     isEditMode = false,   // Add or edit mode
     exerciseId,           // Required if isEditMode is true
-    initialData,          // Optional object with name, primaryMuscleGroup, secondaryMuscleGroups
+    initialData,          // Optional object with name, primaryMuscleGroup
 }) {
     const [formData, setFormData] = useState({
         name: '',
         primaryMuscleGroup: '',
-        secondaryMuscleGroups: [{ group: '' }],
         exerciseType: ''
     });
 
     useEffect(() => {
         if (show) {
             if (isEditMode && initialData) {
-                const secondaryGroups = initialData.secondaryMuscleGroups?.length > 0
-                    ? initialData.secondaryMuscleGroups.map(group => ({ group }))
-                    : [{ group: '' }];
                 setFormData({
                     name: initialData.name || '',
                     primaryMuscleGroup: initialData?.primaryMuscleGroup || '',
-                    secondaryMuscleGroups: secondaryGroups,
                     exerciseType: initialData?.exerciseType || ''
                 });
             } else {
                 setFormData({
                     name: '',
                     primaryMuscleGroup: '',
-                    secondaryMuscleGroups: [{ group: '' }],
                     exerciseType: ''
                 });
             }
@@ -62,7 +56,6 @@ function ExerciseCreationModal({
         setFormData({
             name: '',
             primaryMuscleGroup: '',
-            secondaryMuscleGroups: [{ group: '' }],
             exerciseType: ''
         });
         setValidationError('');
@@ -104,24 +97,6 @@ function ExerciseCreationModal({
             return false;
         }
 
-        // Validate secondary muscle groups
-        const validSecondaryGroups = formData.secondaryMuscleGroups
-            .map(mg => mg.group)
-            .filter(Boolean);
-
-        // Prevent duplicate muscle groups
-        const uniqueSecondaryGroups = [...new Set(validSecondaryGroups)];
-        if (validSecondaryGroups.length !== uniqueSecondaryGroups.length) {
-            setValidationError('Remove duplicate secondary muscle groups.');
-            return false;
-        }
-
-        // Prevent primary muscle group from being a secondary muscle group
-        if (validSecondaryGroups.includes(formData.primaryMuscleGroup)) {
-            setValidationError('Primary muscle group cannot be a secondary muscle group.');
-            return false;
-        }
-
         return true;
     };
 
@@ -139,9 +114,6 @@ function ExerciseCreationModal({
             const exerciseData = {
                 name: formData.name.trim(),
                 primaryMuscleGroup: formData.primaryMuscleGroup,
-                secondaryMuscleGroups: formData.secondaryMuscleGroups
-                    .map(mg => mg.group)
-                    .filter(Boolean),
                 exerciseType: formData.exerciseType
             };
 
@@ -175,35 +147,6 @@ function ExerciseCreationModal({
         } finally {
             setIsSubmitting(false);
         }
-    };
-
-    const addSecondaryMuscleGroup = () => {
-        if (formData.secondaryMuscleGroups.length < MUSCLE_GROUPS.length - 1) {
-            setFormData({
-                ...formData,
-                secondaryMuscleGroups: [...formData.secondaryMuscleGroups, { group: '' }]
-            });
-        }
-    };
-
-    const handleSecondaryMuscleGroupChange = (index, value) => {
-        const updated = [...formData.secondaryMuscleGroups];
-        updated[index] = { group: value };
-
-        setFormData({
-            ...formData,
-            secondaryMuscleGroups: updated
-        });
-    };
-
-    const removeSecondaryMuscleGroup = (index) => {
-        const updated = [...formData.secondaryMuscleGroups];
-        updated.splice(index, 1);
-
-        setFormData({
-            ...formData,
-            secondaryMuscleGroups: updated
-        });
     };
 
     return (
@@ -262,7 +205,7 @@ function ExerciseCreationModal({
                         </Form.Control>
                     </Form.Group>
 
-                    <Form.Label>Secondary Muscle Groups</Form.Label>
+                    {/* <Form.Label>Secondary Muscle Groups</Form.Label>
                     {formData.secondaryMuscleGroups.map((muscleGroup, index) => (
                         <InputGroup key={`secondary-${index}`} className="mb-3">
                             <Form.Control
@@ -293,7 +236,7 @@ function ExerciseCreationModal({
                                 </Button>
                             )}
                         </InputGroup>
-                    ))}
+                    ))} */}
                 </Form>
             </Modal.Body>
             <Modal.Footer>

@@ -111,24 +111,6 @@ function Exercises() {
       return false;
     }
 
-    // Validate secondary muscle groups (optional)
-    const validSecondaryGroups = secondaryGroups
-      .map(mg => mg.group)
-      .filter(Boolean);
-
-    // Prevent duplicate muscle groups
-    const uniqueSecondaryGroups = [...new Set(validSecondaryGroups)];
-    if (validSecondaryGroups.length !== uniqueSecondaryGroups.length) {
-      setValidationError('Remove duplicate secondary muscle groups.');
-      return false;
-    }
-
-    // Prevent primary muscle group from being a secondary muscle group
-    if (validSecondaryGroups.includes(primaryGroup)) {
-      setValidationError('Primary muscle group cannot be a secondary muscle group.');
-      return false;
-    }
-
     return true;
   };
 
@@ -189,9 +171,6 @@ function Exercises() {
                             {exercise.exerciseType && (
                               <span className="ms-2 badge bg-info text-dark">{exercise.exerciseType}</span>
                             )}
-                            {exercise.secondaryMuscleGroups.length > 0 && 
-                              <span> - Secondary: {exercise.secondaryMuscleGroups.join(', ')}</span>
-                            }
                           </div>
                         </ListGroup.Item>
                       ))}
