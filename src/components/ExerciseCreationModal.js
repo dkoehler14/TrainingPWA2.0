@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Button, Alert, InputGroup } from 'react-bootstrap';
-import { Trash } from 'react-bootstrap-icons';
+import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
 

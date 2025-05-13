@@ -1,17 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Form, Button, ListGroup, Accordion, InputGroup, Alert, Modal } from 'react-bootstrap';
-import { Trash, PencilSquare, PlusLg } from 'react-bootstrap-icons';
-import { db, auth } from '../firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { Container, Row, Col, Button, ListGroup, Accordion, Alert } from 'react-bootstrap';
+import { PencilSquare, PlusLg } from 'react-bootstrap-icons';
+import { db } from '../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import '../styles/Exercises.css';
 
 function Exercises() {
-  const MUSCLE_GROUPS = [
-    'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders', 
-    'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves', 
-    'Traps', 'Forearms'
-  ];
 
   const [exercises, setExercises] = useState([]);
   
@@ -73,46 +68,46 @@ function Exercises() {
     setShowModal(false);
   };
 
-  const validateExercise = async (exerciseName, primaryGroup, secondaryGroups, checkingExistingId = null) => {
-    // Reset previous error message
-    setValidationError('');
+  // const validateExercise = async (exerciseName, primaryGroup, secondaryGroups, checkingExistingId = null) => {
+  //   // Reset previous error message
+  //   setValidationError('');
 
-    // Validate exercise name
-    if (!exerciseName.trim()) {
-      setValidationError('Exercise name is required.');
-      return false;
-    }
+  //   // Validate exercise name
+  //   if (!exerciseName.trim()) {
+  //     setValidationError('Exercise name is required.');
+  //     return false;
+  //   }
 
-    // Check for duplicate exercise name
-    const exerciseQuery = query(collection(db, "exercises"), where("name", "==", exerciseName.trim()));
-    const querySnapshot = await getDocs(exerciseQuery);
+  //   // Check for duplicate exercise name
+  //   const exerciseQuery = query(collection(db, "exercises"), where("name", "==", exerciseName.trim()));
+  //   const querySnapshot = await getDocs(exerciseQuery);
     
-    // When editing, we need to exclude the current exercise from duplicate check
-    if (!querySnapshot.empty) {
-      // If we're in edit mode, check if the duplicate is the exercise we're editing
-      let isDuplicate = false;
-      querySnapshot.forEach((doc) => {
-        if (checkingExistingId && doc.id === checkingExistingId) {
-          // This is our own exercise, so not a duplicate
-        } else {
-          isDuplicate = true;
-        }
-      });
+  //   // When editing, we need to exclude the current exercise from duplicate check
+  //   if (!querySnapshot.empty) {
+  //     // If we're in edit mode, check if the duplicate is the exercise we're editing
+  //     let isDuplicate = false;
+  //     querySnapshot.forEach((doc) => {
+  //       if (checkingExistingId && doc.id === checkingExistingId) {
+  //         // This is our own exercise, so not a duplicate
+  //       } else {
+  //         isDuplicate = true;
+  //       }
+  //     });
 
-      if (isDuplicate) {
-        setValidationError('An exercise with this name already exists.');
-        return false;
-      }
-    }
+  //     if (isDuplicate) {
+  //       setValidationError('An exercise with this name already exists.');
+  //       return false;
+  //     }
+  //   }
 
-    // Validate primary muscle group
-    if (!primaryGroup || primaryGroup === '' || String(primaryGroup).trim() === '') {
-      setValidationError('Primary muscle group is required.');
-      return false;
-    }
+  //   // Validate primary muscle group
+  //   if (!primaryGroup || primaryGroup === '' || String(primaryGroup).trim() === '') {
+  //     setValidationError('Primary muscle group is required.');
+  //     return false;
+  //   }
 
-    return true;
-  };
+  //   return true;
+  // };
 
   const groupByPrimaryMuscle = () => {
     return exercises.reduce((acc, exercise) => {
