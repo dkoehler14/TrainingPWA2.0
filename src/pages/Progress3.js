@@ -6,16 +6,15 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
 
-// Removed hardcoded MUSCLE_GROUPS since we'll now use the actual data from Firestore
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#8dd1e1'];
+const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 
 function Analytics() {
     const [workoutLogs, setWorkoutLogs] = useState([]);
     const [exercises, setExercises] = useState([]);
     const [muscleGroups, setMuscleGroups] = useState({});
     const [selectedExercise, setSelectedExercise] = useState(null);
-    const [activeTab, setActiveTab] = useState('volume'); // Changed default to 'volume' as it's the only tab shown
-    const [dateRange, setDateRange] = useState('month'); // 'week', 'month', 'year', 'all'
+    const [activeTab, setActiveTab] = useState('overview');
+    const [dateRange, setDateRange] = useState('month');
     const [muscleGroupData, setMuscleGroupData] = useState([]);
     const [strengthMetrics, setStrengthMetrics] = useState([]);
     const [completionRate, setCompletionRate] = useState(0);
@@ -23,11 +22,22 @@ function Analytics() {
     const [personalRecords, setPersonalRecords] = useState([]);
     const user = auth.currentUser;
 
+    const getWeekStartDate = (date) => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+        d.setDate(diff);
+        d.setHours(0, 0, 0, 0); // Reset time to midnight
+        return {
+            dateObj: new Date(d),
+            dateStr: d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+        };
+    };
+
     useEffect(() => {
         const fetchData = async () => {
             if (user) {
                 try {
-                    // Fetch workout logs
                     const logsQuery = query(
                         collection(db, "workoutLogs"),
                         where("userId", "==", user.uid)
@@ -40,7 +50,6 @@ function Analytics() {
                     }));
                     setWorkoutLogs(logsData);
 
-                    // Fetch exercises
                     const exercisesSnapshot = await getDocs(collection(db, "exercises"));
                     const exercisesData = exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setExercises(exercisesData);
@@ -48,7 +57,6 @@ function Analytics() {
                     if (exercisesData.length > 0) {
                         setSelectedExercise(exercisesData[0].id);
 
-                        // Generate muscle groups mapping from the exercises data
                         const groupsMap = {};
                         exercisesData.forEach(exercise => {
                             const primaryGroup = exercise.primaryMuscleGroup;
@@ -57,13 +65,11 @@ function Analytics() {
                             }
                             groupsMap[primaryGroup].push(exercise.name);
 
-                            // Also add exercise to secondary muscle groups if any
                             if (exercise.secondaryMuscleGroups && exercise.secondaryMuscleGroups.length > 0) {
                                 exercise.secondaryMuscleGroups.forEach(secondaryGroup => {
                                     if (!groupsMap[secondaryGroup]) {
                                         groupsMap[secondaryGroup] = [];
                                     }
-                                    // Only add if not already in the array (to avoid duplicates)
                                     if (!groupsMap[secondaryGroup].includes(exercise.name)) {
                                         groupsMap[secondaryGroup].push(exercise.name);
                                     }
@@ -92,7 +98,7 @@ function Analytics() {
         calculateStrengthMetrics(filteredLogs);
         calculateWorkoutCompletionRate(filteredLogs);
         calculateVolumeProgression(filteredLogs);
-        calculatePersonalRecords(workoutLogs); // Use all logs for PRs
+        calculatePersonalRecords(workoutLogs);
     };
 
     const filterLogsByDateRange = (logs) => {
@@ -120,7 +126,6 @@ function Analytics() {
     const calculateVolumeByMuscleGroup = (logs) => {
         const volumeByMuscle = {};
 
-        // Initialize all muscle groups with zero volume
         Object.keys(muscleGroups).forEach(group => {
             volumeByMuscle[group] = 0;
         });
@@ -130,17 +135,13 @@ function Analytics() {
                 const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
                 if (!exerciseData) return;
 
-                // Get primary muscle group for this exercise
                 const primaryMuscleGroup = exerciseData.primaryMuscleGroup;
 
                 if (primaryMuscleGroup) {
-                    // Calculate volume (sets × reps × weight)
                     let volume = calculateExerciseVolume(exercise);
                     volumeByMuscle[primaryMuscleGroup] = (volumeByMuscle[primaryMuscleGroup] || 0) + volume;
 
-                    // Also add a portion of the volume to secondary muscle groups
                     if (exerciseData.secondaryMuscleGroups && exerciseData.secondaryMuscleGroups.length > 0) {
-                        // Assign a fraction of the volume to secondary muscle groups (e.g., 40%)
                         const secondaryVolume = volume * 0.4 / exerciseData.secondaryMuscleGroups.length;
 
                         exerciseData.secondaryMuscleGroups.forEach(secondaryGroup => {
@@ -152,7 +153,7 @@ function Analytics() {
         });
 
         const muscleData = Object.entries(volumeByMuscle)
-            .filter(([_, value]) => value > 0) // Remove muscle groups with zero volume
+            .filter(([_, value]) => value > 0)
             .map(([name, value]) => ({
                 name: name,
                 value
@@ -161,7 +162,6 @@ function Analytics() {
         setMuscleGroupData(muscleData);
     };
 
-    // Helper function to calculate volume for an exercise
     const calculateExerciseVolume = (exercise) => {
         let volume = 0;
         if (exercise.sets && exercise.reps && exercise.weights) {
@@ -175,7 +175,6 @@ function Analytics() {
     const calculateStrengthMetrics = (logs) => {
         if (!selectedExercise) return;
 
-        // Group logs by date for the selected exercise
         const strengthData = [];
         const dateMap = new Map();
 
@@ -184,14 +183,12 @@ function Analytics() {
             log.exercises?.forEach(exercise => {
                 if (exercise.exerciseId === selectedExercise) {
                     if (exercise.weights && exercise.weights.length > 0 && exercise.reps && exercise.reps.length > 0) {
-                        // Calculate estimated 1RM using Brzycki formula: weight × (36 / (37 - reps))
                         const maxWeight = Math.max(...exercise.weights);
                         const matchingReps = exercise.reps[exercise.weights.indexOf(maxWeight)];
 
-                        if (matchingReps <= 10) { // 1RM estimates are more accurate with lower rep ranges
+                        if (matchingReps <= 10) {
                             const estimatedOneRM = Math.round(maxWeight * (36 / (37 - matchingReps)));
 
-                            // If we have multiple entries for the same date, keep the highest 1RM
                             if (!dateMap.has(date) || dateMap.get(date).estimatedOneRM < estimatedOneRM) {
                                 dateMap.set(date, {
                                     date,
@@ -205,7 +202,6 @@ function Analytics() {
             });
         });
 
-        // Convert to array and sort by date
         Array.from(dateMap.values()).forEach(entry => {
             strengthData.push(entry);
         });
@@ -226,34 +222,30 @@ function Analytics() {
     };
 
     const calculateVolumeProgression = (logs) => {
-        // Group logs by week and calculate total volume
         const volumeByWeek = new Map();
 
         logs.forEach(log => {
-            const date = new Date(log.date);
-            const weekNumber = getWeekNumber(date);
-            const weekLabel = `Week ${weekNumber}`;
+            const { dateObj, dateStr } = getWeekStartDate(log.date);
+            const weekKey = dateStr;
 
-            let weeklyVolume = volumeByWeek.get(weekLabel) || 0;
+            let weeklyVolume = volumeByWeek.get(weekKey) || 0;
 
             log.exercises?.forEach(exercise => {
                 weeklyVolume += calculateExerciseVolume(exercise);
             });
 
-            volumeByWeek.set(weekLabel, weeklyVolume);
+            volumeByWeek.set(weekKey, weeklyVolume);
         });
 
-        // Convert to array format for charts
-        const volumeProgressionData = Array.from(volumeByWeek.entries()).map(([week, volume]) => ({
-            week,
+        const volumeProgressionData = Array.from(volumeByWeek.entries()).map(([date, volume]) => ({
+            date,
             volume
         }));
 
-        // Sort by week number
         volumeProgressionData.sort((a, b) => {
-            const weekA = parseInt(a.week.split(' ')[1]);
-            const weekB = parseInt(b.week.split(' ')[1]);
-            return weekA - weekB;
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            return dateA - dateB;
         });
 
         setVolumeData(volumeProgressionData);
@@ -286,15 +278,8 @@ function Analytics() {
         setPersonalRecords(Array.from(prs.values()));
     };
 
-    const getWeekNumber = (date) => {
-        const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-        const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
-        return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
-    };
-
     const estimateOneRepMax = (weight, reps) => {
-        // Brzycki formula: weight × (36 / (37 - reps))
-        if (reps >= 36) return weight; // Formula breaks down at high reps
+        if (reps >= 36) return weight;
         return Math.round(weight * (36 / (37 - reps)));
     };
 
@@ -378,7 +363,7 @@ function Analytics() {
                                         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="week" />
+                                        <XAxis dataKey="date" />
                                         <YAxis />
                                         <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
                                         <Legend />
@@ -521,18 +506,15 @@ function Analytics() {
     };
 
     const renderVolumeTab = () => {
-        // Calculate volume data by muscle group over time
         const muscleVolumeTrends = {};
         Object.keys(muscleGroups).forEach(group => {
             muscleVolumeTrends[group] = [];
         });
 
-        // Group workout logs by weeks
         const logsByWeek = {};
         workoutLogs.forEach(log => {
-            const date = new Date(log.date);
-            const weekNumber = getWeekNumber(date);
-            const weekLabel = `Week ${weekNumber}`;
+            const { dateStr } = getWeekStartDate(log.date);
+            const weekLabel = dateStr;
 
             if (!logsByWeek[weekLabel]) {
                 logsByWeek[weekLabel] = [];
@@ -540,78 +522,61 @@ function Analytics() {
             logsByWeek[weekLabel].push(log);
         });
 
-        // Calculate volume for each muscle group by week
         Object.entries(logsByWeek).forEach(([week, logs]) => {
-            // Initialize volume for each muscle group for this week
             const weeklyVolume = {};
             Object.keys(muscleGroups).forEach(group => {
                 weeklyVolume[group] = 0;
             });
 
-            // Calculate volume for each exercise in this week's logs
             logs.forEach(log => {
                 log.exercises?.forEach(exercise => {
                     const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
                     if (!exerciseData) return;
 
-                    // Calculate exercise volume
                     const volume = calculateExerciseVolume(exercise);
 
-                    // Add volume to primary muscle group
                     const primaryGroup = exerciseData.primaryMuscleGroup;
                     if (primaryGroup) {
                         weeklyVolume[primaryGroup] = (weeklyVolume[primaryGroup] || 0) + volume;
                     }
-
-                    // Add partial volume to secondary muscle groups
-                    // if (exerciseData.secondaryMuscleGroups && exerciseData.secondaryMuscleGroups.length > 0) {
-                    //     const secondaryVolume = volume * 0.4 / exerciseData.secondaryMuscleGroups.length;
-                    //     exerciseData.secondaryMuscleGroups.forEach(secondaryGroup => {
-                    //         weeklyVolume[secondaryGroup] = (weeklyVolume[secondaryGroup] || 0) + secondaryVolume;
-                    //     });
-                    // }
                 });
             });
 
-            // Add this week's volume data to each muscle group's trend
             Object.entries(weeklyVolume).forEach(([group, volume]) => {
-                if (volume > 0) { // Only add data points for muscle groups with activity
+                if (volume > 0) {
                     muscleVolumeTrends[group].push({
-                        week,
+                        date: week,
                         volume
                     });
                 }
             });
         });
 
-        // Sort each muscle group's data by week
         Object.keys(muscleVolumeTrends).forEach(group => {
             muscleVolumeTrends[group].sort((a, b) => {
-                const weekA = parseInt(a.week.split(' ')[1]);
-                const weekB = parseInt(b.week.split(' ')[1]);
-                return weekA - weekB;
+                const dateA = new Date(a.date);
+                const dateB = new Date(b.date);
+                return dateA - dateB;
             });
         });
 
-        // Prepare data for stacked bar chart
         const stackedData = [];
         const weeks = [...new Set(Object.values(muscleVolumeTrends)
-            .flatMap(data => data.map(item => item.week)))].sort((a, b) => {
-                const weekA = parseInt(a.split(' ')[1]);
-                const weekB = parseInt(b.split(' ')[1]);
-                return weekA - weekB;
+            .flatMap(data => data.map(item => item.date)))].sort((a, b) => {
+                const dateA = new Date(a);
+                const dateB = new Date(b);
+                return dateA - dateB;
             });
 
         weeks.forEach(week => {
-            const weekData = { week };
+            const weekData = { date: week };
             Object.entries(muscleVolumeTrends).forEach(([group, data]) => {
-                const weekItem = data.find(item => item.week === week);
+                const weekItem = data.find(item => item.date === week);
                 weekData[group] = weekItem ? weekItem.volume : 0;
             });
             stackedData.push(weekData);
         });
 
-        // Filter out inactive muscle groups (those with no data in any week)
         const activeGroups = Object.keys(muscleVolumeTrends).filter(group =>
             muscleVolumeTrends[group].some(data => data.volume > 0)
         );
@@ -631,7 +596,7 @@ function Analytics() {
                                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="week" />
+                                        <XAxis dataKey="date" />
                                         <YAxis />
                                         <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
                                         <Legend />
@@ -664,7 +629,7 @@ function Analytics() {
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
-                                            dataKey="week"
+                                            dataKey="date"
                                             allowDuplicatedCategory={false}
                                             type="category"
                                             allowDecimals={false}
@@ -759,4 +724,4 @@ function Analytics() {
     );
 }
 
-export default Analytics
+export default Analytics;
