@@ -230,7 +230,7 @@ function LogWorkout() {
         where("userId", "==", user.uid),
         where("isWorkoutFinished", "==", true),
         orderBy("date", "desc"),
-        limit(10) // Limit to recent 10 entries
+        limit(20) // Limit to recent 10 entries
       );
 
       const logsSnapshot = await getDocs(logsQuery);
@@ -246,22 +246,15 @@ function LogWorkout() {
         const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
 
         if (exerciseInLog) {
-          console.log(`Found exercise in log. Sets: ${exerciseInLog.sets}, Weights array length: ${exerciseInLog.weights.length}, Reps array length: ${exerciseInLog.reps.length}`);
-
-          // For each set, create a history entry
-          if (exerciseInLog.sets && Array.isArray(exerciseInLog.weights) && Array.isArray(exerciseInLog.reps)) {
-            for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
+          for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
+            if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
               const weight = exerciseInLog.weights[setIndex];
               const reps = exerciseInLog.reps[setIndex];
-
-              // Explicitly convert to numbers and validate
               const weightValue = weight === '' || weight === null ? 0 : Number(weight);
               const repsValue = reps === '' || reps === null ? 0 : Number(reps);
 
-              // Skip entries with no weight or reps
               if (weightValue === 0 && repsValue === 0) continue;
 
-              // Only add valid entries
               if (!isNaN(weightValue) && !isNaN(repsValue)) {
                 historyData.push({
                   date: log.date.toDate(),
@@ -270,7 +263,7 @@ function LogWorkout() {
                   set: setIndex + 1,
                   weight: weightValue,
                   reps: repsValue,
-                  completed: exerciseInLog.completed && exerciseInLog.completed[setIndex] ? true : false
+                  completed: true
                 });
               }
             }
@@ -280,23 +273,6 @@ function LogWorkout() {
 
       // Sort by date (most recent first)
       historyData.sort((a, b) => b.date - a.date);
-      console.log("Final history data:", historyData);
-
-      // Calculate stats for debugging
-      if (historyData.length > 0) {
-        const allReps = historyData.map(e => e.reps);
-        console.log("All reps values:", allReps);
-        console.log("Max reps:", Math.max(...allReps));
-        console.log("Min reps:", Math.min(...allReps));
-
-        const repSum = historyData.reduce((sum, e) => {
-          console.log(`Adding ${e.reps} to current sum ${sum}`);
-          return sum + e.reps;
-        }, 0);
-
-        console.log(`Total reps sum: ${repSum}, Count: ${historyData.length}, Average: ${repSum / historyData.length}`);
-      }
-
       setExerciseHistoryData(historyData);
     } catch (error) {
       console.error("Error fetching exercise history:", error);
@@ -1018,7 +994,6 @@ function LogWorkout() {
                                 <th>Set</th>
                                 <th>Weight</th>
                                 <th>Reps</th>
-                                <th>Status</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1029,17 +1004,12 @@ function LogWorkout() {
                                   <td>{entry.set}</td>
                                   <td>{entry.weight}</td>
                                   <td>{entry.reps}</td>
-                                  <td>
-                                    <span className={`badge ${entry.completed ? 'bg-success' : 'bg-secondary'}`}>
-                                      {entry.completed ? 'Completed' : 'Incomplete'}
-                                    </span>
-                                  </td>
                                 </tr>
                               ))}
                             </tbody>
                           </Table>
                         ) : (
-                          <p className="text-center">No history found for this exercise.</p>
+                          <p className="text-center">No completed sets found for this exercise.</p>
                         )}
 
                         {exerciseHistoryData.length > 0 && (
@@ -1058,9 +1028,9 @@ function LogWorkout() {
                               <li>
                                 <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
                               </li>
-                              <li>
+                              {/* <li>
                                 <strong>Completion Rate:</strong> {((exerciseHistoryData.filter(e => e.completed).length / exerciseHistoryData.length) * 100).toFixed(0)}%
-                              </li>
+                              </li> */}
                             </ul>
                           </div>
                         )}
