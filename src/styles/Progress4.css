@@ -1,0 +1,116 @@
+/* Root variables for consistent theming */
+:root {
+    --primary-color: #007bff;
+    --secondary-color: #6c757d;
+    --background-color: #f8f9fa;
+    --text-color: #343a40;
+    --border-color: #e9ecef;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --gradient: linear-gradient(135deg, #007bff, #0056b3);
+  }
+  
+  /* Container and card styles */
+  .analytics-container {
+    padding: 2rem 0;
+  }
+  
+  .analytics-card {
+    padding: 2rem;
+    background-color: var(--background-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+  }
+  
+  /* Title styling */
+  .analytics-title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+  }
+  
+  /* Form elements */
+  .soft-input {
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    padding: 0.5rem;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+  }
+  
+  .soft-input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+  }
+  
+  /* Chart styling */
+  canvas {
+    background-color: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  /* Table styling */
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+  
+  .table th,
+  .table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  .table th {
+    background-color: var(--primary-color);
+    color: #fff;
+    font-weight: bold;
+  }
+  
+  .table tr:nth-child(even) {
+    background-color: #f2f2f2;
+  }
+  
+  .table tr:hover {
+    background-color: #e9ecef;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .analytics-title {
+      font-size: 2rem;
+    }
+  
+    .analytics-card {
+      padding: 1.5rem;
+    }
+  
+    canvas {
+      height: 250px !important; /* Adjust chart height for mobile */
+    }
+  
+    .table {
+      font-size: 0.9rem;
+    }
+  
+    .table th,
+    .table td {
+      padding: 0.5rem;
+    }
+  }
+  
+  /* Additional elements */
+  .spinner-blue {
+    color: var(--primary-color);
+  }
+  
+  .error-message {
+    color: red;
+    font-weight: bold;
+    margin-top: 1rem;
+  }

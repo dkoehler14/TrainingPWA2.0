@@ -11,6 +11,7 @@ import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
 import ProgressTracker2 from './pages/ProgressTracker2';
 import Analytics from './pages/Progress3';
+import Progress4 from './pages/Progress4';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -54,6 +55,7 @@ function AppContent() {
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
         <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
+        <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
       </Routes>
     </Router>
   );

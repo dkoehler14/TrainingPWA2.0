@@ -7,6 +7,75 @@ import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as n
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 
+function WorkoutSummaryModal({ show, onHide, workoutData, previousData, weightUnit }) {
+  // Calculate total volume
+  const totalVolume = workoutData.reduce((sum, ex) => {
+    const exerciseVolume = ex.weights.reduce((acc, weight, idx) => 
+      acc + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
+    return sum + exerciseVolume;
+  }, 0);
+
+  // Calculate exercise-specific metrics
+  const exerciseMetrics = workoutData.map(ex => {
+    const totalReps = ex.reps.reduce((sum, rep) => sum + (Number(rep) || 0), 0);
+    const avgWeight = totalReps > 0 ? ex.weights.reduce((sum, w) => sum + (Number(w) || 0), 0) / ex.weights.length : 0;
+    const maxWeight = Math.max(...ex.weights.map(w => Number(w) || 0));
+    return { name: ex.name, totalReps, avgWeight: avgWeight.toFixed(1), maxWeight };
+  });
+
+  // Compare to previous workout
+  const previousVolume = previousData ? previousData.reduce((sum, ex) => {
+    const exerciseVolume = ex.weights.reduce((acc, weight, idx) => 
+      acc + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
+    return sum + exerciseVolume;
+  }, 0) : 0;
+  const volumeDifference = totalVolume - previousVolume;
+
+  // Check for personal bests
+  const personalBests = exerciseMetrics
+    .map(metric => {
+      const prevMax = previousData?.find(p => p.name === metric.name)?.maxWeight || 0;
+      return metric.maxWeight > prevMax ? { name: metric.name, maxWeight: metric.maxWeight } : null;
+    })
+    .filter(Boolean);
+
+  return (
+    <Modal show={show} onHide={onHide} centered>
+      <Modal.Header closeButton>
+        <Modal.Title>Workout Summary</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <h5>Great Job!</h5>
+        <p><strong>Total Volume:</strong> {totalVolume.toLocaleString()} {weightUnit}</p>
+        {exerciseMetrics.map((metric, idx) => (
+          <div key={idx} className="mb-3">
+            <h6>{metric.name}</h6>
+            <p>Total Reps: {metric.totalReps}</p>
+            <p>Average Weight: {metric.avgWeight} {weightUnit}</p>
+            <p>Max Weight: {metric.maxWeight} {weightUnit}</p>
+          </div>
+        ))}
+        {volumeDifference !== 0 && (
+          <p><strong>Compared to Last Time:</strong> {volumeDifference > 0 ? '+' : ''}{volumeDifference.toLocaleString()} {weightUnit}</p>
+        )}
+        {personalBests.length > 0 && (
+          <div>
+            <h6>New Personal Bests!</h6>
+            <ul>
+              {personalBests.map((pb, idx) => (
+                <li key={idx}>{pb.name}: {pb.maxWeight} {weightUnit}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onHide}>Close</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+}
+
 function LogWorkout() {
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
@@ -30,6 +99,8 @@ function LogWorkout() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [showGridModal, setShowGridModal] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [previousWorkoutData, setPreviousWorkoutData] = useState(null);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -279,6 +350,34 @@ function LogWorkout() {
       setExerciseHistoryData([]);
     } finally {
       setIsLoadingHistory(false);
+    }
+  };
+
+  const fetchPreviousWorkout = async (programId, weekIndex, dayIndex) => {
+    if (!user) return null;
+    try {
+      const logsQuery = query(
+        collection(db, "workoutLogs"),
+        where("userId", "==", user.uid),
+        where("programId", "==", programId),
+        where("weekIndex", "<", weekIndex),
+        where("dayIndex", "==", dayIndex),
+        where("isWorkoutFinished", "==", true),
+        orderBy("date", "desc"),
+        limit(1)
+      );
+      const logsSnapshot = await getDocs(logsQuery);
+      if (!logsSnapshot.empty) {
+        const prevLog = logsSnapshot.docs[0].data();
+        return prevLog.exercises.map(ex => ({
+          ...ex,
+          name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown'
+        }));
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching previous workout:", error);
+      return null;
     }
   };
 
@@ -617,7 +716,9 @@ function LogWorkout() {
         });
       }
       setIsWorkoutFinished(true);
-      alert('Workout finished successfully!');
+      const prevData = await fetchPreviousWorkout(selectedProgram.id, selectedWeek, selectedDay);
+      setPreviousWorkoutData(prevData);
+      setShowSummaryModal(true);
     } catch (error) {
       console.error("Error finishing workout: ", error);
       alert('Error finishing workout. Please try again.');
@@ -1009,7 +1110,7 @@ function LogWorkout() {
                             </tbody>
                           </Table>
                         ) : (
-                          <p className="text-center">No completed sets found for this exercise.</p>
+                          <p className="text-center">No recent completed sets found for this exercise.</p>
                         )}
 
                         {exerciseHistoryData.length > 0 && (
@@ -1057,6 +1158,13 @@ function LogWorkout() {
           </div>
         </Col>
       </Row>
+      <WorkoutSummaryModal
+        show={showSummaryModal}
+        onHide={() => setShowSummaryModal(false)}
+        workoutData={logData.map(ex => ({ ...ex, name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown' }))}
+        previousData={previousWorkoutData}
+        weightUnit={selectedProgram?.weightUnit || 'LB'}
+      />
     </Container>
   );
 }
