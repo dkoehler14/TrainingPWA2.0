@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
-import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 
@@ -26,7 +26,8 @@ function Programs() {
           const userProgramsQuery = query(
             collection(db, "programs"),
             where("userId", "==", user.uid),
-            where("isPredefined", "==", false)
+            where("isPredefined", "==", false),
+            orderBy("createdAt", "desc")
           );
           const userProgramsSnapshot = await getDocs(userProgramsQuery);
           const userProgramsData = userProgramsSnapshot.docs.map(doc => ({
