@@ -570,6 +570,10 @@ function LogWorkout() {
     // The useEffect will handle loading or initializing logData
   };
 
+  const handleFocus = (e) => {
+    e.currentTarget.select();
+  };
+
   const handleChange = (exerciseIndex, setIndex, value, field) => {
     if (isWorkoutFinished) return; // Don't allow changes if workout is finished
 
@@ -968,6 +972,7 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.reps[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
+                                    onFocus={handleFocus}
                                     className="soft-input center-input"
                                     style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={repsInputRef} // Attach ref for double-click
@@ -979,6 +984,7 @@ function LogWorkout() {
                                     type="number"
                                     value={ex.weights[setIndex] || ''}
                                     onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weights')}
+                                    onFocus={handleFocus}
                                     className="soft-input center-input"
                                     style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                     ref={weightInputRef} // Attach ref for double-click
