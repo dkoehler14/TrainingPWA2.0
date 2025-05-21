@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Modal } from 'react-bootstrap';
-import { useNavigate } from'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle } from 'react-bootstrap-icons';
@@ -24,7 +24,7 @@ function Programs() {
         try {
           // Fetch user programs
           const userProgramsQuery = query(
-            collection(db, "programs"), 
+            collection(db, "programs"),
             where("userId", "==", user.uid),
             where("isPredefined", "==", false)
           );
@@ -38,7 +38,7 @@ function Programs() {
 
           // Fetch predefined programs
           const predefProgramsQuery = query(
-            collection(db, "programs"), 
+            collection(db, "programs"),
             where("isPredefined", "==", true)
           );
           const predefProgramsSnapshot = await getDocs(predefProgramsQuery);
@@ -105,7 +105,7 @@ function Programs() {
 
   const deleteProgram = async (programId) => {
     if (!window.confirm('Are you sure you want to delete this program?')) return;
-    
+
     setIsDeleting(true);
     try {
       await deleteDoc(doc(db, "programs", programId));
@@ -121,16 +121,16 @@ function Programs() {
 
   const setCurrentProgram = async (programId) => {
     if (!user) return;
-    
+
     try {
       // First, set all user's programs to not current
       const userProgramsQuery = query(
-        collection(db, "programs"), 
+        collection(db, "programs"),
         where("userId", "==", user.uid),
         where("isPredefined", "==", false)
       );
       const userProgramsSnapshot = await getDocs(userProgramsQuery);
-      
+
       // Batch update to set all programs to not current
       const batch = [];
       userProgramsSnapshot.docs.forEach(programDoc => {
@@ -139,21 +139,21 @@ function Programs() {
         });
         batch.push(updatePromise);
       });
-      
+
       // Wait for all updates to complete
       await Promise.all(batch);
-      
+
       // Set the selected program as current
       await updateDoc(doc(db, "programs", programId), {
         isCurrent: true
       });
-      
+
       // Update local state
       setUserPrograms(userPrograms.map(program => ({
         ...program,
         isCurrent: program.id === programId
       })));
-      
+
       alert('Current program updated successfully!');
     } catch (error) {
       console.error("Error setting current program: ", error);
@@ -172,12 +172,12 @@ function Programs() {
       );
 
       const logsSnapshot = await getDocs(logsQuery);
-      
+
       const logs = {};
       logsSnapshot.docs.forEach(logDoc => {
         const log = logDoc.data();
         const key = `week${log.weekIndex + 1}_day${log.dayIndex + 1}`;
-        
+
         if (!logs[key]) {
           logs[key] = {
             exercises: {},
@@ -209,7 +209,7 @@ function Programs() {
 
   const renderWorkoutLogs = (exercise, weekKey) => {
     const log = workoutLogs[weekKey]?.exercises?.[exercise.exerciseId];
-    
+
     if (!log) {
       return null;
     }
@@ -252,30 +252,30 @@ function Programs() {
               <Star className="text-warning" size={24} />
             )}
           </div>
-          
+
           <div className="d-flex justify-content-between align-items-center mt-3">
             <div className="d-flex gap-2">
-              <Button 
-                variant="outline-primary" 
-                size="sm" 
+              <Button
+                variant="outline-primary"
+                size="sm"
                 onClick={() => viewProgramDetails(program)}
               >
                 <FileText className="me-1" /> Details
               </Button>
-              
+
               {!isPredefined ? (
                 <>
                   {!program.isCurrent && (
-                    <Button 
-                      variant="outline-success" 
+                    <Button
+                      variant="outline-success"
                       size="sm"
                       onClick={() => setCurrentProgram(program.id)}
                     >
                       <Clock className="me-1" /> Set Current
                     </Button>
                   )}
-                  <Button 
-                    variant="outline-danger" 
+                  <Button
+                    variant="outline-danger"
                     size="sm"
                     onClick={() => deleteProgram(program.id)}
                     disabled={isDeleting}
@@ -284,8 +284,8 @@ function Programs() {
                   </Button>
                 </>
               ) : (
-                <Button 
-                  variant="outline-secondary" 
+                <Button
+                  variant="outline-secondary"
                   size="sm"
                   onClick={() => adoptProgram(program)}
                 >
@@ -299,9 +299,11 @@ function Programs() {
     );
   };
 
+  // Enhanced Program Details Modal (from Claude)
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
 
+    // Calculate overall program progress
     const calculateProgramProgress = () => {
       let totalWorkouts = 0;
       let completedWorkouts = 0;
@@ -323,187 +325,708 @@ function Programs() {
       };
     };
 
+    // Calculate weekly progress breakdown
+    const calculateWeeklyProgress = () => {
+      const weeklyProgress = [];
+
+      selectedProgram.weeklyConfigs.forEach((week, weekIndex) => {
+        let totalDays = week.length;
+        let completedDays = 0;
+
+        week.forEach((day, dayIndex) => {
+          const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+          if (workoutLogs[weekKey]?.isWorkoutFinished) {
+            completedDays++;
+          }
+        });
+
+        weeklyProgress.push({
+          week: weekIndex + 1,
+          totalDays,
+          completedDays,
+          percentage: Math.round((completedDays / totalDays) * 100)
+        });
+      });
+
+      return weeklyProgress;
+    };
+
+    // Calculate exercise performance metrics
+    const calculateExerciseMetrics = () => {
+      const exerciseMetrics = {};
+
+      // Collect all exercise data from logs
+      Object.keys(workoutLogs).forEach(weekKey => {
+        if (workoutLogs[weekKey]?.exercises) {
+          Object.keys(workoutLogs[weekKey].exercises).forEach(exerciseId => {
+            const exerciseLog = workoutLogs[weekKey].exercises[exerciseId];
+
+            if (!exerciseMetrics[exerciseId]) {
+              exerciseMetrics[exerciseId] = {
+                name: getExerciseName(exerciseId),
+                sessions: [],
+                maxWeight: 0,
+                totalVolume: 0,
+                progressTrend: []
+              };
+            }
+
+            if (exerciseLog.weights && exerciseLog.reps) {
+              const sessionMaxWeight = Math.max(...exerciseLog.weights.filter(w => !isNaN(parseFloat(w))).map(w => parseFloat(w)) || [0]);
+              const sessionVolume = exerciseLog.weights.reduce((total, weight, idx) => {
+                return total + (parseFloat(weight) || 0) * (exerciseLog.reps[idx] || 0);
+              }, 0);
+
+              // Extract week and day from the key (week1_day1)
+              const [weekPart, dayPart] = weekKey.split('_');
+              const weekNum = parseInt(weekPart.replace('week', ''));
+              const dayNum = parseInt(dayPart.replace('day', ''));
+
+              exerciseMetrics[exerciseId].sessions.push({
+                weekNum,
+                dayNum,
+                weights: exerciseLog.weights,
+                reps: exerciseLog.reps,
+                maxWeight: sessionMaxWeight,
+                volume: sessionVolume
+              });
+
+              exerciseMetrics[exerciseId].maxWeight = Math.max(exerciseMetrics[exerciseId].maxWeight, sessionMaxWeight);
+              exerciseMetrics[exerciseId].totalVolume += sessionVolume;
+
+              // Add to progress trend for charting
+              exerciseMetrics[exerciseId].progressTrend.push({
+                session: exerciseMetrics[exerciseId].sessions.length,
+                maxWeight: sessionMaxWeight,
+                volume: sessionVolume
+              });
+            }
+          });
+        }
+      });
+
+      // Sort by total volume
+      return Object.values(exerciseMetrics).sort((a, b) => b.totalVolume - a.totalVolume);
+    };
+
     const progress = calculateProgramProgress();
+    const weeklyProgress = calculateWeeklyProgress();
+    const exerciseMetrics = calculateExerciseMetrics();
+
+    // Find current week based on completion status
+    const getCurrentWeekIndex = () => {
+      for (let weekIndex = 0; weekIndex < selectedProgram.weeklyConfigs.length; weekIndex++) {
+        const week = selectedProgram.weeklyConfigs[weekIndex];
+        let isWeekCompleted = true;
+
+        for (let dayIndex = 0; dayIndex < week.length; dayIndex++) {
+          const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+          if (!workoutLogs[weekKey]?.isWorkoutFinished) {
+            isWeekCompleted = false;
+            break;
+          }
+        }
+
+        if (!isWeekCompleted) {
+          return weekIndex;
+        }
+      }
+
+      // If all weeks are completed, return the last week
+      return selectedProgram.weeklyConfigs.length - 1;
+    };
+
+    const currentWeekIndex = getCurrentWeekIndex();
 
     return (
-      <Modal 
-        show={showProgramDetails} 
+      <Modal
+        show={showProgramDetails}
         onHide={() => {
           setShowProgramDetails(false);
           setActiveTab('overview');
         }}
         size="lg"
         centered
+        dialogClassName="program-details-modal"
       >
-        <Modal.Header closeButton>
-          <Modal.Title>{selectedProgram.name}</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <div className="mb-4">
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <div>
-                <strong>Duration:</strong> {selectedProgram.duration} weeks
-                <br />
-                <strong>Days per Week:</strong> {selectedProgram.daysPerWeek}
-                <br />
-                <strong>Weight Unit:</strong> {selectedProgram.weightUnit || 'LB'}
+        <Modal.Header closeButton className="border-bottom-0 pb-0">
+          <Modal.Title className="d-flex align-items-center">
+            <div>
+              <h4 className="mb-0">{selectedProgram.name}</h4>
+              <div className="text-muted small">
+                {selectedProgram.duration} weeks | {selectedProgram.daysPerWeek} days per week | {selectedProgram.weightUnit || 'LB'}
               </div>
-              <div className="text-center">
-                <div className="progress-circle" style={{ width: '80px', height: '80px' }}>
-                  <svg viewBox="0 0 36 36" className="circular-chart">
-                    <path
-                      className="circle-bg"
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="circle"
-                      strokeDasharray={`${progress.percentage}, 100`}
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                  </svg>
-                  <div className="progress-text">{progress.percentage}%</div>
+            </div>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="pt-0">
+          {/* Program Progress Summary */}
+          <div className="program-progress-summary card shadow-sm mb-4">
+            <div className="card-body">
+              <div className="row align-items-center">
+                <div className="col-md-3 text-center">
+                  <div className="progress-circle-container">
+                    <div className="progress-circle" style={{ width: '120px', height: '120px' }}>
+                      <svg viewBox="0 0 36 36" className="circular-chart">
+                        <path
+                          className="circle-bg"
+                          d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path
+                          className="circle"
+                          strokeDasharray={`${progress.percentage}, 100`}
+                          d="M18 2.0845
+                          a 15.9155 15.9155 0 0 1 0 31.831
+                          a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                      </svg>
+                      <div className="progress-percentage">{progress.percentage}%</div>
+                    </div>
+                    <div className="mt-2 text-center">
+                      <strong>{progress.completedWorkouts}</strong> of <strong>{progress.totalWorkouts}</strong> workouts completed
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-2">
-                  {progress.completedWorkouts} of {progress.totalWorkouts} workouts completed
+
+                <div className="col-md-9">
+                  <h5 className="mb-3">Weekly Progress</h5>
+                  <div className="weekly-progress-bars">
+                    {weeklyProgress.map((weekProgress) => (
+                      <div key={weekProgress.week} className="mb-2">
+                        <div className="d-flex justify-content-between mb-1">
+                          <span>Week {weekProgress.week}</span>
+                          <span>{weekProgress.completedDays}/{weekProgress.totalDays} days</span>
+                        </div>
+                        <div className="progress" style={{ height: '8px' }}>
+                          <div
+                            className="progress-bar"
+                            role="progressbar"
+                            style={{ width: `${weekProgress.percentage}%` }}
+                            aria-valuenow={weekProgress.percentage}
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3">
+                    <div className="d-flex justify-content-between">
+                      <span><strong>Currently on:</strong> Week {currentWeekIndex + 1}</span>
+                      {progress.completedWorkouts > 0 && (
+                        <span className="text-success">
+                          On track to complete in {Math.ceil((progress.totalWorkouts * (selectedProgram.duration / progress.completedWorkouts)) / 7)} weeks
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+          </div>
 
-            <ul className="nav nav-tabs mb-3">
-              <li className="nav-item">
-                <button
-                  className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('overview')}
-                >
-                  Overview
-                </button>
-              </li>
-              <li className="nav-item">
-                <button
-                  className={`nav-link ${activeTab === 'schedule' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('schedule')}
-                >
-                  Schedule
-                </button>
-              </li>
-            </ul>
+          {/* Navigation Tabs */}
+          <ul className="nav nav-tabs nav-fill mb-4">
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overview')}
+              >
+                Program Overview
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === 'performance' ? 'active' : ''}`}
+                onClick={() => setActiveTab('performance')}
+              >
+                Performance Metrics
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === 'workout-logs' ? 'active' : ''}`}
+                onClick={() => setActiveTab('workout-logs')}
+              >
+                Workout Logs
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${activeTab === 'schedule' ? 'active' : ''}`}
+                onClick={() => setActiveTab('schedule')}
+              >
+                Full Schedule
+              </button>
+            </li>
+          </ul>
 
-            {activeTab === 'overview' && (
-              <div className="program-overview">
-                <div className="row">
-                  {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
-                    <div key={weekIndex} className="col-md-6 mb-4">
-                      <div className="card h-100">
-                        <div className="card-header">
-                          <h5 className="mb-0">Week {weekIndex + 1}</h5>
-                        </div>
-                        <div className="card-body">
-                          {week.map((day, dayIndex) => {
-                            const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
-                            const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
-                            
-                            return (
-                              <div key={dayIndex} className="mb-3">
-                                <div className="d-flex justify-content-between align-items-center mb-2">
-                                  <h6 className="mb-0">Day {dayIndex + 1}</h6>
-                                  {isWorkoutFinished ? (
-                                    <span className="badge bg-success">Completed</span>
-                                  ) : (
-                                    <span className="badge bg-secondary">Pending</span>
-                                  )}
-                                </div>
-                                <div className="exercise-list">
-                                  {day.exercises.map((ex, exIndex) => (
-                                    <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
-                                      <div className="d-flex justify-content-between align-items-center">
-                                        <div>
-                                          <strong>{getExerciseName(ex.exerciseId)}</strong>
-                                          <div className="text-muted small">
-                                            {ex.sets} sets x {ex.reps} reps
-                                          </div>
+          {/* Overview Tab */}
+          {activeTab === 'overview' && (
+            <div className="program-overview">
+              <div className="card shadow-sm mb-4">
+                <div className="card-header bg-primary text-white">
+                  <h5 className="mb-0">Current Week: Week {currentWeekIndex + 1}</h5>
+                </div>
+                <div className="card-body">
+                  <div className="row">
+                    {selectedProgram.weeklyConfigs[currentWeekIndex].map((day, dayIndex) => {
+                      const weekKey = `week${currentWeekIndex + 1}_day${dayIndex + 1}`;
+                      const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+
+                      return (
+                        <div key={dayIndex} className="col-md-6 mb-3">
+                          <div className={`card h-100 ${isWorkoutFinished ? 'border-success' : ''}`}>
+                            <div className={`card-header d-flex justify-content-between align-items-center ${isWorkoutFinished ? 'bg-success text-white' : ''}`}>
+                              <h6 className="mb-0">Day {dayIndex + 1}</h6>
+                              {isWorkoutFinished ? (
+                                <span className="badge bg-white text-success">Completed</span>
+                              ) : (
+                                <span className="badge bg-secondary">Pending</span>
+                              )}
+                            </div>
+                            <div className="card-body">
+                              {day.exercises.map((ex, exIndex) => {
+                                const exerciseName = getExerciseName(ex.exerciseId);
+                                const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+
+                                return (
+                                  <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
+                                    <div className="d-flex justify-content-between align-items-center">
+                                      <div>
+                                        <strong>{exerciseName}</strong>
+                                        <div className="text-muted small">
+                                          Target: {ex.sets} sets × {ex.reps} reps
                                         </div>
-                                        {isWorkoutFinished && (
-                                          <Check className="text-success" />
-                                        )}
                                       </div>
-                                      {renderWorkoutLogs(ex, weekKey)}
                                     </div>
-                                  ))}
+
+                                    {/* Display logs if completed */}
+                                    {exerciseLog && (
+                                      <div className="mt-2 exercise-log-details">
+                                        <div className="sets-completed">
+                                          {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => (
+                                            <div key={setIndex} className="set-data d-flex justify-content-between p-1 border-bottom">
+                                              <span>Set {setIndex + 1}:</span>
+                                              <span>
+                                                <strong>{exerciseLog.reps?.[setIndex] || '-'}</strong> reps @
+                                                <strong> {exerciseLog.weights?.[setIndex] || '-'}</strong> {selectedProgram.weightUnit}
+                                                {exerciseLog.completed?.[setIndex] &&
+                                                  <Check className="text-success ms-1" size={14} />
+                                                }
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="row">
+                {/* Program Structure Overview */}
+                <div className="col-md-6">
+                  <div className="card shadow-sm h-100">
+                    <div className="card-header">
+                      <h5 className="mb-0">Program Structure</h5>
+                    </div>
+                    <div className="card-body">
+                      <div className="table-responsive">
+                        <table className="table table-sm">
+                          <thead>
+                            <tr>
+                              <th>Week</th>
+                              <th>Workouts</th>
+                              <th>Total Exercises</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedProgram.weeklyConfigs.map((week, weekIndex) => {
+                              const totalExercises = week.reduce((sum, day) => sum + day.exercises.length, 0);
+                              const completedDays = week.filter((_, dayIndex) => {
+                                const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+                                return workoutLogs[weekKey]?.isWorkoutFinished;
+                              }).length;
+
+                              let status = "Not Started";
+                              if (completedDays === week.length) status = "Completed";
+                              else if (completedDays > 0) status = "In Progress";
+
+                              let statusClass = "secondary";
+                              if (status === "Completed") statusClass = "success";
+                              else if (status === "In Progress") statusClass = "primary";
+
+                              return (
+                                <tr key={weekIndex}>
+                                  <td>Week {weekIndex + 1}</td>
+                                  <td>{week.length}</td>
+                                  <td>{totalExercises}</td>
+                                  <td><span className={`badge bg-${statusClass}`}>{status}</span></td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Exercises */}
+                <div className="col-md-6">
+                  <div className="card shadow-sm h-100">
+                    <div className="card-header">
+                      <h5 className="mb-0">Top Exercises</h5>
+                    </div>
+                    <div className="card-body">
+                      {exerciseMetrics.length > 0 ? (
+                        <div className="table-responsive">
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>Exercise</th>
+                                <th>Sessions</th>
+                                <th>Max Weight</th>
+                                <th>Total Volume</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exerciseMetrics.slice(0, 5).map((exercise, index) => (
+                                <tr key={index}>
+                                  <td>{exercise.name}</td>
+                                  <td>{exercise.sessions.length}</td>
+                                  <td>{exercise.maxWeight} {selectedProgram.weightUnit}</td>
+                                  <td>{Math.round(exercise.totalVolume)} {selectedProgram.weightUnit}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-4">
+                          <p className="text-muted">No exercise data available yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Performance Metrics Tab */}
+          {activeTab === 'performance' && (
+            <div className="performance-metrics">
+              {exerciseMetrics.length > 0 ? (
+                <>
+                  <div className="row mb-4">
+                    <div className="col-12">
+                      <div className="card shadow-sm">
+                        <div className="card-header">
+                          <h5 className="mb-0">Exercise Performance</h5>
+                        </div>
+                        <div className="card-body pb-0">
+                          <div className="exercise-metrics-container">
+                            {exerciseMetrics.map((exercise, index) => (
+                              <div key={index} className="exercise-metric-card mb-4">
+                                <h6>{exercise.name}</h6>
+                                <div className="d-flex justify-content-between mb-2">
+                                  <div className="metric-box">
+                                    <div className="metric-value">{exercise.maxWeight}</div>
+                                    <div className="metric-label">Max Weight ({selectedProgram.weightUnit})</div>
+                                  </div>
+                                  <div className="metric-box">
+                                    <div className="metric-value">{exercise.sessions.length}</div>
+                                    <div className="metric-label">Sessions</div>
+                                  </div>
+                                  <div className="metric-box">
+                                    <div className="metric-value">{Math.round(exercise.totalVolume)}</div>
+                                    <div className="metric-label">Total Volume</div>
+                                  </div>
                                 </div>
+
+                                {exercise.sessions.length > 1 && (
+                                  <div className="progression-chart mb-4">
+                                    <h6 className="mb-2">Progression Chart</h6>
+                                    <div className="chart-container">
+                                      {/* Simple visual representation of progression */}
+                                      <div className="chart-bars" style={{ height: '80px', display: 'flex', alignItems: 'flex-end' }}>
+                                        {exercise.progressTrend.map((session, idx) => {
+                                          const heightPercentage = (session.maxWeight / exercise.maxWeight) * 100;
+                                          return (
+                                            <div
+                                              key={idx}
+                                              className="chart-bar mx-1"
+                                              style={{
+                                                height: `${heightPercentage}%`,
+                                                width: `${100 / exercise.progressTrend.length}%`,
+                                                backgroundColor: '#007bff',
+                                                borderRadius: '2px 2px 0 0'
+                                              }}
+                                              title={`${session.maxWeight} ${selectedProgram.weightUnit}`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                      <div className="d-flex justify-content-between mt-2">
+                                        <span>Session 1</span>
+                                        <span>Session {exercise.sessions.length}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="table-responsive">
+                                  <table className="table table-sm">
+                                    <thead>
+                                      <tr>
+                                        <th>Week</th>
+                                        <th>Day</th>
+                                        <th>Sets × Reps</th>
+                                        <th>Weights ({selectedProgram.weightUnit})</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {exercise.sessions.sort((a, b) => {
+                                        if (a.weekNum !== b.weekNum) return a.weekNum - b.weekNum;
+                                        return a.dayNum - b.dayNum;
+                                      }).map((session, sessionIdx) => {
+                                        const setsReps = session.weights.map((_, i) =>
+                                          `${session.reps[i] || '-'}`
+                                        ).join(' / ');
+
+                                        const weights = session.weights.join(' / ');
+
+                                        return (
+                                          <tr key={sessionIdx}>
+                                            <td>Week {session.weekNum}</td>
+                                            <td>Day {session.dayNum}</td>
+                                            <td>{setsReps}</td>
+                                            <td>{weights}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <hr className="my-4" />
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-5">
+                  <p className="text-muted">No workout data available yet to display performance metrics</p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {activeTab === 'schedule' && (
-              <div className="program-schedule">
-                <div className="table-responsive">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Week</th>
-                        <th>Day</th>
-                        <th>Exercises</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
-                        week.map((day, dayIndex) => {
+          {/* Workout Logs Tab */}
+          {activeTab === 'workout-logs' && (
+            <div className="workout-logs">
+              <div className="accordion" id="workoutLogsAccordion">
+                {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
+                  <div className="accordion-item" key={weekIndex}>
+                    <h2 className="accordion-header" id={`heading-week-${weekIndex + 1}`}>
+                      <button
+                        className={`accordion-button ${weekIndex !== currentWeekIndex ? 'collapsed' : ''}`}
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target={`#collapse-week-${weekIndex + 1}`}
+                        aria-expanded={weekIndex === currentWeekIndex}
+                        aria-controls={`collapse-week-${weekIndex + 1}`}
+                      >
+                        Week {weekIndex + 1}
+                      </button>
+                    </h2>
+                    <div
+                      id={`collapse-week-${weekIndex + 1}`}
+                      className={`accordion-collapse collapse ${weekIndex === currentWeekIndex ? 'show' : ''}`}
+                      aria-labelledby={`heading-week-${weekIndex + 1}`}
+                      data-bs-parent="#workoutLogsAccordion"
+                    >
+                      <div className="accordion-body">
+                        {week.map((day, dayIndex) => {
                           const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
                           const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
-                          
+
                           return (
-                            <tr key={`${weekIndex}-${dayIndex}`}>
-                              <td>Week {weekIndex + 1}</td>
-                              <td>Day {dayIndex + 1}</td>
-                              <td>
-                                <ul className="list-unstyled mb-0">
-                                  {day.exercises.map((ex, exIndex) => {
-                                    const log = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
-                                    return (
-                                      <li key={exIndex}>
-                                        <div>
-                                          {getExerciseName(ex.exerciseId)} ({ex.sets}x{ex.reps})
-                                          {log && log.weights && (
-                                            <div className="text-muted small">
-                                              Last weights: {log.weights.join(', ')} {selectedProgram.weightUnit || 'LB'}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                              </td>
-                              <td>
+                            <div key={dayIndex} className="card mb-3">
+                              <div className={`card-header d-flex justify-content-between align-items-center ${isWorkoutFinished ? 'bg-success text-white' : ''}`}>
+                                <h6 className="mb-0">Day {dayIndex + 1}</h6>
                                 {isWorkoutFinished ? (
-                                  <span className="badge bg-success">Completed</span>
+                                  <span className="badge bg-white text-success">Completed</span>
                                 ) : (
                                   <span className="badge bg-secondary">Pending</span>
                                 )}
-                              </td>
-                            </tr>
+                              </div>
+                              <div className="card-body">
+                                {day.exercises.map((ex, exIndex) => {
+                                  const exerciseName = getExerciseName(ex.exerciseId);
+                                  const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+
+                                  return (
+                                    <div key={exIndex} className="exercise-log p-3 mb-3 bg-light rounded">
+                                      <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 className="mb-0">{exerciseName}</h6>
+                                        <div>
+                                          <span className="badge bg-primary me-2">
+                                            Target: {ex.sets} × {ex.reps}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {exerciseLog ? (
+                                        <div className="table-responsive">
+                                          <table className="table table-sm">
+                                            <thead>
+                                              <tr>
+                                                <th style={{ width: '80px' }}>Set</th>
+                                                <th>Reps</th>
+                                                <th>Weight ({selectedProgram.weightUnit})</th>
+                                                <th style={{ width: '80px' }}>Status</th>
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => (
+                                                <tr key={setIndex}>
+                                                  <td>{setIndex + 1}</td>
+                                                  <td>{exerciseLog.reps?.[setIndex] || '-'}</td>
+                                                  <td>{exerciseLog.weights?.[setIndex] || '-'}</td>
+                                                  <td>
+                                                    {exerciseLog.completed?.[setIndex] ? (
+                                                      <Check className="text-success" />
+                                                    ) : (
+                                                      <span className="text-muted">-</span>
+                                                    )}
+                                                  </td>
+                                                </tr>
+                                              ))}
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      ) : (
+                                        <div className="text-center py-2">
+                                          <p className="text-muted mb-0">No data recorded</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                           );
-                        })
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Schedule Tab (Similar to original but enhanced) */}
+          {activeTab === 'schedule' && (
+            <div className="program-schedule">
+              <div className="table-responsive">
+                <table className="table table-hover">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Week</th>
+                      <th>Day</th>
+                      <th>Exercises</th>
+                      <th>Status</th>
+                      <th>Completion</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedProgram.weeklyConfigs.map((week, weekIndex) => (
+                      week.map((day, dayIndex) => {
+                        const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+                        const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+
+                        // Calculate completion date if available
+                        let completionDate = null;
+                        if (isWorkoutFinished && workoutLogs[weekKey]?.completedAt) {
+                          completionDate = new Date(workoutLogs[weekKey].completedAt.toDate());
+                        }
+
+                        return (
+                          <tr key={`${weekIndex}-${dayIndex}`} className={isWorkoutFinished ? 'table-success' : ''}>
+                            <td>Week {weekIndex + 1}</td>
+                            <td>Day {dayIndex + 1}</td>
+                            <td>
+                              <ul className="list-unstyled mb-0">
+                                {day.exercises.map((ex, exIndex) => {
+                                  const exerciseName = getExerciseName(ex.exerciseId);
+                                  const log = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+
+                                  return (
+                                    <li key={exIndex} className="mb-1">
+                                      <div className="d-flex justify-content-between">
+                                        <div>
+                                          <strong>{exerciseName}</strong> ({ex.sets}×{ex.reps})
+                                        </div>
+                                        {log && log.weights && (
+                                          <div className="small">
+                                            {log.weights.map((w, i) => `${log.reps?.[i] || '?'} @ ${w || '-'}`).join(', ')}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </td>
+                            <td>
+                              {isWorkoutFinished ? (
+                                <span className="badge bg-success">Completed</span>
+                              ) : (
+                                <span className="badge bg-secondary">Pending</span>
+                              )}
+                            </td>
+                            <td>
+                              {completionDate ? (
+                                <span>{completionDate.toLocaleDateString()}</span>
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => {
+            setShowProgramDetails(false);
+            setActiveTab('overview');
+          }}>
+            Close
+          </Button>
+        </Modal.Footer>
       </Modal>
     );
   };
@@ -518,12 +1041,12 @@ function Programs() {
             {userPrograms.length === 0 ? (
               <div className="text-center p-4">
                 <p className="text-muted mb-3">
-                You haven't created any programs yet. 
-                Get started by creating a new workout program!
+                  You haven't created any programs yet.
+                  Get started by creating a new workout program!
                 </p>
-                <Button 
-                  variant="primary" 
-                  size="lg" 
+                <Button
+                  variant="primary"
+                  size="lg"
                   onClick={() => navigate('/create-program')}
                 >
                   <PlusCircle className="me-2" /> Create First Program
