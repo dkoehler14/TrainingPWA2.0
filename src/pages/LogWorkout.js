@@ -7,7 +7,7 @@ import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as n
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 
-function WorkoutSummaryModal({ show, onHide, workoutData, previousData, weightUnit }) {
+function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
   const totalVolume = workoutData.reduce((sum, ex) => {
     const exerciseVolume = ex.weights.reduce((acc, weight, idx) => 
@@ -15,29 +15,28 @@ function WorkoutSummaryModal({ show, onHide, workoutData, previousData, weightUn
     return sum + exerciseVolume;
   }, 0);
 
-  // Calculate exercise-specific metrics
-  const exerciseMetrics = workoutData.map(ex => {
-    const totalReps = ex.reps.reduce((sum, rep) => sum + (Number(rep) || 0), 0);
-    const avgWeight = totalReps > 0 ? ex.weights.reduce((sum, w) => sum + (Number(w) || 0), 0) / ex.weights.length : 0;
-    const maxWeight = Math.max(...ex.weights.map(w => Number(w) || 0));
-    return { name: ex.name, totalReps, avgWeight: avgWeight.toFixed(1), maxWeight };
-  });
+  // Calculate muscle group metrics
+  const muscleGroupMetrics = workoutData.reduce((acc, ex) => {
+    const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+    const muscleGroup = exercise?.primaryMuscleGroup || 'Unknown';
+    const volume = ex.weights.reduce((sum, weight, idx) => 
+      sum + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
+    const sets = Number(ex.sets) || 0;
 
-  // Compare to previous workout
-  const previousVolume = previousData ? previousData.reduce((sum, ex) => {
-    const exerciseVolume = ex.weights.reduce((acc, weight, idx) => 
-      acc + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
-    return sum + exerciseVolume;
-  }, 0) : 0;
-  const volumeDifference = totalVolume - previousVolume;
+    if (!acc[muscleGroup]) {
+      acc[muscleGroup] = { volume: 0, sets: 0 };
+    }
+    acc[muscleGroup].volume += volume;
+    acc[muscleGroup].sets += sets;
+    return acc;
+  }, {});
 
-  // Check for personal bests
-  const personalBests = exerciseMetrics
-    .map(metric => {
-      const prevMax = previousData?.find(p => p.name === metric.name)?.maxWeight || 0;
-      return metric.maxWeight > prevMax ? { name: metric.name, maxWeight: metric.maxWeight } : null;
-    })
-    .filter(Boolean);
+  // Convert to array for rendering
+  const muscleGroupList = Object.entries(muscleGroupMetrics).map(([group, metrics]) => ({
+    group,
+    volume: metrics.volume,
+    sets: metrics.sets
+  })).sort((a, b) => b.volume - a.volume); // Sort by volume descending
 
   return (
     <Modal show={show} onHide={onHide} centered>
@@ -45,28 +44,35 @@ function WorkoutSummaryModal({ show, onHide, workoutData, previousData, weightUn
         <Modal.Title>Workout Summary</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <h5>Great Job!</h5>
-        <p><strong>Total Volume:</strong> {totalVolume.toLocaleString()} {weightUnit}</p>
-        {exerciseMetrics.map((metric, idx) => (
-          <div key={idx} className="mb-3">
-            <h6>{metric.name}</h6>
-            <p>Total Reps: {metric.totalReps}</p>
-            <p>Average Weight: {metric.avgWeight} {weightUnit}</p>
-            <p>Max Weight: {metric.maxWeight} {weightUnit}</p>
-          </div>
-        ))}
-        {volumeDifference !== 0 && (
-          <p><strong>Compared to Last Time:</strong> {volumeDifference > 0 ? '+' : ''}{volumeDifference.toLocaleString()} {weightUnit}</p>
-        )}
-        {personalBests.length > 0 && (
-          <div>
-            <h6>New Personal Bests!</h6>
-            <ul>
-              {personalBests.map((pb, idx) => (
-                <li key={idx}>{pb.name}: {pb.maxWeight} {weightUnit}</li>
+        <div className="text-center mb-4">
+          <h3 style={{ fontSize: '2.5rem', fontWeight: 'bold' }}>
+            {totalVolume.toLocaleString()} {weightUnit}
+          </h3>
+          <p className="text-muted">Total Volume</p>
+        </div>
+        
+        <h6>Muscle Group Breakdown</h6>
+        {muscleGroupList.length > 0 ? (
+          <Table responsive className="muscle-group-table">
+            <thead>
+              <tr>
+                <th>Muscle Group</th>
+                <th>Volume ({weightUnit})</th>
+                <th>Sets</th>
+              </tr>
+            </thead>
+            <tbody>
+              {muscleGroupList.map((metric, idx) => (
+                <tr key={idx}>
+                  <td>{metric.group}</td>
+                  <td>{metric.volume.toLocaleString()}</td>
+                  <td>{metric.sets}</td>
+                </tr>
               ))}
-            </ul>
-          </div>
+            </tbody>
+          </Table>
+        ) : (
+          <p className="text-center text-muted">No muscle group data available.</p>
         )}
       </Modal.Body>
       <Modal.Footer>
@@ -100,7 +106,6 @@ function LogWorkout() {
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [showGridModal, setShowGridModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [previousWorkoutData, setPreviousWorkoutData] = useState(null);
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -350,34 +355,6 @@ function LogWorkout() {
       setExerciseHistoryData([]);
     } finally {
       setIsLoadingHistory(false);
-    }
-  };
-
-  const fetchPreviousWorkout = async (programId, weekIndex, dayIndex) => {
-    if (!user) return null;
-    try {
-      const logsQuery = query(
-        collection(db, "workoutLogs"),
-        where("userId", "==", user.uid),
-        where("programId", "==", programId),
-        where("weekIndex", "<", weekIndex),
-        where("dayIndex", "==", dayIndex),
-        where("isWorkoutFinished", "==", true),
-        orderBy("date", "desc"),
-        limit(1)
-      );
-      const logsSnapshot = await getDocs(logsQuery);
-      if (!logsSnapshot.empty) {
-        const prevLog = logsSnapshot.docs[0].data();
-        return prevLog.exercises.map(ex => ({
-          ...ex,
-          name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown'
-        }));
-      }
-      return null;
-    } catch (error) {
-      console.error("Error fetching previous workout:", error);
-      return null;
     }
   };
 
@@ -720,8 +697,6 @@ function LogWorkout() {
         });
       }
       setIsWorkoutFinished(true);
-      const prevData = await fetchPreviousWorkout(selectedProgram.id, selectedWeek, selectedDay);
-      setPreviousWorkoutData(prevData);
       setShowSummaryModal(true);
     } catch (error) {
       console.error("Error finishing workout: ", error);
@@ -1168,7 +1143,7 @@ function LogWorkout() {
         show={showSummaryModal}
         onHide={() => setShowSummaryModal(false)}
         workoutData={logData.map(ex => ({ ...ex, name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown' }))}
-        previousData={previousWorkoutData}
+        exercisesList={exercisesList}
         weightUnit={selectedProgram?.weightUnit || 'LB'}
       />
     </Container>
