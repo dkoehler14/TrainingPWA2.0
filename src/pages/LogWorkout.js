@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight } from 'react-bootstrap-icons'
 import { db, auth } from '../firebase';
-import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp, getDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js'; // Adjust path as needed
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
@@ -10,7 +10,7 @@ import { debounce } from 'lodash';
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
   const totalVolume = workoutData.reduce((sum, ex) => {
-    const exerciseVolume = ex.weights.reduce((acc, weight, idx) => 
+    const exerciseVolume = ex.weights.reduce((acc, weight, idx) =>
       acc + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
     return sum + exerciseVolume;
   }, 0);
@@ -19,7 +19,7 @@ function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightU
   const muscleGroupMetrics = workoutData.reduce((acc, ex) => {
     const exercise = exercisesList.find(e => e.id === ex.exerciseId);
     const muscleGroup = exercise?.primaryMuscleGroup || 'Unknown';
-    const volume = ex.weights.reduce((sum, weight, idx) => 
+    const volume = ex.weights.reduce((sum, weight, idx) =>
       sum + (Number(weight) || 0) * (Number(ex.reps[idx]) || 0), 0);
     const sets = Number(ex.sets) || 0;
 
@@ -50,7 +50,7 @@ function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightU
           </h3>
           <p className="text-muted">Total Volume</p>
         </div>
-        
+
         <h6>Muscle Group Breakdown</h6>
         {muscleGroupList.length > 0 ? (
           <Table responsive className="muscle-group-table">
@@ -106,6 +106,8 @@ function LogWorkout() {
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [showGridModal, setShowGridModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  // New state for session bodyweight
+  const [sessionBodyweight, setSessionBodyweight] = useState('');
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -126,6 +128,19 @@ function LogWorkout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    if (sessionBodyweight && logData.length > 0) {
+      const newLogData = logData.map(ex => {
+        const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+        if (exercise?.exerciseType === 'Bodyweight') {
+          return { ...ex, weights: Array(ex.sets).fill(sessionBodyweight) };
+        }
+        return ex;
+      });
+      setLogData(newLogData);
+    }
+  }, [sessionBodyweight, exercisesList]);
+
   // Create a debounced save function
   const debouncedSaveLog = useCallback(
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
@@ -141,37 +156,34 @@ function LogWorkout() {
         );
         const logsSnapshot = await getDocs(logsQuery);
 
+        const logDataToSave = {
+          userId: userData.uid,
+          programId: programData.id,
+          weekIndex: weekIndex,
+          dayIndex: dayIndex,
+          exercises: exerciseData.map(ex => ({
+            exerciseId: ex.exerciseId,
+            sets: Number(ex.sets),
+            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+            completed: ex.completed,
+            notes: ex.notes || ''
+          })),
+          date: Timestamp.fromDate(new Date()),
+          sessionBodyweight: sessionBodyweight ? Number(sessionBodyweight) : null
+        };
+
         if (!logsSnapshot.empty) {
           // Update existing log
           const logDoc = logsSnapshot.docs[0];
           await updateDoc(doc(db, "workoutLogs", logDoc.id), {
-            exercises: exerciseData.map(ex => ({
-              exerciseId: ex.exerciseId,
-              sets: Number(ex.sets),
-              reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-              weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-              completed: ex.completed,
-              notes: ex.notes || '' // Include the notes field
-            })),
-            date: Timestamp.fromDate(new Date()),
+            ...logDataToSave,
             isWorkoutFinished: logsSnapshot.docs[0].data().isWorkoutFinished || false
           });
         } else {
           // Create new log if none exists
           await addDoc(collection(db, "workoutLogs"), {
-            userId: userData.uid,
-            programId: programData.id,
-            weekIndex: weekIndex,
-            dayIndex: dayIndex,
-            exercises: exerciseData.map(ex => ({
-              exerciseId: ex.exerciseId,
-              sets: ex.sets,
-              reps: ex.reps,
-              weights: ex.weights,
-              completed: ex.completed,
-              notes: ex.notes || '' // Include the notes field
-            })),
-            date: Timestamp.fromDate(new Date()),
+            ...logDataToSave,
             isWorkoutFinished: false
           });
         }
@@ -204,6 +216,13 @@ function LogWorkout() {
           // Fetch exercises
           const exercisesSnapshot = await getDocs(collection(db, "exercises"));
           setExercisesList(exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
+          // Fetch user bodyweight
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setSessionBodyweight(userData.weightLbs || '');
+          }
 
           // Check for a current program first, then fall back to most recent if none is marked current
           const currentProgram = programsData.find(program => program.isCurrent === true);
@@ -274,25 +293,55 @@ function LogWorkout() {
   useEffect(() => {
     if (!user || !selectedProgram || selectedWeek === null || selectedDay === null) return;
     setIsLoading(true);
-    const  key = `${selectedWeek}_${selectedDay}`;
+    const key = `${selectedWeek}_${selectedDay}`;
     if (programLogs[key]) {
-      setLogData(programLogs[key].exercises);
+      setLogData(programLogs[key].exercises.map(ex => {
+        const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+        if (exercise?.exerciseType === 'Bodyweight' && sessionBodyweight) {
+          return { ...ex, weights: Array(ex.sets).fill(sessionBodyweight) };
+        }
+        return ex;
+      }));
       setIsWorkoutFinished(programLogs[key].isWorkoutFinished);
     } else {
       setIsWorkoutFinished(false);
-      const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => ({
-        ...ex,
-        reps: Array(ex.sets).fill(ex.reps),
-        weights: Array(ex.sets).fill(''),
-        completed: Array(ex.sets).fill(false),
-        notes: ex.notes || ''
-      }));
+      const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
+        if (ex.exerciseType === 'Bodyweight' && sessionBodyweight) {
+          return {
+            ...ex,
+            reps: Array(ex.sets).fill(ex.reps),
+            weights: Array(ex.sets).fill(sessionBodyweight),
+            completed: Array(ex.sets).fill(false),
+            notes: ex.notes || ''
+          };
+        }
+        return {
+          ...ex,
+          reps: Array(ex.sets).fill(ex.reps),
+          weights: Array(ex.sets).fill(''),
+          completed: Array(ex.sets).fill(false),
+          notes: ex.notes || ''
+        };
+      });
       setLogData(dayExercises);
       // Optionally pre-populate programLogs with initialized data
       setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
     }
     setIsLoading(false);
-  }, [user, selectedProgram, selectedWeek, selectedDay, programLogs]);
+  }, [user, selectedProgram, selectedWeek, selectedDay, programLogs, sessionBodyweight, exercisesList]);
+
+  useEffect(() => {
+    if (sessionBodyweight && logData.length > 0) {
+      const newLogData = logData.map(ex => {
+        const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+        if (exercise?.exerciseType === 'Bodyweight') {
+          return { ...ex, weights: Array(ex.sets).fill(sessionBodyweight) };
+        }
+        return ex;
+      });
+      setLogData(newLogData);
+    }
+  }, [sessionBodyweight, exercisesList]);
 
   // Add this new function to fetch exercise history
   const fetchExerciseHistory = async (exerciseId) => {
@@ -555,6 +604,9 @@ function LogWorkout() {
     if (isWorkoutFinished) return; // Don't allow changes if workout is finished
 
     const newLogData = [...logData];
+    const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
+    const exerciseType = exercise?.exerciseType || '';
+    if (field === 'weights' && exerciseType === 'Bodyweight') return;
     if (field === 'reps') {
       newLogData[exerciseIndex].reps[setIndex] = value;
     } else if (field === 'weights') {
@@ -587,7 +639,8 @@ function LogWorkout() {
     const newLogData = [...logData];
     newLogData[exerciseIndex].sets += 1;
     newLogData[exerciseIndex].reps.push(newLogData[exerciseIndex].reps[0]);
-    newLogData[exerciseIndex].weights.push('');
+    const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
+    newLogData[exerciseIndex].weights.push(exercise?.exerciseType === 'Bodyweight' ? sessionBodyweight : '');
     newLogData[exerciseIndex].completed.push(false);
     setLogData(newLogData);
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
@@ -664,37 +717,29 @@ function LogWorkout() {
       );
       const logsSnapshot = await getDocs(logsQuery);
 
+      const logDataToSave = {
+        userId: user.uid,
+        programId: selectedProgram.id,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        exercises: logData.map(ex => ({
+          exerciseId: ex.exerciseId,
+          sets: Number(ex.sets),
+          reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+          weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+          completed: ex.completed,
+          notes: ex.notes || ''
+        })),
+        date: Timestamp.fromDate(new Date()),
+        sessionBodyweight: sessionBodyweight ? Number(sessionBodyweight) : null,
+        isWorkoutFinished: true
+      };
+
       if (!logsSnapshot.empty) {
         const logDoc = logsSnapshot.docs[0];
-        await updateDoc(doc(db, "workoutLogs", logDoc.id), {
-          exercises: logData.map(ex => ({
-            exerciseId: ex.exerciseId,
-            sets: Number(ex.sets),
-            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed,
-            notes: ex.notes || ''
-          })),
-          date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: true
-        });
+        await updateDoc(doc(db, "workoutLogs", logDoc.id), logDataToSave);
       } else {
-        await addDoc(collection(db, "workoutLogs"), {
-          userId: user.uid,
-          programId: selectedProgram.id,
-          weekIndex: selectedWeek,
-          dayIndex: selectedDay,
-          exercises: logData.map(ex => ({
-            exerciseId: ex.exerciseId,
-            sets: Number(ex.sets),
-            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed,
-            notes: ex.notes || ''
-          })),
-          date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: true
-        });
+        await addDoc(collection(db, "workoutLogs"), logDataToSave);
       }
       setIsWorkoutFinished(true);
       setShowSummaryModal(true);
@@ -738,14 +783,24 @@ function LogWorkout() {
 
                 {selectedProgram && (
                   <>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Bodyweight for this session ({selectedProgram?.weightUnit || 'LB'})</Form.Label>
+                      <Form.Control
+                        type="number"
+                        value={sessionBodyweight}
+                        onChange={(e) => setSessionBodyweight(e.target.value)}
+                        className="soft-input"
+                        placeholder="Enter your bodyweight"
+                      />
+                    </Form.Group>
                     <div className="mb-3">
-                      <h5 className="soft-text" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                      <h5 className="soft-text" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         Week {selectedWeek + 1}, Day {selectedDay + 1}
                         <Button onClick={() => setShowGridModal(true)} className="soft-button">
                           Change Week/Day
                         </Button>
                       </h5>
-                      
+
                     </div>
 
                     {/* Modal containing the week and day grid */}
@@ -817,171 +872,201 @@ function LogWorkout() {
                       </Form.Group>
                     </div> */}
 
-                    {logData.map((ex, exIndex) => (
-                      <div key={exIndex} className="mb-4">
-                        <div className="d-flex justify-content-between align-items-center">
-                          {/* Replace buttons with a dropdown in mobile view */}
-                          {isMobile ? (
-                            <div className="d-flex align-items-center">
-                              <Dropdown>
-                                <Dropdown.Toggle
-                                  variant="light"
-                                  id={`dropdown-${exIndex}`}
-                                  className="border-0 bg-transparent three-dots-vert"
-                                  style={{ padding: '0.25rem' }}
-                                >
-                                  <ThreeDotsVertical size={20} className="three-dots-vert" />
-                                </Dropdown.Toggle>
+                    {logData.map((ex, exIndex) => {
+                      const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+                      const exerciseType = exercise?.exerciseType || '';
+                      return (
+                        <div key={exIndex} className="mb-4">
+                          <div className="d-flex justify-content-between align-items-center">
+                            {/* Replace buttons with a dropdown in mobile view */}
+                            {isMobile ? (
+                              <div className="d-flex align-items-center">
+                                <Dropdown>
+                                  <Dropdown.Toggle
+                                    variant="light"
+                                    id={`dropdown-${exIndex}`}
+                                    className="border-0 bg-transparent three-dots-vert"
+                                    style={{ padding: '0.25rem' }}
+                                  >
+                                    <ThreeDotsVertical size={20} className="three-dots-vert" />
+                                  </Dropdown.Toggle>
 
-                                <Dropdown.Menu>
-                                  <Dropdown.Item
-                                    onClick={() => openNotesModal(exIndex)}
-                                    className="d-flex align-items-center"
-                                  >
-                                    <Pencil />
-                                    {ex.notes ? 'Edit Notes' : 'Add Notes'}
-                                    {ex.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
-                                  </Dropdown.Item>
-                                  <Dropdown.Item
-                                    onClick={() => openReplaceExerciseModal(ex)}
-                                    className="d-flex align-items-center"
-                                  >
-                                    <ArrowLeftRight />
-                                    Replace Exercise
-                                  </Dropdown.Item>
-                                  <Dropdown.Item
-                                    onClick={() => handleAddSet(exIndex)}
-                                    className="d-flex align-items-center"
-                                  >
-                                    <Plus />
-                                    Add Set
-                                  </Dropdown.Item>
-                                  <Dropdown.Item
-                                    onClick={() => openHistoryModal(ex)}
-                                    className="d-flex align-items-center"
-                                  >
-                                    <BarChart className="me-2" />
-                                    View History
-                                  </Dropdown.Item>
-                                </Dropdown.Menu>
-                              </Dropdown>
-                              <h5 className="soft-label mb-0">
-                                {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
-                                {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
-                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                    {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
-                                  </span>
-                                )}
-                              </h5>
-                            </div>
-                          ) : (
-                            <>
-                              <h5 className="soft-label">
-                                {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
-                                {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
-                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                    {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
-                                  </span>
-                                )}
-                              </h5>
-                              <div>
-                                <Button
-                                  variant="outline-info"
-                                  size="sm"
-                                  onClick={() => openNotesModal(exIndex)}
-                                  className="me-2"
-                                >
-                                  {ex.notes ? 'View/Edit Notes' : 'Add Notes'}
-                                </Button>
-                                <Button
-                                  variant="outline-secondary"
-                                  size="sm"
-                                  onClick={() => openReplaceExerciseModal(ex)}
-                                  className="me-2"
-                                >
-                                  Replace Exercise
-                                </Button>
-                                <Button
-                                  variant="outline-success"
-                                  size="sm"
-                                  onClick={() => handleAddSet(exIndex)}
-                                  className="me-2"
-                                >
-                                  Add Set
-                                </Button>
-                                <Button
-                                  variant="outline-primary"
-                                  size="sm"
-                                  onClick={() => openHistoryModal(ex)}
-                                >
-                                  View History
-                                </Button>
+                                  <Dropdown.Menu>
+                                    <Dropdown.Item
+                                      onClick={() => openNotesModal(exIndex)}
+                                      className="d-flex align-items-center"
+                                    >
+                                      <Pencil />
+                                      {ex.notes ? 'Edit Notes' : 'Add Notes'}
+                                      {ex.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
+                                    </Dropdown.Item>
+                                    <Dropdown.Item
+                                      onClick={() => openReplaceExerciseModal(ex)}
+                                      className="d-flex align-items-center"
+                                    >
+                                      <ArrowLeftRight />
+                                      Replace Exercise
+                                    </Dropdown.Item>
+                                    <Dropdown.Item
+                                      onClick={() => handleAddSet(exIndex)}
+                                      className="d-flex align-items-center"
+                                    >
+                                      <Plus />
+                                      Add Set
+                                    </Dropdown.Item>
+                                    <Dropdown.Item
+                                      onClick={() => openHistoryModal(ex)}
+                                      className="d-flex align-items-center"
+                                    >
+                                      <BarChart className="me-2" />
+                                      View History
+                                    </Dropdown.Item>
+                                  </Dropdown.Menu>
+                                </Dropdown>
+                                <h5 className="soft-label mb-0">
+                                  {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
+                                  {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
+                                    <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                      {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
+                                    </span>
+                                  )}
+                                </h5>
                               </div>
-                            </>
-                          )}
-                        </div>
-
-                        {/* Display notes preview if there is a note */}
-                        {ex.notes && (
-                          <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-1 bg-light border rounded`}>
-                            <small className="text-muted">
-                              <strong>Note:</strong> {ex.notes.length > 50 ? `${ex.notes.substring(0, 50)}...` : ex.notes}
-                            </small>
+                            ) : (
+                              <>
+                                <h5 className="soft-label">
+                                  {exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Loading...'}
+                                  {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType && (
+                                    <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                      {exercisesList.find(e => e.id === ex.exerciseId)?.exerciseType}
+                                    </span>
+                                  )}
+                                </h5>
+                                <div>
+                                  <Button
+                                    variant="outline-info"
+                                    size="sm"
+                                    onClick={() => openNotesModal(exIndex)}
+                                    className="me-2"
+                                  >
+                                    {ex.notes ? 'View/Edit Notes' : 'Add Notes'}
+                                  </Button>
+                                  <Button
+                                    variant="outline-secondary"
+                                    size="sm"
+                                    onClick={() => openReplaceExerciseModal(ex)}
+                                    className="me-2"
+                                  >
+                                    Replace Exercise
+                                  </Button>
+                                  <Button
+                                    variant="outline-success"
+                                    size="sm"
+                                    onClick={() => handleAddSet(exIndex)}
+                                    className="me-2"
+                                  >
+                                    Add Set
+                                  </Button>
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => openHistoryModal(ex)}
+                                  >
+                                    View History
+                                  </Button>
+                                </div>
+                              </>
+                            )}
                           </div>
-                        )}
 
-                        <Table responsive className="workout-log-table">
-                          <thead>
-                            <tr>
-                              <th>Set</th>
-                              <th>Reps</th>
-                              <th>Weight</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {Array.from({ length: ex.sets }).map((_, setIndex) => (
-                              <tr key={setIndex}>
-                                <td className="text-center">{setIndex + 1}</td>
-                                <td className="text-center">
-                                  <Form.Control
-                                    type="number"
-                                    value={ex.reps[setIndex] || ''}
-                                    onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
-                                    onFocus={handleFocus}
-                                    className="soft-input center-input"
-                                    style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
-                                    ref={repsInputRef} // Attach ref for double-click
-                                    disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
-                                  />
-                                </td>
-                                <td className="text-center">
-                                  <Form.Control
-                                    type="number"
-                                    value={ex.weights[setIndex] || ''}
-                                    onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weights')}
-                                    onFocus={handleFocus}
-                                    className="soft-input center-input"
-                                    style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
-                                    ref={weightInputRef} // Attach ref for double-click
-                                    disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
-                                  />
-                                </td>
-                                <td className="text-center">
-                                  <Form.Check
-                                    type="checkbox"
-                                    checked={ex.completed[setIndex]}
-                                    onChange={() => handleChange(exIndex, setIndex, null, 'completed')}
-                                    className={`completed-checkbox ${canMarkSetComplete(ex, setIndex) ? 'checkbox-enabled' : ''}`}
-                                    style={{ transform: 'scale(1.5)' }} // Larger checkbox for better touch interaction
-                                    disabled={!canMarkSetComplete(ex, setIndex) || isWorkoutFinished} // Disable if conditions not met or workout is finished
-                                  />
-                                </td>
+                          {/* Display notes preview if there is a note */}
+                          {ex.notes && (
+                            <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-1 bg-light border rounded`}>
+                              <small className="text-muted">
+                                <strong>Note:</strong> {ex.notes.length > 50 ? `${ex.notes.substring(0, 50)}...` : ex.notes}
+                              </small>
+                            </div>
+                          )}
+
+                          <Table responsive className="workout-log-table">
+                            <thead>
+                              <tr>
+                                <th>Set</th>
+                                <th>Reps</th>
+                                <th>Weight</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </Table>
-                      </div>
-                    ))}
+                            </thead>
+                            <tbody>
+                              {Array.from({ length: ex.sets }).map((_, setIndex) => (
+                                <tr key={setIndex}>
+                                  <td className="text-center">{setIndex + 1}</td>
+                                  <td className="text-center">
+                                    <Form.Control
+                                      type="number"
+                                      value={ex.reps[setIndex] || ''}
+                                      onChange={e => handleChange(exIndex, setIndex, e.target.value, 'reps')}
+                                      onFocus={handleFocus}
+                                      className="soft-input center-input"
+                                      style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
+                                      ref={repsInputRef} // Attach ref for double-click
+                                      disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
+                                    />
+                                  </td>
+                                  <td className="text-center">
+                                    {exerciseType === "Bodyweight" ? (
+                                      <Form.Control
+                                        type="number"
+                                        value={sessionBodyweight}
+                                        className="soft-input center-input"
+                                        style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
+                                      />
+                                    ) : exerciseType === 'Bodyweight Loadable' ? (
+                                      <div>
+                                        <Form.Control
+                                          type="number"
+                                          value={ex.weights[setIndex] || ''}
+                                          onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weights')}
+                                          onFocus={handleFocus}
+                                          className="soft-input center-input"
+                                          style={{ width: '80px', display: 'inline-block' }}
+                                          placeholder="Additional Weight"
+                                        />
+                                        {sessionBodyweight && ex.weights[setIndex] && (
+                                          <small className="ms-2">
+                                            Total: {(parseFloat(sessionBodyweight) + parseFloat(ex.weights[setIndex])).toFixed(1)} {selectedProgram?.weightUnit || 'LB'}
+                                          </small>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <Form.Control
+                                        type="number"
+                                        value={ex.weights[setIndex] || ''}
+                                        onChange={e => handleChange(exIndex, setIndex, e.target.value, 'weights')}
+                                        onFocus={handleFocus}
+                                        className="soft-input center-input"
+                                        style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
+                                        ref={weightInputRef} // Attach ref for double-click
+                                        disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
+                                      />
+                                    )}
+                                  </td>
+                                  <td className="text-center">
+                                    <Form.Check
+                                      type="checkbox"
+                                      checked={ex.completed[setIndex]}
+                                      onChange={() => handleChange(exIndex, setIndex, null, 'completed')}
+                                      className={`completed-checkbox ${canMarkSetComplete(ex, setIndex) ? 'checkbox-enabled' : ''}`}
+                                      style={{ transform: 'scale(1.5)' }} // Larger checkbox for better touch interaction
+                                      disabled={!canMarkSetComplete(ex, setIndex) || isWorkoutFinished} // Disable if conditions not met or workout is finished
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        </div>
+                      );
+                    })}
 
                     {/* Modal for replacing exercises */}
                     <Modal show={showReplaceModal} onHide={() => setShowReplaceModal(false)} centered>
