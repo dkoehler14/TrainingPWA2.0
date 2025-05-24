@@ -181,7 +181,7 @@ function Progress4() {
             <Row className="mt-4">
               <Col>
                 <h2>Personal Records</h2>
-                <table className="table">
+                <table className="progress4-table">
                   <thead>
                     <tr>
                       <th>Exercise</th>

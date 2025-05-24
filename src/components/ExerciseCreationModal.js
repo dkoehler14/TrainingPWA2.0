@@ -11,7 +11,7 @@ const MUSCLE_GROUPS = [
 
 const EXERCISE_TYPES = [
     'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-    'Bodyweight Only', 'Bodyweight Loadable', 'Swiss Bar', 'Kettlebell',
+    'Bodyweight', 'Bodyweight Loadable', 'Swiss Bar', 'Kettlebell',
     'Machine', 'Smith Machine', 'Camber Bar'
 ];
 

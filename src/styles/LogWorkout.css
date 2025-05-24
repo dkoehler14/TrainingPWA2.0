@@ -287,3 +287,7 @@
 .react-select__single-value--is-disabled {
   color: var(--text-secondary) !important;
 }
+
+.bw-modal {
+  margin-bottom: 0 !important;
+}
