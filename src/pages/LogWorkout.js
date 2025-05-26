@@ -479,6 +479,14 @@ function LogWorkout() {
           ? {
             ...ex,
             exerciseId: alternativeExercise.id,
+            // Reset bodyweight if exercise types are different
+            bodyweight: ['Bodyweight', 'Bodyweight Loadable'].includes(alternativeExercise.exerciseType)
+              ? (ex.bodyweight || '')
+              : '',
+            // Reset weights if switching to/from bodyweight exercises
+            weights: alternativeExercise.exerciseType === 'Bodyweight'
+              ? Array(ex.sets).fill(ex.bodyweight || '')
+              : ex.weights
           }
           : ex
       );
@@ -487,37 +495,72 @@ function LogWorkout() {
       // Now update the program's weeklyConfigs in Firestore
       const programRef = doc(db, "programs", selectedProgram.id);
 
-      // Create a copy of the program's weeklyConfigs
-      const updatedWeeklyConfigs = { ...selectedProgram.weeklyConfigs };
+      // Get current program document to ensure we have the latest data
+      const programDoc = await getDoc(programRef);
+      if (!programDoc.exists()) {
+        throw new Error("Program document not found");
+      }
 
-      // Create the key in the format the program uses
+      const currentProgramData = programDoc.data();
+
+      // Create the correct key for the flattened structure
       const configKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
+      console.log("Updating config key:", configKey);
 
-      // Get the current exercises for this week/day
-      const currentExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises;
+      // Get current exercises for this week/day from the flattened structure
+      const currentExercises = currentProgramData.weeklyConfigs?.[configKey];
 
-      // Create an updated exercises array with the replacement
+      if (!currentExercises) {
+        throw new Error(`No exercises found for ${configKey}`);
+      }
+
+      // Create updated exercises array with the replacement
       const updatedExercises = currentExercises.map(ex =>
         ex.exerciseId === exerciseToReplace.exerciseId
           ? { ...ex, exerciseId: alternativeExercise.id }
           : ex
       );
 
-      // Update the weekly configs with the new exercise list
+      console.log("Original exercises:", currentExercises);
+      console.log("Updated exercises:", updatedExercises);
+
+      // Update Firestore with the correct nested path
       await updateDoc(programRef, {
         [`weeklyConfigs.${configKey}`]: updatedExercises
       });
 
-      console.log(`Updated program config for ${configKey}`);
+      console.log(`Successfully updated program config for ${configKey}`);
 
       // Update the local program state to reflect the changes
       const updatedProgram = { ...selectedProgram };
-      updatedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises = updatedExercises;
-      setSelectedProgram(updatedProgram);
+
+      // Ensure the weeklyConfigs structure exists
+      if (!updatedProgram.weeklyConfigs[selectedWeek]) {
+        updatedProgram.weeklyConfigs[selectedWeek] = [];
+      }
+      if (!updatedProgram.weeklyConfigs[selectedWeek][selectedDay]) {
+        updatedProgram.weeklyConfigs[selectedWeek][selectedDay] = { exercises: [] };
+      }
+
+      // Update programLogs to reflect the change
+      const key = `${selectedWeek}_${selectedDay}`;
+      setProgramLogs(prev => ({
+        ...prev,
+        [key]: {
+          exercises: newLogData,
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+        }
+      }));
+
+      // Trigger auto-save with updated data
+      debouncedSaveLog(user, updatedProgram, selectedWeek, selectedDay, newLogData);
 
       setShowReplaceModal(false);
       setExerciseToReplace(null);
       setAlternativeExercises([]);
+
+      console.log("Exercise replacement completed successfully");
+
     } catch (error) {
       console.error("Error replacing exercise: ", error);
       alert("Failed to update program with replaced exercise.");

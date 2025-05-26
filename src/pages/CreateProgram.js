@@ -5,39 +5,152 @@ import { db, auth } from '../firebase';
 import { collection, getDocs, addDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
+import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
 
 // Add these constants near the top, after imports:
-const MUSCLE_GROUPS = [
-  'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
-  'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
-  'Traps', 'Forearms'
-];
-const EXERCISE_TYPES = [
-  'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-  'Bodyweight Only', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
-  'Machine', 'Smith Machine', 'Camber Bar'
-];
+// const MUSCLE_GROUPS = [
+//   'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
+//   'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
+//   'Traps', 'Forearms'
+// ];
+// const EXERCISE_TYPES = [
+//   'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
+//   'Bodyweight Only', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
+//   'Machine', 'Smith Machine', 'Camber Bar'
+// ];
 
 // New Exercise Selection Modal Component
-const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [muscleFilter, setMuscleFilter] = useState('');
-  const [sortOption, setSortOption] = useState('name-asc');
+// const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
+//   const [searchTerm, setSearchTerm] = useState('');
+//   const [typeFilter, setTypeFilter] = useState('');
+//   const [muscleFilter, setMuscleFilter] = useState('');
+//   const [sortOption, setSortOption] = useState('name-asc');
 
-  // Filtering and sorting logic
-  const filteredExercises = exercises
-    .filter(ex => !typeFilter || ex.exerciseType === typeFilter)
-    .filter(ex => !muscleFilter || ex.primaryMuscleGroup === muscleFilter)
-    .filter(ex => ex.name.toLowerCase().includes(searchTerm.toLowerCase()))
-    .sort((a, b) => {
-      if (sortOption === 'name-asc') return a.name.localeCompare(b.name);
-      if (sortOption === 'name-desc') return b.name.localeCompare(a.name);
-      if (sortOption === 'muscle') return a.primaryMuscleGroup.localeCompare(b.primaryMuscleGroup);
-      if (sortOption === 'type') return a.exerciseType.localeCompare(b.exerciseType);
-      return 0;
-    });
+//   // Filtering and sorting logic
+//   const filteredExercises = exercises
+//     .filter(ex => !typeFilter || ex.exerciseType === typeFilter)
+//     .filter(ex => !muscleFilter || ex.primaryMuscleGroup === muscleFilter)
+//     .filter(ex => ex.name.toLowerCase().includes(searchTerm.toLowerCase()))
+//     .sort((a, b) => {
+//       if (sortOption === 'name-asc') return a.name.localeCompare(b.name);
+//       if (sortOption === 'name-desc') return b.name.localeCompare(a.name);
+//       if (sortOption === 'muscle') return a.primaryMuscleGroup.localeCompare(b.primaryMuscleGroup);
+//       if (sortOption === 'type') return a.exerciseType.localeCompare(b.exerciseType);
+//       return 0;
+//     });
+
+//   return (
+//     <Modal show={show} onHide={onHide} size="lg" centered>
+//       <Modal.Header closeButton>
+//         <Modal.Title>Select an Exercise</Modal.Title>
+//       </Modal.Header>
+//       <Modal.Body>
+//         <Form.Control
+//           type="text"
+//           placeholder="Search exercises..."
+//           value={searchTerm}
+//           onChange={e => setSearchTerm(e.target.value)}
+//           className="soft-input mb-3"
+//         />
+
+//         <Row className="mb-3">
+//           <Col md={4} className="mb-2">
+//             <Form.Select
+//               value={typeFilter}
+//               onChange={e => setTypeFilter(e.target.value)}
+//               className="soft-input"
+//             >
+//               <option value="">All Types</option>
+//               {EXERCISE_TYPES.map(type => (
+//                 <option key={type} value={type}>{type}</option>
+//               ))}
+//             </Form.Select>
+//           </Col>
+//           <Col md={4} className="mb-2">
+//             <Form.Select
+//               value={muscleFilter}
+//               onChange={e => setMuscleFilter(e.target.value)}
+//               className="soft-input"
+//             >
+//               <option value="">All Muscle Groups</option>
+//               {MUSCLE_GROUPS.map(group => (
+//                 <option key={group} value={group}>{group}</option>
+//               ))}
+//             </Form.Select>
+//           </Col>
+//           <Col md={4} className="mb-2">
+//             <Form.Select
+//               value={sortOption}
+//               onChange={e => setSortOption(e.target.value)}
+//               className="soft-input"
+//             >
+//               <option value="name-asc">Name (A-Z)</option>
+//               <option value="name-desc">Name (Z-A)</option>
+//               <option value="muscle">Primary Muscle</option>
+//               <option value="type">Exercise Type</option>
+//             </Form.Select>
+//           </Col>
+//         </Row>
+
+//         {/* Add a button to create a new exercise */}
+//         <div className="text-center mb-3">
+//           <Button
+//             variant="outline-primary"
+//             onClick={onCreateNew}
+//             className="soft-button"
+//           >
+//             Create New Exercise
+//           </Button>
+//         </div>
+
+//         {filteredExercises.length === 0 && (
+//           <p className="text-muted text-center">No exercises found.</p>
+//         )}
+//         <Row>
+//           {filteredExercises.map(ex => (
+//             <Col xs={12} md={4} key={ex.id} className="mb-3">
+//               <div
+//                 className="p-3 border rounded exercise-card text-center"
+//                 style={{
+//                   cursor: 'pointer',
+//                   backgroundColor: '#f8f9fa',
+//                   transition: 'background-color 0.2s',
+//                 }}
+//                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e9ecef'}
+//                 onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+//                 onClick={() => { onSelect({ value: ex.id, label: ex.name }); onHide(); }}
+//               >
+//                 <div>
+//                   <span className="fw-bold">{ex.name}</span>
+//                 </div>
+//                 <div className="mt-2">
+//                   {ex.exerciseType && (
+//                     <span className="badge bg-info text-dark me-1">{ex.exerciseType}</span>
+//                   )}
+//                   {ex.primaryMuscleGroup && (
+//                     <span className="badge bg-secondary">{ex.primaryMuscleGroup}</span>
+//                   )}
+//                 </div>
+//               </div>
+//             </Col>
+//           ))}
+//         </Row>
+//       </Modal.Body>
+//       <Modal.Footer>
+//         <Button variant="secondary" onClick={onHide}>
+//           Cancel
+//         </Button>
+//       </Modal.Footer>
+//     </Modal>
+//   );
+// };
+// New Exercise Selection Modal Component using ExerciseGrid
+const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
+  const handleExerciseSelect = (exercise) => {
+    onSelect({ value: exercise.id, label: exercise.name });
+    onHide();
+  };
 
   return (
     <Modal show={show} onHide={onHide} size="lg" centered>
@@ -45,53 +158,6 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
         <Modal.Title>Select an Exercise</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <Form.Control
-          type="text"
-          placeholder="Search exercises..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="soft-input mb-3"
-        />
-
-        <Row className="mb-3">
-          <Col md={4} className="mb-2">
-            <Form.Select
-              value={typeFilter}
-              onChange={e => setTypeFilter(e.target.value)}
-              className="soft-input"
-            >
-              <option value="">All Types</option>
-              {EXERCISE_TYPES.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
-            </Form.Select>
-          </Col>
-          <Col md={4} className="mb-2">
-            <Form.Select
-              value={muscleFilter}
-              onChange={e => setMuscleFilter(e.target.value)}
-              className="soft-input"
-            >
-              <option value="">All Muscle Groups</option>
-              {MUSCLE_GROUPS.map(group => (
-                <option key={group} value={group}>{group}</option>
-              ))}
-            </Form.Select>
-          </Col>
-          <Col md={4} className="mb-2">
-            <Form.Select
-              value={sortOption}
-              onChange={e => setSortOption(e.target.value)}
-              className="soft-input"
-            >
-              <option value="name-asc">Name (A-Z)</option>
-              <option value="name-desc">Name (Z-A)</option>
-              <option value="muscle">Primary Muscle</option>
-              <option value="type">Exercise Type</option>
-            </Form.Select>
-          </Col>
-        </Row>
-
         {/* Add a button to create a new exercise */}
         <div className="text-center mb-3">
           <Button
@@ -103,38 +169,11 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
           </Button>
         </div>
 
-        {filteredExercises.length === 0 && (
-          <p className="text-muted text-center">No exercises found.</p>
-        )}
-        <Row>
-          {filteredExercises.map(ex => (
-            <Col xs={12} md={4} key={ex.id} className="mb-3">
-              <div
-                className="p-3 border rounded exercise-card text-center"
-                style={{
-                  cursor: 'pointer',
-                  backgroundColor: '#f8f9fa',
-                  transition: 'background-color 0.2s',
-                }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e9ecef'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-                onClick={() => { onSelect({ value: ex.id, label: ex.name }); onHide(); }}
-              >
-                <div>
-                  <span className="fw-bold">{ex.name}</span>
-                </div>
-                <div className="mt-2">
-                  {ex.exerciseType && (
-                    <span className="badge bg-info text-dark me-1">{ex.exerciseType}</span>
-                  )}
-                  {ex.primaryMuscleGroup && (
-                    <span className="badge bg-secondary">{ex.primaryMuscleGroup}</span>
-                  )}
-                </div>
-              </div>
-            </Col>
-          ))}
-        </Row>
+        <ExerciseGrid
+          exercises={exercises}
+          onExerciseClick={handleExerciseSelect}
+          emptyMessage="No exercises found."
+        />
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide}>
