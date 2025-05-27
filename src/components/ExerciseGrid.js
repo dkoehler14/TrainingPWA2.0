@@ -137,7 +137,7 @@ const ExerciseGrid = ({
                                         e.stopPropagation();
                                         onEditClick(ex);
                                     }}
-                                    className="position-absolute"
+                                    className="position-absolute exercises-edit-button"
                                     style={{ top: '8px', right: '8px', zIndex: 10 }}
                                 >
                                     <PencilSquare size={14} />
@@ -159,13 +159,13 @@ const ExerciseGrid = ({
                                         )}
                                     </div>
 
-                                    {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
+                                    {/* {ex.secondaryMuscleGroups && ex.secondaryMuscleGroups.length > 0 && (
                                         <div className="mt-2">
                                             <small className="text-muted">
                                                 Secondary: {ex.secondaryMuscleGroups.join(', ')}
                                             </small>
                                         </div>
-                                    )}
+                                    )} */}
                                 </div>
                             </div>
                         </div>
