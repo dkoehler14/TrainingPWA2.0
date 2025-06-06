@@ -2,149 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
-import { collection, getDocs, addDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
+import { useParams, useNavigate } from 'react-router-dom';
 
-// Add these constants near the top, after imports:
-// const MUSCLE_GROUPS = [
-//   'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
-//   'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
-//   'Traps', 'Forearms'
-// ];
-// const EXERCISE_TYPES = [
-//   'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-//   'Bodyweight Only', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
-//   'Machine', 'Smith Machine', 'Camber Bar'
-// ];
-
-// New Exercise Selection Modal Component
-// const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
-//   const [searchTerm, setSearchTerm] = useState('');
-//   const [typeFilter, setTypeFilter] = useState('');
-//   const [muscleFilter, setMuscleFilter] = useState('');
-//   const [sortOption, setSortOption] = useState('name-asc');
-
-//   // Filtering and sorting logic
-//   const filteredExercises = exercises
-//     .filter(ex => !typeFilter || ex.exerciseType === typeFilter)
-//     .filter(ex => !muscleFilter || ex.primaryMuscleGroup === muscleFilter)
-//     .filter(ex => ex.name.toLowerCase().includes(searchTerm.toLowerCase()))
-//     .sort((a, b) => {
-//       if (sortOption === 'name-asc') return a.name.localeCompare(b.name);
-//       if (sortOption === 'name-desc') return b.name.localeCompare(a.name);
-//       if (sortOption === 'muscle') return a.primaryMuscleGroup.localeCompare(b.primaryMuscleGroup);
-//       if (sortOption === 'type') return a.exerciseType.localeCompare(b.exerciseType);
-//       return 0;
-//     });
-
-//   return (
-//     <Modal show={show} onHide={onHide} size="lg" centered>
-//       <Modal.Header closeButton>
-//         <Modal.Title>Select an Exercise</Modal.Title>
-//       </Modal.Header>
-//       <Modal.Body>
-//         <Form.Control
-//           type="text"
-//           placeholder="Search exercises..."
-//           value={searchTerm}
-//           onChange={e => setSearchTerm(e.target.value)}
-//           className="soft-input mb-3"
-//         />
-
-//         <Row className="mb-3">
-//           <Col md={4} className="mb-2">
-//             <Form.Select
-//               value={typeFilter}
-//               onChange={e => setTypeFilter(e.target.value)}
-//               className="soft-input"
-//             >
-//               <option value="">All Types</option>
-//               {EXERCISE_TYPES.map(type => (
-//                 <option key={type} value={type}>{type}</option>
-//               ))}
-//             </Form.Select>
-//           </Col>
-//           <Col md={4} className="mb-2">
-//             <Form.Select
-//               value={muscleFilter}
-//               onChange={e => setMuscleFilter(e.target.value)}
-//               className="soft-input"
-//             >
-//               <option value="">All Muscle Groups</option>
-//               {MUSCLE_GROUPS.map(group => (
-//                 <option key={group} value={group}>{group}</option>
-//               ))}
-//             </Form.Select>
-//           </Col>
-//           <Col md={4} className="mb-2">
-//             <Form.Select
-//               value={sortOption}
-//               onChange={e => setSortOption(e.target.value)}
-//               className="soft-input"
-//             >
-//               <option value="name-asc">Name (A-Z)</option>
-//               <option value="name-desc">Name (Z-A)</option>
-//               <option value="muscle">Primary Muscle</option>
-//               <option value="type">Exercise Type</option>
-//             </Form.Select>
-//           </Col>
-//         </Row>
-
-//         {/* Add a button to create a new exercise */}
-//         <div className="text-center mb-3">
-//           <Button
-//             variant="outline-primary"
-//             onClick={onCreateNew}
-//             className="soft-button"
-//           >
-//             Create New Exercise
-//           </Button>
-//         </div>
-
-//         {filteredExercises.length === 0 && (
-//           <p className="text-muted text-center">No exercises found.</p>
-//         )}
-//         <Row>
-//           {filteredExercises.map(ex => (
-//             <Col xs={12} md={4} key={ex.id} className="mb-3">
-//               <div
-//                 className="p-3 border rounded exercise-card text-center"
-//                 style={{
-//                   cursor: 'pointer',
-//                   backgroundColor: '#f8f9fa',
-//                   transition: 'background-color 0.2s',
-//                 }}
-//                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#e9ecef'}
-//                 onMouseLeave={e => e.currentTarget.style.backgroundColor = '#f8f9fa'}
-//                 onClick={() => { onSelect({ value: ex.id, label: ex.name }); onHide(); }}
-//               >
-//                 <div>
-//                   <span className="fw-bold">{ex.name}</span>
-//                 </div>
-//                 <div className="mt-2">
-//                   {ex.exerciseType && (
-//                     <span className="badge bg-info text-dark me-1">{ex.exerciseType}</span>
-//                   )}
-//                   {ex.primaryMuscleGroup && (
-//                     <span className="badge bg-secondary">{ex.primaryMuscleGroup}</span>
-//                   )}
-//                 </div>
-//               </div>
-//             </Col>
-//           ))}
-//         </Row>
-//       </Modal.Body>
-//       <Modal.Footer>
-//         <Button variant="secondary" onClick={onHide}>
-//           Cancel
-//         </Button>
-//       </Modal.Footer>
-//     </Modal>
-//   );
-// };
 // New Exercise Selection Modal Component using ExerciseGrid
 const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
   const handleExerciseSelect = (exercise) => {
@@ -184,7 +48,9 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
   );
 };
 
-function CreateProgram() {
+function CreateProgram({ mode = 'create' }) {
+  const { programId } = useParams();
+  const navigate = useNavigate();
   const [programName, setProgramName] = useState('');
   const [weightUnit, setWeightUnit] = useState('LB');
   const [weeks, setWeeks] = useState([
@@ -203,6 +69,7 @@ function CreateProgram() {
   const [currentExerciseSelection, setCurrentExerciseSelection] = useState({ weekIndex: 0, dayIndex: 0, exIndex: 0 }); // Track which exercise is being selected
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
   const user = auth.currentUser;
+  const [isLoading, setIsLoading] = useState(mode === 'edit');
 
   const setsRef = useRef(null);
   const repsRef = useRef(null);
@@ -235,8 +102,165 @@ function CreateProgram() {
     fetchData();
   }, [user]);
 
+  useEffect(() => {
+    console.log('CreateProgram mounted:', { mode, programId, isLoading });
+  }, []);
+
+  useEffect(() => {
+    const loadProgram = async () => {
+      console.log('Starting loadProgram:', { mode, programId });
+      if (mode === 'edit' && programId) {
+        try {
+          const programDoc = await getDoc(doc(db, "programs", programId));
+          console.log('Program document exists:', programDoc.exists());
+          
+          if (programDoc.exists()) {
+            const programData = programDoc.data();
+            console.log('Loaded program data:', {
+              name: programData.name,
+              duration: programData.duration,
+              daysPerWeek: programData.daysPerWeek,
+              hasWeeklyConfigs: !!programData.weeklyConfigs,
+              weeklyConfigsKeys: programData.weeklyConfigs ? Object.keys(programData.weeklyConfigs) : []
+            });
+            
+            // Validate required fields
+            if (!programData.duration || !programData.daysPerWeek || !programData.weeklyConfigs) {
+              console.error('Invalid program structure:', {
+                duration: programData.duration,
+                daysPerWeek: programData.daysPerWeek,
+                hasWeeklyConfigs: !!programData.weeklyConfigs
+              });
+              throw new Error("Invalid program data structure");
+            }
+
+            setProgramName(programData.name || '');
+            setWeightUnit(programData.weightUnit || 'LB');
+            
+            // Create the correct structure for weeks
+            const weeklyConfigs = Array.from({ length: programData.duration }, () => ({
+              days: Array.from({ length: programData.daysPerWeek }, () => ({
+                exercises: []
+              }))
+            }));
+
+            console.log('Created empty weeklyConfigs structure:', {
+              weeksLength: weeklyConfigs.length,
+              firstWeekDaysLength: weeklyConfigs[0]?.days?.length,
+              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length
+            });
+
+            // Ensure weeklyConfigs is an object
+            if (typeof programData.weeklyConfigs === 'object') {
+              console.log('Processing weeklyConfigs object:', {
+                configKeys: Object.keys(programData.weeklyConfigs),
+                configValues: Object.values(programData.weeklyConfigs).map(exercises => exercises?.length)
+              });
+
+              for (let key in programData.weeklyConfigs) {
+                const match = key.match(/week(\d+)_day(\d+)_exercises/);
+                if (match) {
+                  const weekIndex = parseInt(match[1], 10) - 1;
+                  const dayIndex = parseInt(match[2], 10) - 1;
+                  
+                  console.log('Processing config key:', {
+                    key,
+                    weekIndex,
+                    dayIndex,
+                    exercisesCount: programData.weeklyConfigs[key]?.length
+                  });
+                  
+                  // Validate indices are within bounds
+                  if (weekIndex >= 0 && weekIndex < programData.duration &&
+                      dayIndex >= 0 && dayIndex < programData.daysPerWeek) {
+                    // Ensure each exercise has a notes field
+                    const processedExercises = (programData.weeklyConfigs[key] || []).map(ex => ({
+                      ...ex,
+                      notes: ex.notes || '' // Ensure notes field exists with empty string as default
+                    }));
+                    
+                    console.log('Setting exercises for week/day:', {
+                      weekIndex,
+                      dayIndex,
+                      exercisesCount: processedExercises.length,
+                      firstExercise: processedExercises[0]
+                    });
+                    
+                    // Update the structure to use the correct path
+                    weeklyConfigs[weekIndex].days[dayIndex].exercises = processedExercises;
+                  } else {
+                    console.warn('Invalid indices:', {
+                      weekIndex,
+                      dayIndex,
+                      duration: programData.duration,
+                      daysPerWeek: programData.daysPerWeek
+                    });
+                  }
+                }
+              }
+            }
+
+            // Log final structure before setting state
+            console.log('Final weeklyConfigs structure:', {
+              weeksLength: weeklyConfigs.length,
+              firstWeekDaysLength: weeklyConfigs[0]?.days?.length,
+              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length,
+              firstExercise: weeklyConfigs[0]?.days?.[0]?.exercises?.[0],
+              structure: weeklyConfigs[0] // Log the first week's structure to verify
+            });
+
+            // Validate the structure before setting state
+            if (weeklyConfigs.length > 0 && weeklyConfigs[0].days?.length > 0) {
+              console.log('Setting weeks state with valid structure');
+              setWeeks(weeklyConfigs);
+            } else {
+              console.warn('Invalid weekly configs structure, setting default');
+              setWeeks([
+                { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+              ]);
+            }
+          } else {
+            console.error('Program not found:', programId);
+            throw new Error("Program not found");
+          }
+        } catch (error) {
+          console.error("Error loading program:", error);
+          alert("Failed to load program data. Starting with empty program.");
+          setWeeks([
+            { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+          ]);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    loadProgram();
+  }, [mode, programId]);
+
   const openNotesModal = (weekIndex, dayIndex, exIndex) => {
-    const currentNotes = weeks[0].days[dayIndex]?.exercises[exIndex]?.notes || '';
+    console.log('Opening notes modal:', {
+      weekIndex,
+      dayIndex,
+      exIndex,
+      hasWeeks: !!weeks,
+      hasDays: !!weeks?.[0]?.days,
+      hasExercise: !!weeks?.[0]?.days?.[dayIndex]?.exercises?.[exIndex]
+    });
+
+    // Validate indices before opening modal
+    if (!weeks || !weeks[0]?.days?.[dayIndex]?.exercises?.[exIndex]) {
+      console.error('Invalid indices for notes modal:', {
+        weekIndex,
+        dayIndex,
+        exIndex,
+        weeksLength: weeks?.length,
+        daysLength: weeks?.[0]?.days?.length,
+        exercisesLength: weeks?.[0]?.days?.[dayIndex]?.exercises?.length
+      });
+      return;
+    }
+
+    const currentNotes = weeks[0].days[dayIndex].exercises[exIndex].notes || '';
     setCurrentNoteExercise({ weekIndex, dayIndex, exIndex, tempNotes: currentNotes });
     setShowNotesModal(true);
   };
@@ -248,9 +272,34 @@ function CreateProgram() {
 
   const saveNotes = () => {
     const { weekIndex, dayIndex, exIndex, tempNotes } = currentNoteExercise;
+    
+    console.log('Saving notes:', {
+      weekIndex,
+      dayIndex,
+      exIndex,
+      hasWeeks: !!weeks,
+      hasDays: !!weeks?.[0]?.days,
+      hasExercise: !!weeks?.[0]?.days?.[dayIndex]?.exercises?.[exIndex]
+    });
+
+    // Validate indices before saving
+    if (!weeks || !weeks[0]?.days?.[dayIndex]?.exercises?.[exIndex]) {
+      console.error('Invalid indices for saving notes:', {
+        weekIndex,
+        dayIndex,
+        exIndex,
+        weeksLength: weeks?.length,
+        daysLength: weeks?.[0]?.days?.length,
+        exercisesLength: weeks?.[0]?.days?.[dayIndex]?.exercises?.length
+      });
+      return;
+    }
+
     const newWeeks = [...weeks];
     newWeeks.forEach(week => {
+      if (week.days[dayIndex]?.exercises[exIndex]) {
       week.days[dayIndex].exercises[exIndex].notes = tempNotes || '';
+      }
     });
     setWeeks(newWeeks);
     setShowNotesModal(false);
@@ -344,7 +393,26 @@ function CreateProgram() {
   };
 
   const saveProgram = async () => {
-    if (!user || !programName || weeks.length === 0 || weeks[0].days.length === 0) return;
+    console.log('Starting saveProgram:', {
+      mode,
+      programId,
+      hasUser: !!user,
+      programName,
+      weeksLength: weeks?.length,
+      firstWeekDays: weeks?.[0]?.days?.length
+    });
+
+    if (!user || !programName || !weeks || weeks.length === 0 || !weeks[0]?.days || weeks[0].days.length === 0) {
+      console.warn('Save program validation failed:', {
+        hasUser: !!user,
+        hasProgramName: !!programName,
+        hasWeeks: !!weeks,
+        weeksLength: weeks?.length,
+        firstWeekDays: weeks?.[0]?.days?.length
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const flattenedConfigs = {};
@@ -359,17 +427,27 @@ function CreateProgram() {
         });
       });
 
-      await addDoc(collection(db, "programs"), {
-        userId: user.uid,
-        isPredefined: false,
+      const programData = {
         name: programName,
         weightUnit: weightUnit,
         duration: weeks.length,
         daysPerWeek: weeks[0].days.length,
         weeklyConfigs: flattenedConfigs,
+      };
+
+      if (mode === 'edit') {
+        await updateDoc(doc(db, "programs", programId), programData);
+        alert('Program updated successfully!');
+        navigate('/programs');
+      } else {
+        await addDoc(collection(db, "programs"), {
+          ...programData,
+          userId: user.uid,
+          isPredefined: false,
         createdAt: new Date()
       });
       alert('Program created successfully!');
+        // Reset form for new program
       setProgramName('');
       setWeightUnit('LB');
       setWeeks([
@@ -378,8 +456,10 @@ function CreateProgram() {
         { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
         { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
       ]);
+      }
     } catch (error) {
-      console.error("Error saving program: ", error);
+      console.error("Error saving program:", error);
+      alert(mode === 'edit' ? 'Failed to update program' : 'Failed to create program');
     } finally {
       setIsSubmitting(false);
     }
@@ -392,7 +472,8 @@ function CreateProgram() {
   };
 
   const hasNotes = (dayIndex, exIndex) => {
-    return weeks[0].days[dayIndex]?.exercises[exIndex]?.notes?.trim().length > 0;
+    const notes = weeks[0]?.days?.[dayIndex]?.exercises?.[exIndex]?.notes;
+    return notes !== undefined && notes !== null && notes.trim().length > 0;
   };
 
   const calculateTableWidth = () => {
@@ -595,6 +676,37 @@ function CreateProgram() {
     );
   };
 
+  useEffect(() => {
+    console.log('Weeks state updated:', {
+      weeksLength: weeks?.length,
+      firstWeekDays: weeks?.[0]?.days?.length,
+      firstDayExercises: weeks?.[0]?.days?.[0]?.exercises?.length
+    });
+  }, [weeks]);
+
+  useEffect(() => {
+    console.log('Render conditions:', {
+      isLoading,
+      hasWeeks: !!weeks,
+      weeksLength: weeks?.length,
+      firstWeekDays: weeks?.[0]?.days?.length,
+      isMobile
+    });
+  }, [isLoading, weeks, isMobile]);
+
+  if (isLoading) {
+    return (
+      <Container fluid className="soft-container create-program-container">
+        <div className="text-center p-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p className="mt-3">Loading program data...</p>
+        </div>
+      </Container>
+    );
+  }
+
   return (
     <Container fluid className="soft-container create-program-container">
       <Row className="mb-4 program-misc-input">
@@ -628,21 +740,26 @@ function CreateProgram() {
       </Row>
       <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
         <div className="d-flex flex-wrap week-indicators">
-          {weeks.map((_, index) => (
+          {weeks && weeks.length > 0 ? (
+            weeks.map((_, index) => (
             <div key={index} className="me-2 mb-2">
               <span className="badge bg-secondary">Week {index + 1}</span>
             </div>
-          ))}
+            ))
+          ) : (
+            <div className="text-muted">No weeks added yet</div>
+          )}
         </div>
         <div className={`d-flex ${isMobile ? 'flex-column w-100 button-container' : ''}`}>
           <Button onClick={addWeek} className={`soft-button gradient ${isMobile ? 'mb-2 w-100' : 'me-2'}`}>Add Week</Button>
-          <Button onClick={removeWeek} className={`soft-button gradient ${isMobile ? 'w-100' : ''}`} disabled={weeks.length <= 1}>Remove Week</Button>
+          <Button onClick={removeWeek} className={`soft-button gradient ${isMobile ? 'w-100' : ''}`} disabled={!weeks || weeks.length <= 1}>Remove Week</Button>
         </div>
       </div>
 
       {isMobile ? (
         <Accordion defaultActiveKey="0" className="mb-4">
-          {weeks[0].days.map((day, dayIndex) => (
+          {weeks && weeks.length > 0 && weeks[0]?.days ? (
+            weeks[0].days.map((day, dayIndex) => (
             <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
               <Accordion.Header className="d-flex justify-content-between">
                 <span className="me-3">Day {dayIndex + 1}</span>
@@ -657,7 +774,12 @@ function CreateProgram() {
                 </div>
               </Accordion.Body>
             </Accordion.Item>
-          ))}
+            ))
+          ) : (
+            <div className="text-center p-3">
+              <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
+            </div>
+          )}
         </Accordion>
       ) : (
         <div style={{ width: `${tableWidth}px`, maxWidth: '100%', overflowX: 'auto' }}>
@@ -665,9 +787,13 @@ function CreateProgram() {
             <thead>
               <tr>
                 <th style={{ width: '215px', border: 'none' }}></th>
-                {weeks.map((_, index) => (
+                {weeks && weeks.length > 0 ? (
+                  weeks.map((_, index) => (
                   <th key={index} style={{ textAlign: 'center', width: '100px' }}>Week {index + 1}</th>
-                ))}
+                  ))
+                ) : (
+                  <th style={{ textAlign: 'center', width: '100px' }}>No Weeks</th>
+                )}
                 <th style={{ width: '235px' }}></th>
               </tr>
             </thead>
@@ -675,7 +801,8 @@ function CreateProgram() {
               <tr>
                 <td colSpan={weeks.length * 2 + 2}>
                   <Accordion defaultActiveKey="0">
-                    {weeks[0].days.map((day, dayIndex) => (
+                    {weeks && weeks.length > 0 && weeks[0]?.days ? (
+                      weeks[0].days.map((day, dayIndex) => (
                       <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
                         <Accordion.Header>
                           Day {dayIndex + 1}
@@ -695,7 +822,12 @@ function CreateProgram() {
                           </div>
                         </Accordion.Body>
                       </Accordion.Item>
-                    ))}
+                      ))
+                    ) : (
+                      <div className="text-center p-3">
+                        <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
+                      </div>
+                    )}
                   </Accordion>
                 </td>
               </tr>
@@ -711,7 +843,7 @@ function CreateProgram() {
           className={`soft-button create-program-button gradient ${isMobile ? 'w-100' : ''}`}
           disabled={isSubmitting || !programName}
         >
-          Save Program
+          {mode === 'edit' ? 'Update Program' : 'Save Program'}
         </Button>
       </div>
 
@@ -719,10 +851,31 @@ function CreateProgram() {
         <Modal.Header closeButton>
           <Modal.Title>
             Exercise Notes
-            {currentNoteExercise.dayIndex !== null && (
+            {currentNoteExercise.dayIndex !== null && weeks && weeks[0]?.days?.[currentNoteExercise.dayIndex]?.exercises?.[currentNoteExercise.exIndex] ? (
               <div className="text-muted fs-6">
-                {exercises.find(e => e.value === weeks[0].days[currentNoteExercise.dayIndex]?.exercises[currentNoteExercise.exIndex]?.exerciseId)?.label || 'Exercise'}
+                {(() => {
+                  const exerciseId = weeks[0].days[currentNoteExercise.dayIndex].exercises[currentNoteExercise.exIndex].exerciseId;
+                  const exercise = exercises.find(e => e.value === exerciseId);
+                  console.log('Notes modal exercise lookup:', {
+                    exerciseId,
+                    foundExercise: !!exercise,
+                    currentNoteExercise,
+                    hasWeeks: !!weeks,
+                    hasDays: !!weeks?.[0]?.days,
+                    dayIndex: currentNoteExercise.dayIndex,
+                    exIndex: currentNoteExercise.exIndex
+                  });
+                  return exercise?.label || 'Exercise';
+                })()}
               </div>
+            ) : (
+              console.warn('Notes modal missing data:', {
+                currentNoteExercise,
+                hasWeeks: !!weeks,
+                hasDays: !!weeks?.[0]?.days,
+                dayIndex: currentNoteExercise?.dayIndex,
+                exIndex: currentNoteExercise?.exIndex
+              })
             )}
           </Modal.Title>
         </Modal.Header>
@@ -738,7 +891,21 @@ function CreateProgram() {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Cancel</Button>
-          <Button className="soft-button gradient" onClick={saveNotes}>Add Note</Button>
+          <Button 
+            className="soft-button gradient" 
+            onClick={() => {
+              console.log('Saving notes:', {
+                currentNoteExercise,
+                hasWeeks: !!weeks,
+                hasDays: !!weeks?.[0]?.days,
+                dayIndex: currentNoteExercise?.dayIndex,
+                exIndex: currentNoteExercise?.exIndex
+              });
+              saveNotes();
+            }}
+          >
+            Add Note
+          </Button>
         </Modal.Footer>
       </Modal>
 

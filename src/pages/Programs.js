@@ -3,7 +3,7 @@ import { Container, Row, Col, Card, Button, Modal } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
-import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle } from 'react-bootstrap-icons';
+import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 
 function Programs() {
@@ -238,6 +238,10 @@ function Programs() {
     );
   };
 
+  const handleEditProgram = (programId) => {
+    navigate(`/edit-program/${programId}`);
+  };
+
   const renderProgramCard = (program, isPredefined = false) => {
     return (
       <Card key={program.id} className="mb-3 program-card">
@@ -266,6 +270,13 @@ function Programs() {
 
               {!isPredefined ? (
                 <>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => handleEditProgram(program.id)}
+                  >
+                    <Pencil className="me-1" /> Edit
+                  </Button>
                   {!program.isCurrent && (
                     <Button
                       variant="outline-success"
@@ -439,6 +450,23 @@ function Programs() {
 
     const currentWeekIndex = getCurrentWeekIndex();
 
+    const isProgramComplete = (program, workoutLogs) => {
+      // Check if all weeks and days have been completed
+      for (let weekIndex = 0; weekIndex < program.weeklyConfigs.length; weekIndex++) {
+        const week = program.weeklyConfigs[weekIndex];
+        for (let dayIndex = 0; dayIndex < week.length; dayIndex++) {
+          const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
+          // If any workout is not marked as finished, program is not complete
+          if (!workoutLogs[weekKey]?.isWorkoutFinished) {
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    const programComplete = isProgramComplete(selectedProgram, workoutLogs);
+
     return (
       <Modal
         show={showProgramDetails}
@@ -486,7 +514,24 @@ function Programs() {
                       <div className="progress-percentage">{progress.percentage}%</div>
                     </div>
                     <div className="mt-2 text-center">
-                      <strong>{progress.completedWorkouts}</strong> of <strong>{progress.totalWorkouts}</strong> workouts completed
+                      <strong>
+                        {(() => {
+                          // if (programComplete) {
+                          //   return (
+                          //     <span className="text-success">
+                          //       Program completed! 🎉
+                          //     </span>
+                          //   );
+                          // }
+                          
+                          // If not complete, show basic progress
+                          return (
+                            <span className="text-muted">
+                              {progress.completedWorkouts} of {progress.totalWorkouts} workouts completed
+                            </span>
+                          );
+                        })()}
+                      </strong>
                     </div>
                   </div>
                 </div>
@@ -515,11 +560,19 @@ function Programs() {
                   </div>
                   <div className="mt-3">
                     <div className="d-flex justify-content-between">
-                      <span><strong>Currently on:</strong> Week {currentWeekIndex + 1}</span>
-                      {progress.completedWorkouts > 0 && (
+                      {programComplete ? (
                         <span className="text-success">
-                          On track to complete in {Math.ceil((progress.totalWorkouts * (selectedProgram.duration / progress.completedWorkouts)) / 7)} weeks
+                          <strong>Program complete! 🎉</strong>
                         </span>
+                      ) : (
+                        <>
+                          <span><strong>Currently on:</strong> Week {currentWeekIndex + 1}</span>
+                          {progress.completedWorkouts > 0 && (
+                            <span className="text-muted">
+                              On track to complete in {Math.ceil((progress.totalWorkouts * (selectedProgram.duration / progress.completedWorkouts)) / 7)} weeks
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -1057,7 +1110,7 @@ function Programs() {
               userPrograms.map(program => renderProgramCard(program))
             )}
 
-            <h2 className="soft-subtitle section-title mt-5 mb-3">Predefined Programs</h2>
+            <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
             {predefinedPrograms.map(program => renderProgramCard(program, true))}
           </div>
         </Col>

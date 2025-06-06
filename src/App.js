@@ -56,6 +56,7 @@ function AppContent() {
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
         <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
+        <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
       </Routes>
     </Router>
   );
