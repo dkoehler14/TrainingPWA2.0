@@ -227,3 +227,270 @@
 .program-details-modal .set-data:last-child {
   border-bottom: none !important;
 }
+
+/* Mobile-first responsive design */
+@media (max-width: 767px) {
+  .programs-container {
+    padding: 1rem;
+  }
+  
+  .programs-card {
+    padding: 1rem;
+  }
+  
+  .programs-title {
+    font-size: 1.5rem;
+  }
+  
+  .section-title {
+    font-size: 1.25rem;
+  }
+  
+  /* Improve program card layout on mobile */
+  .program-card .card-body {
+    padding: 1rem;
+  }
+  
+  .program-card .d-flex.gap-2 {
+    flex-direction: column;
+    gap: 0.5rem !important;
+  }
+  
+  .program-card .btn {
+    width: 100%;
+    margin-bottom: 0.25rem;
+  }
+  
+  /* Modal improvements for mobile */
+  .program-details-modal .modal-dialog {
+    max-width: 100%;
+    margin: 0.5rem;
+  }
+  
+  .program-details-modal .modal-body {
+    padding: 1rem;
+  }
+  
+  /* Progress circle adjustments */
+  .program-details-modal .progress-circle {
+    width: 80px !important;
+    height: 80px !important;
+  }
+  
+  .program-details-modal .progress-percentage {
+    font-size: 1.2rem;
+  }
+  
+  /* Metric boxes stack vertically on mobile */
+  .program-details-modal .metric-box {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+  
+  /* Tab navigation improvements */
+  .nav-tabs {
+    flex-wrap: wrap;
+  }
+  
+  .nav-tabs .nav-link {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  /* Table improvements for mobile */
+  .table-responsive {
+    font-size: 0.875rem;
+  }
+  
+  .table th,
+  .table td {
+    padding: 0.5rem 0.25rem;
+  }
+  
+  /* Accordion improvements */
+  .accordion-button {
+    font-size: 0.875rem;
+    padding: 0.75rem;
+  }
+  
+  /* Exercise item improvements */
+  .exercise-item {
+    padding: 0.75rem !important;
+  }
+  
+  .exercise-log-details {
+    font-size: 0.8rem;
+  }
+  
+  /* Weekly progress bars */
+  .weekly-progress-bars {
+    margin-top: 1rem;
+  }
+  
+  .weekly-progress-bars .progress {
+    height: 6px;
+  }
+}
+
+/* Tablet improvements */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .programs-container {
+    padding: 1.5rem;
+  }
+  
+  .programs-card {
+    padding: 1.5rem;
+  }
+  
+  .program-card .d-flex.gap-2 {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+  }
+  
+  .program-card .btn {
+    flex: 1 1 auto;
+    min-width: 120px;
+  }
+  
+  .program-details-modal .modal-dialog {
+    max-width: 90%;
+  }
+  
+  .program-details-modal .metric-box {
+    width: 48%;
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Desktop improvements */
+@media (min-width: 1024px) {
+  .program-details-modal .modal-dialog {
+    max-width: 80%;
+  }
+  
+  .program-card .btn {
+    min-width: 100px;
+  }
+  
+  .program-details-modal .metric-box {
+    width: 32%;
+  }
+  
+  /* Better hover effects for desktop */
+  .program-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+  }
+  
+  .exercise-item:hover {
+    background-color: #e9ecef !important;
+  }
+}
+
+/* Accessibility improvements */
+.btn:focus {
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.nav-link:focus {
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+  .btn {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+  }
+  
+  .nav-link {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+  }
+  
+  .accordion-button {
+    min-height: 44px;
+  }
+}
+
+/* Loading states */
+.program-card.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Empty state improvements */
+.no-programs-state {
+  text-align: center;
+  padding: 3rem 1rem;
+}
+
+.no-programs-state .btn {
+  margin-top: 1rem;
+}
+
+/* Program card improvements */
+.program-card .card-title {
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.program-card .card-subtitle {
+  font-size: 0.9rem;
+}
+
+/* Modal header improvements */
+.program-details-modal .modal-header {
+  padding: 1.5rem 1.5rem 1rem;
+}
+
+.program-details-modal .modal-title h4 {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+/* Progress summary improvements */
+.program-progress-summary {
+  margin-bottom: 2rem;
+}
+
+.program-progress-summary .card-body {
+  padding: 1.5rem;
+}
+
+/* Exercise metrics improvements */
+.exercise-metric-card {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.exercise-metric-card h6 {
+  margin-bottom: 1rem;
+  color: #495057;
+}
+
+/* Chart improvements */
+.chart-container {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+.chart-bars {
+  min-height: 60px;
+}
+
+/* Set data improvements */
+.set-data {
+  padding: 0.5rem !important;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.set-data:last-child {
+  border-bottom: none !important;
+}

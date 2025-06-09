@@ -169,6 +169,7 @@ function ExerciseCreationModal({
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
                             placeholder="Enter exercise name"
                             className="soft-input"
+                            autoFocus
                         />
                     </Form.Group>
 

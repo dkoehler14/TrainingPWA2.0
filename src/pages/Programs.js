@@ -17,6 +17,8 @@ function Programs() {
   const [activeTab, setActiveTab] = useState('overview');
   const user = auth.currentUser;
   const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -242,6 +244,116 @@ function Programs() {
     navigate(`/edit-program/${programId}`);
   };
 
+  const renderActionButtons = (program, isPredefined) => {
+    const isMobile = window.innerWidth <= 767;
+    
+    if (isMobile) {
+      return (
+        <div className="d-flex flex-column gap-2 w-100">
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={() => viewProgramDetails(program)}
+            className="w-100"
+          >
+            <FileText className="me-1" /> Details
+          </Button>
+          
+          {!isPredefined ? (
+            <>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => handleEditProgram(program.id)}
+                className="w-100"
+              >
+                <Pencil className="me-1" /> Edit
+              </Button>
+              {!program.isCurrent && (
+                <Button
+                  variant="outline-success"
+                  size="sm"
+                  onClick={() => setCurrentProgram(program.id)}
+                  className="w-100"
+                >
+                  <Clock className="me-1" /> Set Current
+                </Button>
+              )}
+              <Button
+                variant="outline-danger"
+                size="sm"
+                onClick={() => deleteProgram(program.id)}
+                disabled={isDeleting}
+                className="w-100"
+              >
+                <Trash className="me-1" /> Delete
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => adoptProgram(program)}
+              className="w-100"
+            >
+              <Copy className="me-1" /> Adopt
+            </Button>
+          )}
+        </div>
+      );
+    }
+    
+    // Desktop layout (existing code)
+    return (
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => viewProgramDetails(program)}
+        >
+          <FileText className="me-1" /> Details
+        </Button>
+        
+        {!isPredefined ? (
+          <>
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => handleEditProgram(program.id)}
+            >
+              <Pencil className="me-1" /> Edit
+            </Button>
+            {!program.isCurrent && (
+              <Button
+                variant="outline-success"
+                size="sm"
+                onClick={() => setCurrentProgram(program.id)}
+              >
+                <Clock className="me-1" /> Set Current
+              </Button>
+            )}
+            <Button
+              variant="outline-danger"
+              size="sm"
+              onClick={() => deleteProgram(program.id)}
+              disabled={isDeleting}
+            >
+              <Trash className="me-1" /> Delete
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => adoptProgram(program)}
+          >
+            <Copy className="me-1" /> Adopt
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   const renderProgramCard = (program, isPredefined = false) => {
     return (
       <Card key={program.id} className="mb-3 program-card">
@@ -259,52 +371,7 @@ function Programs() {
           </div>
 
           <div className="d-flex justify-content-between align-items-center mt-3">
-            <div className="d-flex gap-2">
-              <Button
-                variant="outline-primary"
-                size="sm"
-                onClick={() => viewProgramDetails(program)}
-              >
-                <FileText className="me-1" /> Details
-              </Button>
-
-              {!isPredefined ? (
-                <>
-                  <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={() => handleEditProgram(program.id)}
-                  >
-                    <Pencil className="me-1" /> Edit
-                  </Button>
-                  {!program.isCurrent && (
-                    <Button
-                      variant="outline-success"
-                      size="sm"
-                      onClick={() => setCurrentProgram(program.id)}
-                    >
-                      <Clock className="me-1" /> Set Current
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline-danger"
-                    size="sm"
-                    onClick={() => deleteProgram(program.id)}
-                    disabled={isDeleting}
-                  >
-                    <Trash className="me-1" /> Delete
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={() => adoptProgram(program)}
-                >
-                  <Copy className="me-1" /> Adopt
-                </Button>
-              )}
-            </div>
+            {renderActionButtons(program, isPredefined)}
           </div>
         </Card.Body>
       </Card>
@@ -314,7 +381,9 @@ function Programs() {
   // Enhanced Program Details Modal (from Claude)
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
-
+    
+    const isMobile = window.innerWidth <= 767;
+    
     // Calculate overall program progress
     const calculateProgramProgress = () => {
       let totalWorkouts = 0;
@@ -474,8 +543,8 @@ function Programs() {
           setShowProgramDetails(false);
           setActiveTab('overview');
         }}
-        size="lg"
-        centered
+        size={isMobile ? "fullscreen" : "lg"}
+        centered={!isMobile}
         dialogClassName="program-details-modal"
       >
         <Modal.Header closeButton className="border-bottom-0 pb-0">
@@ -1084,6 +1153,16 @@ function Programs() {
       </Modal>
     );
   };
+
+  useEffect(() => {
+    const handleResize = () => {
+      // Force re-render on resize for responsive updates
+      setForceUpdate(prev => !prev);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <Container fluid className="soft-container programs-container">
