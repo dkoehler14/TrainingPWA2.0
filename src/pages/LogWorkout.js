@@ -30,7 +30,7 @@ function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightU
   const muscleGroupMetrics = workoutData.reduce((acc, ex) => {
     const exercise = exercisesList.find(e => e.id === ex.exerciseId);
     const muscleGroup = exercise?.primaryMuscleGroup || 'Unknown';
-	const exerciseType = exercise?.exerciseType || '';
+    const exerciseType = exercise?.exerciseType || '';
     let volume = 0;
     if (exerciseType === 'Bodyweight') {
       volume = ex.weights.reduce((sum, weight, idx) =>
@@ -179,7 +179,7 @@ function LogWorkout() {
             bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
           })),
           date: Timestamp.fromDate(new Date()),
-		  isWorkoutFinished: logsSnapshot.empty ? false : logsSnapshot.docs[0].data().isWorkoutFinished || false
+          isWorkoutFinished: logsSnapshot.empty ? false : logsSnapshot.docs[0].data().isWorkoutFinished || false
         };
 
         if (!logsSnapshot.empty) {
@@ -321,7 +321,7 @@ function LogWorkout() {
     setIsLoading(false);
   }, [user, selectedProgram, selectedWeek, selectedDay, programLogs, exercisesList]);
 
-  // Add this new function to fetch exercise history
+  // Updated fetchExerciseHistory function to handle bodyweight data
   const fetchExerciseHistory = async (exerciseId) => {
     if (!user || !exerciseId) return;
 
@@ -333,13 +333,17 @@ function LogWorkout() {
         where("userId", "==", user.uid),
         where("isWorkoutFinished", "==", true),
         orderBy("date", "desc"),
-        limit(20) // Limit to recent 10 entries
+        limit(20) // Limit to recent 20 entries
       );
 
       const logsSnapshot = await getDocs(logsQuery);
       console.log(`Found ${logsSnapshot.docs.length} workout logs`);
 
       const historyData = [];
+
+      // Get the current exercise to determine its type
+      const currentExercise = exercisesList.find(e => e.id === exerciseId);
+      const exerciseType = currentExercise?.exerciseType || '';
 
       logsSnapshot.forEach(doc => {
         const log = doc.data();
@@ -353,20 +357,39 @@ function LogWorkout() {
             if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
               const weight = exerciseInLog.weights[setIndex];
               const reps = exerciseInLog.reps[setIndex];
+              const bodyweight = exerciseInLog.bodyweight;
+
               const weightValue = weight === '' || weight === null ? 0 : Number(weight);
               const repsValue = reps === '' || reps === null ? 0 : Number(reps);
+              const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
 
               if (weightValue === 0 && repsValue === 0) continue;
 
               if (!isNaN(weightValue) && !isNaN(repsValue)) {
+                // Calculate total weight based on exercise type
+                let totalWeight = weightValue;
+                let displayWeight = weightValue;
+
+                if (exerciseType === 'Bodyweight') {
+                  totalWeight = bodyweightValue;
+                  displayWeight = bodyweightValue;
+                } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
+                  totalWeight = bodyweightValue + weightValue;
+                  displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
+                }
+
                 historyData.push({
                   date: log.date.toDate(),
                   week: log.weekIndex + 1,
                   day: log.dayIndex + 1,
                   set: setIndex + 1,
                   weight: weightValue,
+                  totalWeight: totalWeight,
+                  displayWeight: displayWeight,
                   reps: repsValue,
-                  completed: true
+                  completed: true,
+                  bodyweight: bodyweightValue,
+                  exerciseType: exerciseType
                 });
               }
             }
@@ -396,12 +419,12 @@ function LogWorkout() {
     setExerciseNotes(logData[exerciseIndex].notes || '');
     setShowNotesModal(true);
   };
-  
+
   const openBodyweightModal = (exerciseIndex) => {
     console.log("in openBodyweightModal");
-	  setBodyweightExerciseIndex(exerciseIndex);
-	  setBodyweightInput(logData[exerciseIndex].bodyweight || '');
-	  setShowBodyweightModal(true);
+    setBodyweightExerciseIndex(exerciseIndex);
+    setBodyweightInput(logData[exerciseIndex].bodyweight || '');
+    setShowBodyweightModal(true);
     console.log("showing modal");
   };
 
@@ -701,21 +724,21 @@ function LogWorkout() {
       const logsSnapshot = await getDocs(logsQuery);
 
       const logDataToSave = {
-          userId: user.uid,
-          programId: selectedProgram.id,
-          weekIndex: selectedWeek,
-          dayIndex: selectedDay,
-          exercises: logData.map(ex => ({
-            exerciseId: ex.exerciseId,
-            sets: Number(ex.sets),
-            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed,
-            notes: ex.notes || '',
-            bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
-          })),
-          date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: false
+        userId: user.uid,
+        programId: selectedProgram.id,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        exercises: logData.map(ex => ({
+          exerciseId: ex.exerciseId,
+          sets: Number(ex.sets),
+          reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+          weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+          completed: ex.completed,
+          notes: ex.notes || '',
+          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
+        })),
+        date: Timestamp.fromDate(new Date()),
+        isWorkoutFinished: false
       };
 
       if (!logsSnapshot.empty) {
@@ -956,7 +979,7 @@ function LogWorkout() {
                                           onClick={() => openBodyweightModal(exIndex)}
                                           role="button"
                                           tabIndex={0}
-                                          // onKeyDown={(e) => e.key === 'Enter' && openBodyweightModal(exIndex)}
+                                        // onKeyDown={(e) => e.key === 'Enter' && openBodyweightModal(exIndex)}
                                         >
                                           {bodyweightDisplay} <Pencil size={12} style={{ marginLeft: '2px', verticalAlign: 'middle' }} />
                                         </button>
@@ -968,25 +991,25 @@ function LogWorkout() {
                             ) : (
                               <>
                                 <h5 className="soft-label">
-                                    {exercise?.name || 'Loading...'}
-                                    {exerciseType && (
-                                      <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                        {exerciseType}
-                                        {['Bodyweight', 'Bodyweight Loadable'].includes(exerciseType) && (
-                                          <button
-                                            type="button"
-                                            className="btn btn-sm btn-outline-primary ms-2 py-0 px-1 bw-modal"
-                                            style={{ fontSize: '0.75em', lineHeight: '1.2' }}
-                                            onClick={() => openBodyweightModal(exIndex)}
-                                            role="button"
-                                            tabIndex={0}
-                                            //onKeyDown={(e) => e.key === 'Enter' && openBodyweightModal(exIndex)}
-                                          >
-                                            {bodyweightDisplay} <Pencil size={12} style={{ marginLeft: '2px', verticalAlign: 'middle' }} />
-                                          </button>
-                                        )}
-                                      </span>
-                                    )}
+                                  {exercise?.name || 'Loading...'}
+                                  {exerciseType && (
+                                    <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                      {exerciseType}
+                                      {['Bodyweight', 'Bodyweight Loadable'].includes(exerciseType) && (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline-primary ms-2 py-0 px-1 bw-modal"
+                                          style={{ fontSize: '0.75em', lineHeight: '1.2' }}
+                                          onClick={() => openBodyweightModal(exIndex)}
+                                          role="button"
+                                          tabIndex={0}
+                                        //onKeyDown={(e) => e.key === 'Enter' && openBodyweightModal(exIndex)}
+                                        >
+                                          {bodyweightDisplay} <Pencil size={12} style={{ marginLeft: '2px', verticalAlign: 'middle' }} />
+                                        </button>
+                                      )}
+                                    </span>
+                                  )}
                                 </h5>
                                 <div>
                                   <Button
@@ -1188,109 +1211,132 @@ function LogWorkout() {
                       </Modal.Footer>
                     </Modal>
 
-                      <Modal show={showBodyweightModal} onHide={() => setShowBodyweightModal(false)} centered>
-                        <Modal.Header closeButton>
-                          <Modal.Title>
-                            Set Bodyweight for {exercisesList.find(e => e.id === logData[bodyweightExerciseIndex]?.exerciseId)?.name || 'Exercise'}
-                          </Modal.Title>
-                        </Modal.Header>
-                        <Modal.Body>
-                          <Form.Group>
-                            <Form.Label>Bodyweight ({selectedProgram?.weightUnit || 'LB'})</Form.Label>
-                            <Form.Control
-                              type="number"
-                              value={bodyweightInput}
-                              onChange={(e) => setBodyweightInput(e.target.value)}
-                              placeholder="Enter your bodyweight"
-                              className="soft-input"
-                            />
-                          </Form.Group>
-                        </Modal.Body>
-                        <Modal.Footer>
-                          <Button variant="secondary" onClick={() => setShowBodyweightModal(false)}>
-                            Cancel
-                          </Button>
-                          <Button variant="primary" onClick={saveBodyweight}>
-                            Save
-                          </Button>
-                        </Modal.Footer>
-                      </Modal>
-
-                    <Modal
-                      show={showHistoryModal}
-                      onHide={() => setShowHistoryModal(false)}
-                      size="lg"
-                      centered
-                    >
+                    <Modal show={showBodyweightModal} onHide={() => setShowBodyweightModal(false)} centered>
                       <Modal.Header closeButton>
                         <Modal.Title>
-                          {selectedExerciseHistory && exercisesList.find(
-                            e => e.id === selectedExerciseHistory?.exerciseId
-                          )?.name || 'Exercise'} History
+                          Set Bodyweight for {exercisesList.find(e => e.id === logData[bodyweightExerciseIndex]?.exerciseId)?.name || 'Exercise'}
                         </Modal.Title>
                       </Modal.Header>
                       <Modal.Body>
-                        {isLoadingHistory ? (
-                          <div className="text-center py-3">
-                            <Spinner animation="border" className="spinner-blue" />
-                            <p className="mt-2">Loading history...</p>
-                          </div>
-                        ) : exerciseHistoryData.length > 0 ? (
-                          <Table responsive className="history-table">
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                <th>Week/Day</th>
-                                <th>Set</th>
-                                <th>Weight</th>
-                                <th>Reps</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {exerciseHistoryData.map((entry, index) => (
-                                <tr key={index}>
-                                  <td>{entry.date.toLocaleDateString()}</td>
-                                  <td>W{entry.week} D{entry.day}</td>
-                                  <td>{entry.set}</td>
-                                  <td>{entry.weight}</td>
-                                  <td>{entry.reps}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </Table>
-                        ) : (
-                          <p className="text-center">No recent completed sets found for this exercise.</p>
-                        )}
-
-                        {exerciseHistoryData.length > 0 && (
-                          <div className="mt-3">
-                            <h6>Recent Performance Summary:</h6>
-                            <ul>
-                              <li>
-                                <strong>Highest Weight:</strong> {Math.max(...exerciseHistoryData.map(e => e.weight))}
-                              </li>
-                              <li>
-                                <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
-                              </li>
-                              <li>
-                                <strong>Average Weight:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.length).toFixed(1)}
-                              </li>
-                              <li>
-                                <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
-                              </li>
-                              {/* <li>
-                                <strong>Completion Rate:</strong> {((exerciseHistoryData.filter(e => e.completed).length / exerciseHistoryData.length) * 100).toFixed(0)}%
-                              </li> */}
-                            </ul>
-                          </div>
-                        )}
+                        <Form.Group>
+                          <Form.Label>Bodyweight ({selectedProgram?.weightUnit || 'LB'})</Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={bodyweightInput}
+                            onChange={(e) => setBodyweightInput(e.target.value)}
+                            placeholder="Enter your bodyweight"
+                            className="soft-input"
+                          />
+                        </Form.Group>
                       </Modal.Body>
                       <Modal.Footer>
-                        <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
-                          Close
+                        <Button variant="secondary" onClick={() => setShowBodyweightModal(false)}>
+                          Cancel
+                        </Button>
+                        <Button variant="primary" onClick={saveBodyweight}>
+                          Save
                         </Button>
                       </Modal.Footer>
                     </Modal>
+
+                      <Modal
+                        show={showHistoryModal}
+                        onHide={() => setShowHistoryModal(false)}
+                        size="lg"
+                        centered
+                      >
+                        <Modal.Header closeButton>
+                          <Modal.Title>
+                            {selectedExerciseHistory && exercisesList.find(
+                              e => e.id === selectedExerciseHistory?.exerciseId
+                            )?.name || 'Exercise'} History
+                          </Modal.Title>
+                        </Modal.Header>
+                        <Modal.Body>
+                          {isLoadingHistory ? (
+                            <div className="text-center py-3">
+                              <Spinner animation="border" className="spinner-blue" />
+                              <p className="mt-2">Loading history...</p>
+                            </div>
+                          ) : exerciseHistoryData.length > 0 ? (
+                            <>
+                              <Table responsive className="history-table">
+                                <thead>
+                                  <tr>
+                                    <th>Date</th>
+                                    <th>Week/Day</th>
+                                    <th>Set</th>
+                                    <th>
+                                      {(() => {
+                                        const exerciseType = exerciseHistoryData[0]?.exerciseType;
+                                        if (exerciseType === 'Bodyweight') return 'Bodyweight';
+                                        if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                        return 'Weight';
+                                      })()}
+                                    </th>
+                                    <th>Reps</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {exerciseHistoryData.map((entry, index) => (
+                                    <tr key={index}>
+                                      <td>{entry.date.toLocaleDateString()}</td>
+                                      <td>W{entry.week} D{entry.day}</td>
+                                      <td>{entry.set}</td>
+                                      <td>
+                                        {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
+                                          <div>
+                                            <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
+                                            <br />
+                                            <small className="text-muted">
+                                              BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
+                                            </small>
+                                          </div>
+                                        ) : (
+                                          entry.displayWeight || entry.weight
+                                        )}
+                                      </td>
+                                      <td>{entry.reps}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </Table>
+
+                              {exerciseHistoryData.length > 0 && (
+                                <div className="mt-3">
+                                  <h6>Recent Performance Summary:</h6>
+                                  <ul>
+                                    <li>
+                                      <strong>Highest {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...exerciseHistoryData.map(e => e.totalWeight))}
+                                    </li>
+                                    <li>
+                                      <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
+                                    </li>
+                                    <li>
+                                      <strong>Average {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.totalWeight, 0) / exerciseHistoryData.length).toFixed(1)}
+                                    </li>
+                                    <li>
+                                      <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
+                                    </li>
+                                    {exerciseHistoryData[0]?.exerciseType === 'Bodyweight Loadable' && exerciseHistoryData.some(e => e.weight > 0) && (
+                                      <li>
+                                        <strong>Average Additional Weight:</strong> {(exerciseHistoryData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.filter(e => e.weight > 0).length).toFixed(1)}
+                                      </li>
+                                    )}
+                                  </ul>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-center">No recent completed sets found for this exercise.</p>
+                          )}
+                        </Modal.Body>
+                        <Modal.Footer>
+                          <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
+                            Close
+                          </Button>
+                        </Modal.Footer>
+                      </Modal>
 
                   </>
                 )}
