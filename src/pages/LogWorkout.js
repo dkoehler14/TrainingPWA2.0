@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
-import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight } from 'react-bootstrap-icons';
+import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, documentId, orderBy, limit, addDoc, updateDoc, doc, Timestamp, getDoc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
@@ -710,6 +710,19 @@ function LogWorkout() {
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
+  const handleRemoveSet = (exerciseIndex) => {
+    if (isWorkoutFinished) return; // Don't allow removing sets if workout is finished
+    const newLogData = [...logData];
+    if (newLogData[exerciseIndex].sets > 1) {
+      newLogData[exerciseIndex].sets -= 1;
+      newLogData[exerciseIndex].reps.pop();
+      newLogData[exerciseIndex].weights.pop();
+      newLogData[exerciseIndex].completed.pop();
+      setLogData(newLogData);
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    }
+  };
+
   const saveLog = async () => {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
@@ -958,6 +971,14 @@ function LogWorkout() {
                                       Add Set
                                     </Dropdown.Item>
                                     <Dropdown.Item
+                                      onClick={() => handleRemoveSet(exIndex)}
+                                      className="d-flex align-items-center"
+                                      disabled={ex.sets <= 1 || isWorkoutFinished}
+                                    >
+                                      <Dash />
+                                      Remove Set
+                                    </Dropdown.Item>
+                                    <Dropdown.Item
                                       onClick={() => openHistoryModal(ex)}
                                       className="d-flex align-items-center"
                                     >
@@ -1035,6 +1056,15 @@ function LogWorkout() {
                                     className="me-2"
                                   >
                                     Add Set
+                                  </Button>
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => handleRemoveSet(exIndex)}
+                                    className="me-2"
+                                    disabled={ex.sets <= 1 || isWorkoutFinished}
+                                  >
+                                    Remove Set
                                   </Button>
                                   <Button
                                     variant="outline-primary"
