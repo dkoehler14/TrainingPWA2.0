@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Button, Alert, Spinner } from 'react-bootstrap';
 import { PlusLg } from 'react-bootstrap-icons';
 import { db } from '../firebase';
 import { collection, getDocs } from 'firebase/firestore';
@@ -17,12 +17,14 @@ function Exercises() {
   const [showModal, setShowModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentExercise, setCurrentExercise] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchExercises();
   }, []);
 
   const fetchExercises = async () => {
+    setIsLoading(true);
     try {
       const querySnapshot = await getDocs(collection(db, "exercises"));
       let exercisesData = [];
@@ -33,6 +35,8 @@ function Exercises() {
     } catch (error) {
       console.error("Error fetching exercises: ", error);
       setValidationError("Failed to load exercises. Please refresh the page.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -85,24 +89,33 @@ function Exercises() {
               </Alert>
             )}
 
-            {/* Add exercise button */}
-            <div className="d-flex justify-content-start mb-4">
-              <Button
-                onClick={openAddModal}
-                className="soft-button exercises-button gradient"
-              >
-                <PlusLg className="me-2" /> Add New Exercise
-              </Button>
-            </div>
+            {isLoading ? (
+              <div className="text-center py-4">
+                <Spinner animation="border" className="spinner-blue" />
+                <p className="soft-text mt-2">Loading...</p>
+              </div>
+            ) : (
+              <>
+                {/* Add exercise button */}
+                <div className="d-flex justify-content-start mb-4">
+                  <Button
+                    onClick={openAddModal}
+                    className="soft-button exercises-button gradient"
+                  >
+                    <PlusLg className="me-2" /> Add New Exercise
+                  </Button>
+                </div>
 
-            {/* Exercise Grid */}
-            <ExerciseGrid
-              exercises={exercises}
-              showEditButton={true}
-              onEditClick={openEditModal}
-              emptyMessage="No exercises found. Click the 'Add New Exercise' button to create one."
-              className="exercises-grid"
-            />
+                {/* Exercise Grid */}
+                <ExerciseGrid
+                  exercises={exercises}
+                  showEditButton={true}
+                  onEditClick={openEditModal}
+                  emptyMessage="No exercises found. Click the 'Add New Exercise' button to create one."
+                  className="exercises-grid"
+                />
+              </>
+            )}
           </div>
         </Col>
       </Row>

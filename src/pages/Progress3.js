@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Nav, Button, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -21,6 +21,7 @@ function Analytics() {
     const [volumeData, setVolumeData] = useState([]);
     const [personalRecords, setPersonalRecords] = useState([]);
     const user = auth.currentUser;
+    const [isLoading, setIsLoading] = useState(true);
 
     const getWeekStartDate = (date) => {
         const d = new Date(date);
@@ -37,6 +38,7 @@ function Analytics() {
     useEffect(() => {
         const fetchData = async () => {
             if (user) {
+                setIsLoading(true);
                 try {
                     const logsQuery = query(
                         collection(db, "workoutLogs"),
@@ -80,7 +82,11 @@ function Analytics() {
                     }
                 } catch (error) {
                     console.error("Error fetching data: ", error);
+                } finally {
+                    setIsLoading(false);
                 }
+            } else {
+                setIsLoading(false);
             }
         };
         fetchData();
@@ -662,62 +668,69 @@ function Analytics() {
         <Container fluid className="soft-container analytics-container">
             <Row className="justify-content-center">
                 <Col md={10}>
-                    <div className="soft-card analytics-card shadow border-0">
-                        <div className="d-flex justify-content-between align-items-center mb-4">
-                            <h1 className="soft-title analytics-title">Workout Analytics</h1>
-                            <div className="d-flex">
-                                <Form.Select
-                                    className="me-2"
-                                    value={dateRange}
-                                    onChange={(e) => setDateRange(e.target.value)}
-                                >
-                                    <option value="week">Past Week</option>
-                                    <option value="month">Past Month</option>
-                                    <option value="year">Past Year</option>
-                                    <option value="all">All Time</option>
-                                </Form.Select>
-                                <div className="date-range-display d-flex align-items-center">
-                                    <Calendar className="me-2" />
-                                    <span>
-                                        {dateRange === 'week' ? 'Last 7 days' :
-                                            dateRange === 'month' ? 'Last 30 days' :
-                                                dateRange === 'year' ? 'Last 365 days' : 'All time'}
-                                    </span>
+                    {isLoading ? (
+                        <div className="text-center py-4">
+                            <Spinner animation="border" className="spinner-blue" />
+                            <p className="soft-text mt-2">Loading...</p>
+                        </div>
+                    ) : (
+                        <div className="soft-card analytics-card shadow border-0">
+                            <div className="d-flex justify-content-between align-items-center mb-4">
+                                <h1 className="soft-title analytics-title">Workout Analytics</h1>
+                                <div className="d-flex">
+                                    <Form.Select
+                                        className="me-2"
+                                        value={dateRange}
+                                        onChange={(e) => setDateRange(e.target.value)}
+                                    >
+                                        <option value="week">Past Week</option>
+                                        <option value="month">Past Month</option>
+                                        <option value="year">Past Year</option>
+                                        <option value="all">All Time</option>
+                                    </Form.Select>
+                                    <div className="date-range-display d-flex align-items-center">
+                                        <Calendar className="me-2" />
+                                        <span>
+                                            {dateRange === 'week' ? 'Last 7 days' :
+                                                dateRange === 'month' ? 'Last 30 days' :
+                                                    dateRange === 'year' ? 'Last 365 days' : 'All time'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
+
+                            <Nav tabs className="analytics-tabs mb-4">
+                                <Nav.Item>
+                                    <Nav.Link
+                                        className={activeTab === 'overview' ? 'active' : ''}
+                                        onClick={() => setActiveTab('overview')}
+                                    >
+                                        Overview
+                                    </Nav.Link>
+                                </Nav.Item>
+                                <Nav.Item>
+                                    <Nav.Link
+                                        className={activeTab === 'volume'}
+                                        onClick={() => setActiveTab('volume')}
+                                    >
+                                        Volume Analysis
+                                    </Nav.Link>
+                                </Nav.Item>
+                                <Nav.Item>
+                                    <Nav.Link
+                                        className={activeTab === 'strength'}
+                                        onClick={() => setActiveTab('strength')}
+                                    >
+                                        Strength Analysis
+                                    </Nav.Link>
+                                </Nav.Item>
+                            </Nav>
+
+                            {activeTab === 'overview' && renderOverviewTab()}
+                            {activeTab === 'strength' && renderStrengthTab()}
+                            {activeTab === 'volume' && renderVolumeTab()}
                         </div>
-
-                        <Nav tabs className="analytics-tabs mb-4">
-                            <Nav.Item>
-                                <Nav.Link
-                                    className={activeTab === 'overview' ? 'active' : ''}
-                                    onClick={() => setActiveTab('overview')}
-                                >
-                                    Overview
-                                </Nav.Link>
-                            </Nav.Item>
-                            <Nav.Item>
-                                <Nav.Link
-                                    className={activeTab === 'volume'}
-                                    onClick={() => setActiveTab('volume')}
-                                >
-                                    Volume Analysis
-                                </Nav.Link>
-                            </Nav.Item>
-                            <Nav.Item>
-                                <Nav.Link
-                                    className={activeTab === 'strength'}
-                                    onClick={() => setActiveTab('strength')}
-                                >
-                                    Strength Analysis
-                                </Nav.Link>
-                            </Nav.Item>
-                        </Nav>
-
-                        {activeTab === 'overview' && renderOverviewTab()}
-                        {activeTab === 'strength' && renderStrengthTab()}
-                        {activeTab === 'volume' && renderVolumeTab()}
-                    </div>
+                    )}
                 </Col>
             </Row>
         </Container>

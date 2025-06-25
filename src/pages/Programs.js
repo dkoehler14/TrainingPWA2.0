@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Modal } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Modal, Spinner } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
@@ -23,6 +23,7 @@ function Programs() {
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
+        setIsLoading(true);
         try {
           // Fetch user programs
           const userProgramsQuery = query(
@@ -57,7 +58,11 @@ function Programs() {
           setExercises(exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch (error) {
           console.error("Error fetching data: ", error);
+        } finally {
+          setIsLoading(false);
         }
+      } else {
+        setIsLoading(false);
       }
     };
     fetchData();
@@ -1171,26 +1176,35 @@ function Programs() {
           <div className="soft-card programs-card shadow border-0">
             <h1 className="soft-title programs-title text-center mb-4">My Programs</h1>
 
-            {userPrograms.length === 0 ? (
-              <div className="text-center p-4">
-                <p className="text-muted mb-3">
-                  You haven't created any programs yet.
-                  Get started by creating a new workout program!
-                </p>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={() => navigate('/create-program')}
-                >
-                  <PlusCircle className="me-2" /> Create First Program
-                </Button>
+            {isLoading ? (
+              <div className="text-center py-4">
+                <Spinner animation="border" className="spinner-blue" />
+                <p className="soft-text mt-2">Loading...</p>
               </div>
             ) : (
-              userPrograms.map(program => renderProgramCard(program))
-            )}
+              <>
+                {userPrograms.length === 0 ? (
+                  <div className="text-center p-4">
+                    <p className="text-muted mb-3">
+                      You haven't created any programs yet.
+                      Get started by creating a new workout program!
+                    </p>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={() => navigate('/create-program')}
+                    >
+                      <PlusCircle className="me-2" /> Create First Program
+                    </Button>
+                  </div>
+                ) : (
+                  userPrograms.map(program => renderProgramCard(program))
+                )}
 
-            <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
-            {predefinedPrograms.map(program => renderProgramCard(program, true))}
+                <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
+                {predefinedPrograms.map(program => renderProgramCard(program, true))}
+              </>
+            )}
           </div>
         </Col>
       </Row>

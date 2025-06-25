@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Form } from 'react-bootstrap';
+import { Container, Row, Col, Form, Spinner } from 'react-bootstrap';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import '../styles/Progress4.css';
@@ -71,11 +71,16 @@ function Progress4() {
   const [exercises, setExercises] = useState([]);
   const [selectedExercise, setSelectedExercise] = useState('');
   const [timePeriod, setTimePeriod] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       const user = auth.currentUser;
-      if (!user) return;
+      setIsLoading(true);
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
 
       const logsQuery = query(collection(db, "workoutLogs"), where("userId", "==", user.uid));
       const logsSnapshot = await getDocs(logsQuery);
@@ -85,6 +90,7 @@ function Progress4() {
       const exercisesSnapshot = await getDocs(collection(db, "exercises"));
       const exercisesData = exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setExercises(exercisesData);
+      setIsLoading(false);
     };
     fetchData();
   }, []);
@@ -146,64 +152,71 @@ function Progress4() {
     <Container fluid className="soft-container analytics-container">
       <Row className="justify-content-center">
         <Col md={10}>
-          <div className="soft-card analytics-card shadow border-0">
-            <h1 className="soft-title analytics-title text-center mb-4">Progress</h1>
-            <Form.Group className="mb-3">
-              <Form.Label>Time Period</Form.Label>
-              <Form.Select value={timePeriod} onChange={e => setTimePeriod(e.target.value)} className="soft-input">
-                <option value="all">All Time</option>
-                <option value="month">Last Month</option>
-                <option value="3months">Last 3 Months</option>
-              </Form.Select>
-            </Form.Group>
-
-            <Row>
-              <Col md={6}>
-                <h2>Progressive Overload</h2>
-                <Form.Select
-                  value={selectedExercise}
-                  onChange={e => setSelectedExercise(e.target.value)}
-                  className="soft-input mb-3"
-                >
-                  <option value="">Select Exercise</option>
-                  {exercises.map(ex => (
-                    <option key={ex.id} value={ex.id}>{ex.name}</option>
-                  ))}
+          {isLoading ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" className="spinner-blue" />
+              <p className="soft-text mt-2">Loading...</p>
+            </div>
+          ) : (
+            <div className="soft-card analytics-card shadow border-0">
+              <h1 className="soft-title analytics-title text-center mb-4">Progress</h1>
+              <Form.Group className="mb-3">
+                <Form.Label>Time Period</Form.Label>
+                <Form.Select value={timePeriod} onChange={e => setTimePeriod(e.target.value)} className="soft-input">
+                  <option value="all">All Time</option>
+                  <option value="month">Last Month</option>
+                  <option value="3months">Last 3 Months</option>
                 </Form.Select>
-                {selectedExercise && <canvas id="progressiveChart" height="200"></canvas>}
-              </Col>
-              <Col md={6}>
-                <h2>Muscle Group Volume</h2>
-                <canvas id="volumeChart" height="200"></canvas>
-              </Col>
-            </Row>
+              </Form.Group>
 
-            <Row className="mt-4">
-              <Col>
-                <h2>Personal Records</h2>
-                <table className="progress4-table">
-                  <thead>
-                    <tr>
-                      <th>Exercise</th>
-                      <th>Reps</th>
-                      <th>Weight</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(prs).map(([exercise, records]) =>
-                      Object.entries(records).map(([reps, weight], idx) => (
-                        <tr key={`${exercise}-${reps}-${idx}`}>
-                          <td>{exercise}</td>
-                          <td>{reps}</td>
-                          <td>{weight} {workoutLogs[0]?.weightUnit || 'LB'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </Col>
-            </Row>
-          </div>
+              <Row>
+                <Col md={6}>
+                  <h2>Progressive Overload</h2>
+                  <Form.Select
+                    value={selectedExercise}
+                    onChange={e => setSelectedExercise(e.target.value)}
+                    className="soft-input mb-3"
+                  >
+                    <option value="">Select Exercise</option>
+                    {exercises.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}</option>
+                    ))}
+                  </Form.Select>
+                  {selectedExercise && <canvas id="progressiveChart" height="200"></canvas>}
+                </Col>
+                <Col md={6}>
+                  <h2>Muscle Group Volume</h2>
+                  <canvas id="volumeChart" height="200"></canvas>
+                </Col>
+              </Row>
+
+              <Row className="mt-4">
+                <Col>
+                  <h2>Personal Records</h2>
+                  <table className="progress4-table">
+                    <thead>
+                      <tr>
+                        <th>Exercise</th>
+                        <th>Reps</th>
+                        <th>Weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(prs).map(([exercise, records]) =>
+                        Object.entries(records).map(([reps, weight], idx) => (
+                          <tr key={`${exercise}-${reps}-${idx}`}>
+                            <td>{exercise}</td>
+                            <td>{reps}</td>
+                            <td>{weight} {workoutLogs[0]?.weightUnit || 'LB'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </Col>
+              </Row>
+            </div>
+          )}
         </Col>
       </Row>
     </Container>

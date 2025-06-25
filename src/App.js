@@ -15,6 +15,7 @@ import Progress4 from './pages/Progress4';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { Spinner } from 'react-bootstrap';
 
 function App() {
   return (
@@ -38,7 +39,14 @@ function AppContent() {
   }, []);
 
   if (loading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
+        <div className="text-center">
+          <Spinner animation="border" className="spinner-blue" />
+          <p className="soft-text mt-2">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
