@@ -1186,14 +1186,14 @@ function Programs() {
             </div>
           )}
         </Modal.Body>
-        <Modal.Footer>
+        {/* <Modal.Footer>
           <Button variant="secondary" onClick={() => {
             setShowProgramDetails(false);
             setActiveTab('overview');
           }}>
             Close
           </Button>
-        </Modal.Footer>
+        </Modal.Footer> */}
       </Modal>
     );
   };
