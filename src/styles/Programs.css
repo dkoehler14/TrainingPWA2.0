@@ -332,6 +332,20 @@
   .weekly-progress-bars .progress {
     height: 6px;
   }
+  
+  /* Chart container improvements for mobile */
+  .chart-container {
+    padding: 0.25rem !important;
+    margin: 0.25rem 0 !important;
+  }
+
+  /* Accordion item and body padding reduction for mobile */
+  .accordion-item {
+    padding: 0 !important;
+  }
+  .accordion-body {
+    padding: 0.5rem 0.5rem !important;
+  }
 }
 
 /* Tablet improvements */

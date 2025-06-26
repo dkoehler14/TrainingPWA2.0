@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 function Programs() {
   const [userPrograms, setUserPrograms] = useState([]);
@@ -868,93 +871,127 @@ function Programs() {
                           <h5 className="mb-0">Exercise Performance</h5>
                         </div>
                         <div className="card-body pb-0">
-                          <div className="exercise-metrics-container">
+                          <Accordion defaultActiveKey="0" alwaysOpen>
                             {exerciseMetrics.map((exercise, index) => (
-                              <div key={index} className="exercise-metric-card mb-4">
-                                <h6>{exercise.name}</h6>
-                                <div className="d-flex justify-content-between mb-2">
-                                  <div className="metric-box">
-                                    <div className="metric-value">{exercise.maxWeight}</div>
-                                    <div className="metric-label">Max Weight ({selectedProgram.weightUnit})</div>
-                                  </div>
-                                  <div className="metric-box">
-                                    <div className="metric-value">{exercise.sessions.length}</div>
-                                    <div className="metric-label">Sessions</div>
-                                  </div>
-                                  <div className="metric-box">
-                                    <div className="metric-value">{Math.round(exercise.totalVolume)}</div>
-                                    <div className="metric-label">Total Volume</div>
-                                  </div>
-                                </div>
-
-                                {exercise.sessions.length > 1 && (
-                                  <div className="progression-chart mb-4">
-                                    <h6 className="mb-2">Progression Chart</h6>
-                                    <div className="chart-container">
-                                      {/* Simple visual representation of progression */}
-                                      <div className="chart-bars" style={{ height: '80px', display: 'flex', alignItems: 'flex-end' }}>
-                                        {exercise.progressTrend.map((session, idx) => {
-                                          const heightPercentage = (session.maxWeight / exercise.maxWeight) * 100;
-                                          return (
-                                            <div
-                                              key={idx}
-                                              className="chart-bar mx-1"
-                                              style={{
-                                                height: `${heightPercentage}%`,
-                                                width: `${100 / exercise.progressTrend.length}%`,
-                                                backgroundColor: '#007bff',
-                                                borderRadius: '2px 2px 0 0'
-                                              }}
-                                              title={`${session.maxWeight} ${selectedProgram.weightUnit}`}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                      <div className="d-flex justify-content-between mt-2">
-                                        <span>Session 1</span>
-                                        <span>Session {exercise.sessions.length}</span>
-                                      </div>
+                              <Accordion.Item eventKey={index.toString()} key={index} className="mb-3">
+                                <Accordion.Header>
+                                  <div className="d-flex flex-column flex-md-row w-100 justify-content-between align-items-md-center">
+                                    <span className="fw-bold">{exercise.name}</span>
+                                    <div className="d-flex gap-3 mt-2 mt-md-0">
+                                      <span className="metric-box"><span className="metric-value">{exercise.maxWeight}</span> <span className="metric-label">Max Weight ({selectedProgram.weightUnit})</span></span>
+                                      <span className="metric-box"><span className="metric-value">{exercise.sessions.length}</span> <span className="metric-label">Sessions</span></span>
+                                      <span className="metric-box"><span className="metric-value">{Math.round(exercise.totalVolume)}</span> <span className="metric-label">Total Volume</span></span>
                                     </div>
                                   </div>
-                                )}
+                                </Accordion.Header>
+                                <Accordion.Body>
+                                  {exercise.sessions.length > 1 && (
+                                    <div className="progression-chart mb-4" style={{ overflowX: 'auto' }}>
+                                      <h6 className="mb-2">Progression Chart</h6>
+                                      <div className="chart-container" style={{ minWidth: 320, width: '100%', maxWidth: '100%' }}>
+                                        {/* Responsive Line chart for progression */}
+                                        <Line
+                                          data={{
+                                            labels: exercise.progressTrend.map((session, idx) => `Session ${session.session}`),
+                                            datasets: [
+                                              {
+                                                label: `Max Weight (${selectedProgram.weightUnit})`,
+                                                data: exercise.progressTrend.map(session => session.maxWeight),
+                                                fill: false,
+                                                borderColor: '#007bff',
+                                                backgroundColor: '#007bff',
+                                                tension: 0.2,
+                                                pointRadius: 4,
+                                                pointHoverRadius: 6,
+                                                yAxisID: 'y1',
+                                              },
+                                              {
+                                                label: `Total Volume (${selectedProgram.weightUnit})`,
+                                                data: exercise.progressTrend.map(session => session.volume),
+                                                fill: false,
+                                                borderColor: '#28a745',
+                                                backgroundColor: '#28a745',
+                                                tension: 0.2,
+                                                pointRadius: 4,
+                                                pointHoverRadius: 6,
+                                                yAxisID: 'y2',
+                                              }
+                                            ]
+                                          }}
+                                          options={{
+                                            responsive: true,
+                                            maintainAspectRatio: false,
+                                            plugins: {
+                                              legend: { display: true, position: 'top', labels: { font: { size: window.innerWidth <= 767 ? 10 : 14 } } },
+                                              title: { display: false }
+                                            },
+                                            scales: {
+                                              x: {
+                                                title: { display: true, text: 'Session', font: { size: window.innerWidth <= 767 ? 10 : 14 } },
+                                                ticks: { font: { size: window.innerWidth <= 767 ? 9 : 12 } }
+                                              },
+                                              y1: {
+                                                type: 'linear',
+                                                display: true,
+                                                position: 'left',
+                                                title: { display: true, text: `Max Weight (${selectedProgram.weightUnit})`, font: { size: window.innerWidth <= 767 ? 10 : 14 } },
+                                                beginAtZero: true,
+                                                grid: { drawOnChartArea: true },
+                                                ticks: { font: { size: window.innerWidth <= 767 ? 9 : 12 } }
+                                              },
+                                              y2: {
+                                                type: 'linear',
+                                                display: true,
+                                                position: 'right',
+                                                title: { display: true, text: `Total Volume (${selectedProgram.weightUnit})`, font: { size: window.innerWidth <= 767 ? 10 : 14 } },
+                                                beginAtZero: true,
+                                                grid: { drawOnChartArea: false },
+                                                ticks: { font: { size: window.innerWidth <= 767 ? 9 : 12 } }
+                                              }
+                                            }
+                                          }}
+                                          height={window.innerWidth <= 767 ? 200 : 300}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className="table-responsive">
+                                    <table className="table table-sm">
+                                      <thead>
+                                        <tr>
+                                          <th>Week</th>
+                                          <th>Day</th>
+                                          <th>Sets × Reps</th>
+                                          <th>Weights ({selectedProgram.weightUnit})</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {exercise.sessions.sort((a, b) => {
+                                          if (a.weekNum !== b.weekNum) return a.weekNum - b.weekNum;
+                                          return a.dayNum - b.dayNum;
+                                        }).map((session, sessionIdx) => {
+                                          const setsReps = session.weights.map((_, i) =>
+                                            `${session.reps[i] || '-'}`
+                                          ).join(' / ');
 
-                                <div className="table-responsive">
-                                  <table className="table table-sm">
-                                    <thead>
-                                      <tr>
-                                        <th>Week</th>
-                                        <th>Day</th>
-                                        <th>Sets × Reps</th>
-                                        <th>Weights ({selectedProgram.weightUnit})</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {exercise.sessions.sort((a, b) => {
-                                        if (a.weekNum !== b.weekNum) return a.weekNum - b.weekNum;
-                                        return a.dayNum - b.dayNum;
-                                      }).map((session, sessionIdx) => {
-                                        const setsReps = session.weights.map((_, i) =>
-                                          `${session.reps[i] || '-'}`
-                                        ).join(' / ');
+                                          const weights = session.weights.join(' / ');
 
-                                        const weights = session.weights.join(' / ');
-
-                                        return (
-                                          <tr key={sessionIdx}>
-                                            <td>Week {session.weekNum}</td>
-                                            <td>Day {session.dayNum}</td>
-                                            <td>{setsReps}</td>
-                                            <td>{weights}</td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                                <hr className="my-4" />
-                              </div>
+                                          return (
+                                            <tr key={sessionIdx}>
+                                              <td>Week {session.weekNum}</td>
+                                              <td>Day {session.dayNum}</td>
+                                              <td>{setsReps}</td>
+                                              <td>{weights}</td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </Accordion.Body>
+                              </Accordion.Item>
                             ))}
-                          </div>
+                          </Accordion>
                         </div>
                       </div>
                     </div>
