@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
-import { collection, getDocs, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, updateDoc, doc } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
+import { getCollectionCached, getDocCached, invalidateCache } from '../api/firestoreCache';
 
 // New Exercise Selection Modal Component using ExerciseGrid
 const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
@@ -87,12 +88,11 @@ function CreateProgram({ mode = 'create' }) {
     const fetchData = async () => {
       if (user) {
         try {
-          const exercisesSnapshot = await getDocs(collection(db, "exercises"));
-          setExercises(exercisesSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            label: doc.data().name,
-            value: doc.id,
+          const exercisesData = await getCollectionCached('exercises');
+          setExercises(exercisesData.map(ex => ({
+            ...ex,
+            label: ex.name,
+            value: ex.id,
           })));
         } catch (error) {
           console.error("Error fetching exercises: ", error);
@@ -111,11 +111,9 @@ function CreateProgram({ mode = 'create' }) {
       console.log('Starting loadProgram:', { mode, programId });
       if (mode === 'edit' && programId) {
         try {
-          const programDoc = await getDoc(doc(db, "programs", programId));
-          console.log('Program document exists:', programDoc.exists());
-          
-          if (programDoc.exists()) {
-            const programData = programDoc.data();
+          const programDoc = await getDocCached('programs', programId);
+          if (programDoc) {
+            const programData = programDoc;
             console.log('Loaded program data:', {
               name: programData.name,
               duration: programData.duration,
@@ -437,6 +435,7 @@ function CreateProgram({ mode = 'create' }) {
 
       if (mode === 'edit') {
         await updateDoc(doc(db, "programs", programId), programData);
+        invalidateCache('programs');
         alert('Program updated successfully!');
         navigate('/programs');
       } else {
@@ -444,18 +443,19 @@ function CreateProgram({ mode = 'create' }) {
           ...programData,
           userId: user.uid,
           isPredefined: false,
-        createdAt: new Date()
-      });
-      alert('Program created successfully!');
+          createdAt: new Date()
+        });
+        invalidateCache('programs');
+        alert('Program created successfully!');
         // Reset form for new program
-      setProgramName('');
-      setWeightUnit('LB');
-      setWeeks([
-        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-        { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
-      ]);
+        setProgramName('');
+        setWeightUnit('LB');
+        setWeeks([
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+        ]);
       }
     } catch (error) {
       console.error("Error saving program:", error);

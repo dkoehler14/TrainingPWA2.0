@@ -2,53 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Container, Row, Col, Form, Card, Button, Modal, Spinner } from 'react-bootstrap';
 import { Line, Bar } from 'react-chartjs-2';
 import { db, auth } from '../firebase'; // Adjust path as needed
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import Select from 'react-select';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import '../styles/ProgressTracker.css'; // Ensure this CSS file exists
+import { getCollectionCached } from '../api/firestoreCache';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
-
-// Simple cache for data
-const dataCache = {
-	logs: {},
-	exercises: null,
-	getLogsCacheKey(startDate, endDate) {
-		return `${startDate.toISOString()}_${endDate.toISOString()}`;
-	},
-	storeExercises(exercises) {
-		this.exercises = exercises;
-	},
-	getExercises() {
-		return this.exercises;
-	},
-	storeLogs(startDate, endDate, logs) {
-		const key = this.getLogsCacheKey(startDate, endDate);
-		this.logs[key] = {
-			data: logs,
-			timestamp: Date.now(),
-			expiry: Date.now() + (30 * 60 * 1000) // Cache for 30 minutes
-		};
-	},
-	getLogs(startDate, endDate) {
-		const key = this.getLogsCacheKey(startDate, endDate);
-		const cached = this.logs[key];
-		if (cached && cached.expiry > Date.now()) {
-			return cached.data;
-		}
-		return null;
-	},
-	clearExpiredCache() {
-		const now = Date.now();
-		Object.keys(this.logs).forEach(key => {
-			if (this.logs[key].expiry < now) {
-				delete this.logs[key];
-			}
-		});
-	}
-};
 
 function ProgressTracker2() {
 	const [exercises, setExercises] = useState([]);
@@ -64,38 +25,18 @@ function ProgressTracker2() {
 	const [exerciseTypes, setExerciseTypes] = useState(['All Types']);
 	const [selectedType, setSelectedType] = useState('All Types');
 
-	// Clean up expired cache
-	useEffect(() => {
-		dataCache.clearExpiredCache();
-		const interval = setInterval(() => dataCache.clearExpiredCache(), 5 * 60 * 1000);
-		return () => clearInterval(interval);
-	}, []);
-
 	// Fetch and group exercises
 	useEffect(() => {
 		const fetchExercises = async () => {
 			setIsExercisesLoading(true);
 			try {
-				const cachedExercises = dataCache.getExercises();
-				if (cachedExercises) {
-					setExercises(cachedExercises);
-					const groups = cachedExercises.reduce((acc, ex) => {
-						const group = ex.primaryMuscleGroup || 'Other';
-						if (!acc[group]) acc[group] = [];
-						acc[group].push(ex);
-						return acc;
-					}, {});
-					setMuscleGroups(groups);
-					setIsExercisesLoading(false);
-					return;
-				}
-				const exercisesSnapshot = await getDocs(collection(db, "exercises"));
-				const fetchedExercises = exercisesSnapshot.docs.map(doc => ({
+				const exercisesData = await getCollectionCached('exercises');
+				const fetchedExercises = exercisesData.map(doc => ({
 					value: doc.id,
-					label: doc.data().name,
-					primaryMuscleGroup: doc.data().primaryMuscleGroup || 'Other'
+					label: doc.name,
+					primaryMuscleGroup: doc.primaryMuscleGroup || 'Other',
+					exerciseType: doc.exerciseType || 'Unknown'
 				}));
-				dataCache.storeExercises(fetchedExercises);
 				setExercises(fetchedExercises);
 				const groups = fetchedExercises.reduce((acc, ex) => {
 					const group = ex.primaryMuscleGroup || 'Other';
@@ -120,27 +61,20 @@ function ProgressTracker2() {
 		const fetchLogs = async () => {
 			setIsLoading(true);
 			try {
-				const cachedLogs = dataCache.getLogs(startDate, endDate);
-				if (cachedLogs) {
-					setAllLogs(cachedLogs);
-					setIsLoading(false);
-					return;
-				}
-				const logsQuery = query(
-					collection(db, "workoutLogs"),
-					where("userId", "==", auth.currentUser.uid),
-					where("date", ">=", startDate),
-					where("date", "<=", endDate),
-					where("isWorkoutFinished", "==", true),
-					orderBy("date", "asc")
-				);
-				const logsSnapshot = await getDocs(logsQuery);
-				const fetchedLogs = logsSnapshot.docs.map(doc => ({
+				const logsData = await getCollectionCached('workoutLogs', {
+					where: [
+						['userId', '==', auth.currentUser.uid],
+						['date', '>=', startDate],
+						['date', '<=', endDate],
+						['isWorkoutFinished', '==', true]
+					],
+					orderBy: [['date', 'asc']]
+				});
+				const fetchedLogs = logsData.map(doc => ({
 					id: doc.id,
-					...doc.data(),
-					date: doc.data().date.toDate()
+					...doc,
+					date: doc.date.toDate ? doc.date.toDate() : doc.date
 				}));
-				dataCache.storeLogs(startDate, endDate, fetchedLogs);
 				setAllLogs(fetchedLogs);
 			} catch (error) {
 				console.error("Error fetching logs:", error);

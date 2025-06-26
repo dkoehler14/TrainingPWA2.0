@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
+import { getCollectionCached } from '../api/firestoreCache';
 
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 
@@ -40,20 +40,14 @@ function Analytics() {
             if (user) {
                 setIsLoading(true);
                 try {
-                    const logsQuery = query(
-                        collection(db, "workoutLogs"),
-                        where("userId", "==", user.uid)
-                    );
-                    const logsSnapshot = await getDocs(logsQuery);
-                    const logsData = logsSnapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data(),
-                        date: doc.data().date.toDate()
+                    const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
+                    const logsWithDate = logsData.map(log => ({
+                        ...log,
+                        date: log.date.toDate ? log.date.toDate() : log.date
                     }));
-                    setWorkoutLogs(logsData);
+                    setWorkoutLogs(logsWithDate);
 
-                    const exercisesSnapshot = await getDocs(collection(db, "exercises"));
-                    const exercisesData = exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    const exercisesData = await getCollectionCached('exercises');
                     setExercises(exercisesData);
 
                     if (exercisesData.length > 0) {

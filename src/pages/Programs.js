@@ -5,6 +5,7 @@ import { db, auth } from '../firebase';
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
+import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
 
 function Programs() {
   const [userPrograms, setUserPrograms] = useState([]);
@@ -26,36 +27,38 @@ function Programs() {
         setIsLoading(true);
         try {
           // Fetch user programs
-          const userProgramsQuery = query(
-            collection(db, "programs"),
-            where("userId", "==", user.uid),
-            where("isPredefined", "==", false),
-            orderBy("createdAt", "desc")
+          const userProgramsData = await getCollectionCached(
+            'programs',
+            {
+              where: [
+                ['userId', '==', user.uid],
+                ['isPredefined', '==', false]
+              ],
+              orderBy: [['createdAt', 'desc']]
+            }
           );
-          const userProgramsSnapshot = await getDocs(userProgramsQuery);
-          const userProgramsData = userProgramsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            weeklyConfigs: parseWeeklyConfigs(doc.data().weeklyConfigs, doc.data().duration, doc.data().daysPerWeek)
-          }));
-          setUserPrograms(userProgramsData);
+          setUserPrograms(userProgramsData.map(doc => ({
+            ...doc,
+            weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
+          })));
 
           // Fetch predefined programs
-          const predefProgramsQuery = query(
-            collection(db, "programs"),
-            where("isPredefined", "==", true)
+          const predefinedProgramsData = await getCollectionCached(
+            'programs',
+            {
+              where: [
+                ['isPredefined', '==', true]
+              ]
+            }
           );
-          const predefProgramsSnapshot = await getDocs(predefProgramsQuery);
-          const predefinedProgramsData = predefProgramsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            weeklyConfigs: parseWeeklyConfigs(doc.data().weeklyConfigs, doc.data().duration, doc.data().daysPerWeek)
-          }));
-          setPredefinedPrograms(predefinedProgramsData);
+          setPredefinedPrograms(predefinedProgramsData.map(doc => ({
+            ...doc,
+            weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
+          })));
 
           // Fetch exercises
-          const exercisesSnapshot = await getDocs(collection(db, "exercises"));
-          setExercises(exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+          const exercisesData = await getCollectionCached('exercises');
+          setExercises(exercisesData);
         } catch (error) {
           console.error("Error fetching data: ", error);
         } finally {
@@ -66,6 +69,7 @@ function Programs() {
       }
     };
     fetchData();
+    // eslint-disable-next-line
   }, [user]);
 
   const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
@@ -105,6 +109,7 @@ function Programs() {
         createdAt: new Date(),
         isCurrent: false
       });
+      invalidateCache('programs');
       alert('Program adopted successfully!');
     } catch (error) {
       console.error("Error adopting program: ", error);
@@ -118,6 +123,7 @@ function Programs() {
     try {
       await deleteDoc(doc(db, "programs", programId));
       setUserPrograms(userPrograms.filter(p => p.id !== programId));
+      invalidateCache('programs');
       alert('Program deleted successfully!');
     } catch (error) {
       console.error("Error deleting program: ", error);
@@ -132,36 +138,32 @@ function Programs() {
 
     try {
       // First, set all user's programs to not current
-      const userProgramsQuery = query(
-        collection(db, "programs"),
-        where("userId", "==", user.uid),
-        where("isPredefined", "==", false)
+      const userProgramsData = await getCollectionCached(
+        'programs',
+        {
+          where: [
+            ['userId', '==', user.uid],
+            ['isPredefined', '==', false]
+          ]
+        }
       );
-      const userProgramsSnapshot = await getDocs(userProgramsQuery);
-
       // Batch update to set all programs to not current
       const batch = [];
-      userProgramsSnapshot.docs.forEach(programDoc => {
+      userProgramsData.forEach(programDoc => {
         const updatePromise = updateDoc(doc(db, "programs", programDoc.id), {
           isCurrent: false
         });
         batch.push(updatePromise);
       });
-
-      // Wait for all updates to complete
       await Promise.all(batch);
-
-      // Set the selected program as current
       await updateDoc(doc(db, "programs", programId), {
         isCurrent: true
       });
-
-      // Update local state
+      invalidateCache('programs');
       setUserPrograms(userPrograms.map(program => ({
         ...program,
         isCurrent: program.id === programId
       })));
-
       alert('Current program updated successfully!');
     } catch (error) {
       console.error("Error setting current program: ", error);

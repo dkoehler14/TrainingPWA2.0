@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Spinner } from 'react-bootstrap';
 import { db, auth } from '../firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
 import '../styles/Progress4.css';
+import { getCollectionCached } from '../api/firestoreCache';
 
 // Utility functions
 const calculateVolume = (sets, reps, weights) => {
@@ -82,13 +82,10 @@ function Progress4() {
         return;
       }
 
-      const logsQuery = query(collection(db, "workoutLogs"), where("userId", "==", user.uid));
-      const logsSnapshot = await getDocs(logsQuery);
-      const logsData = logsSnapshot.docs.map(doc => doc.data());
+      const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
       setWorkoutLogs(logsData);
 
-      const exercisesSnapshot = await getDocs(collection(db, "exercises"));
-      const exercisesData = exercisesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const exercisesData = await getCollectionCached('exercises');
       setExercises(exercisesData);
       setIsLoading(false);
     };

@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Alert, Spinner } from 'react-bootstrap';
 import { PlusLg } from 'react-bootstrap-icons';
-import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/Exercises.css';
+import { getExercisesCached, invalidateCache } from '../api/firestoreCache';
 
 function Exercises() {
   const [exercises, setExercises] = useState([]);
@@ -26,11 +25,7 @@ function Exercises() {
   const fetchExercises = async () => {
     setIsLoading(true);
     try {
-      const querySnapshot = await getDocs(collection(db, "exercises"));
-      let exercisesData = [];
-      querySnapshot.forEach((doc) => {
-        exercisesData.push({ id: doc.id, ...doc.data() });
-      });
+      const exercisesData = await getExercisesCached();
       setExercises(exercisesData);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
@@ -56,6 +51,7 @@ function Exercises() {
 
   // Callback for when a new exercise is added
   const handleExerciseAdded = (newExercise) => {
+    invalidateCache('exercises');
     setExercises(prev => [...prev, newExercise]);
     setSuccessMessage(`Exercise "${newExercise.name}" added successfully!`);
     setShowModal(false);
@@ -63,6 +59,7 @@ function Exercises() {
 
   // Callback for when an exercise is updated
   const handleExerciseUpdated = (updatedExercise) => {
+    invalidateCache('exercises');
     setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex));
     setSuccessMessage(`Exercise "${updatedExercise.name}" updated successfully!`);
     setShowModal(false);
