@@ -151,26 +151,20 @@ function ProgressTracker() {
 	// Calculate all metrics at once to avoid multiple re-renders
 	const calculateAllMetrics = async () => {
 		try {
-			// Get all logs for consistency and body part analysis
-			const allLogsQuery = query(
-				collection(db, "workoutLogs"),
-				where("userId", "==", auth.currentUser.uid),
-				where("date", ">=", startDate),
-				where("date", "<=", endDate),
-				where("isWorkoutFinished", "==", true),
-				orderBy("date", "desc")
-			);
-
-			const allLogsSnapshot = await getDocs(allLogsQuery);
-			const allLogs = allLogsSnapshot.docs.map(doc => ({
-				...doc.data(),
-				id: doc.id,
-				date: doc.data().date.toDate()
-			}));
+			// Use cache utility to get all logs for consistency and body part analysis
+			const allLogs = await getCollectionCached('workoutLogs', {
+				where: [
+					['userId', '==', auth.currentUser.uid],
+					['date', '>=', startDate],
+					['date', '<=', endDate],
+					['isWorkoutFinished', '==', true]
+				],
+				orderBy: [['date', 'desc']]
+			});
 
 			// Calculate all metrics
-			const bodyPartFocus = analyzeBodyPartFocus(allLogsSnapshot.docs);
-			const consistencyScore = calculateConsistencyScore(allLogsSnapshot.docs);
+			const bodyPartFocus = analyzeBodyPartFocus(allLogs.map(log => ({ data: () => log })));
+			const consistencyScore = calculateConsistencyScore(allLogs.map(log => ({ data: () => log })));
 			const { pr, volume, frequency, estimatedOneRepMax } = calculateStats(logs);
 			const exerciseProgress = calculateProgressTrend(logs);
 			const summaryStats = await calculateSummaryStats(allLogs);

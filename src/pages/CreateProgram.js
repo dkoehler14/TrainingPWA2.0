@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
-import { addDoc, updateDoc, doc } from 'firebase/firestore';
+import { addDoc, updateDoc, doc, collection } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';

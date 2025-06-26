@@ -156,14 +156,18 @@ function LogWorkout() {
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
       if (!userData || !programData || exerciseData.length === 0) return;
       try {
-        const logsQuery = query(
-          collection(db, "workoutLogs"),
-          where("userId", "==", userData.uid),
-          where("programId", "==", programData.id),
-          where("weekIndex", "==", weekIndex),
-          where("dayIndex", "==", dayIndex)
+        // Use cache utility for workoutLogs
+        const logsData = await getCollectionCached(
+          'workoutLogs',
+          {
+            where: [
+              ['userId', '==', userData.uid],
+              ['programId', '==', programData.id],
+              ['weekIndex', '==', weekIndex],
+              ['dayIndex', '==', dayIndex]
+            ]
+          }
         );
-        const logsSnapshot = await getDocs(logsQuery);
 
         const logDataToSave = {
           userId: userData.uid,
@@ -180,17 +184,17 @@ function LogWorkout() {
             bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
           })),
           date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: logsSnapshot.empty ? false : logsSnapshot.docs[0].data().isWorkoutFinished || false
+          isWorkoutFinished: logsData.length > 0 ? logsData[0].isWorkoutFinished || false : false
         };
 
-        if (!logsSnapshot.empty) {
+        if (logsData.length > 0) {
           // Update existing log
-          const logDoc = logsSnapshot.docs[0];
-          await updateDoc(doc(db, "workoutLogs", logDoc.id), logDataToSave);
+          const logDocId = logsData[0].id;
+          await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
           invalidateCache('workoutLogs');
         } else {
           // Create new log if none exists
-          await addDoc(collection(db, "workoutLogs"), logDataToSave);
+          await addDoc(doc(db, "workoutLogs"), logDataToSave);
           invalidateCache('workoutLogs');
         }
         console.log('Workout log auto-saved');
@@ -471,21 +475,21 @@ function LogWorkout() {
       const originalExercise = exercisesList.find(ex => ex.id === exercise.exerciseId);
 
       if (originalExercise && originalExercise.primaryMuscleGroup) {
-        const exercisesQuery = query(
-          collection(db, "exercises"),
-          where("primaryMuscleGroup", "==", originalExercise.primaryMuscleGroup),
-          where(documentId(), "!=", exercise.exerciseId)
+        // Use cache utility to get alternatives
+        const alternatives = (await getCollectionCached(
+          'exercises',
+          {
+            where: [
+              ['primaryMuscleGroup', '==', originalExercise.primaryMuscleGroup],
+              ['id', '!=', exercise.exerciseId]
+            ]
+          }
+        )) || [];
+        // Remove duplicates
+        const uniqueAlternatives = alternatives.filter((ex, index, self) =>
+          self.findIndex(t => t.id === ex.id) === index
         );
-
-        const alternativesSnapshot = await getDocs(exercisesQuery);
-        const alternatives = alternativesSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          // Remove duplicates
-          .filter((ex, index, self) =>
-            self.findIndex(t => t.id === ex.id) === index
-          );
-
-        setAlternativeExercises(alternatives);
+        setAlternativeExercises(uniqueAlternatives);
       }
     }
     catch (error) {
@@ -521,15 +525,13 @@ function LogWorkout() {
       setLogData(newLogData);
 
       // Now update the program's weeklyConfigs in Firestore
-      const programRef = doc(db, "programs", selectedProgram.id);
-
-      // Get current program document to ensure we have the latest data
-      const programDoc = await getDoc(programRef);
-      if (!programDoc.exists()) {
+      // Use cache utility to get the latest program doc
+      const programDoc = await getDocCached('programs', selectedProgram.id);
+      if (!programDoc) {
         throw new Error("Program document not found");
       }
 
-      const currentProgramData = programDoc.data();
+      const currentProgramData = programDoc;
 
       // Create the correct key for the flattened structure
       const configKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
@@ -553,9 +555,10 @@ function LogWorkout() {
       console.log("Updated exercises:", updatedExercises);
 
       // Update Firestore with the correct nested path
-      await updateDoc(programRef, {
+      await updateDoc(doc(db, "programs", selectedProgram.id), {
         [`weeklyConfigs.${configKey}`]: updatedExercises
       });
+      invalidateCache('programs');
 
       console.log(`Successfully updated program config for ${configKey}`);
 
@@ -618,16 +621,19 @@ function LogWorkout() {
     if (!user || !program) return null;
 
     try {
-      const logsQuery = query(
-        collection(db, "workoutLogs"),
-        where("userId", "==", user.uid),
-        where("programId", "==", program.id)
+      // Use cache utility for workoutLogs
+      const logsData = await getCollectionCached(
+        'workoutLogs',
+        {
+          where: [
+            ['userId', '==', user.uid],
+            ['programId', '==', program.id]
+          ]
+        }
       );
-      const logsSnapshot = await getDocs(logsQuery);
       const completedDays = new Set();
 
-      logsSnapshot.forEach(doc => {
-        const log = doc.data();
+      logsData.forEach(log => {
         if (log.isWorkoutFinished) {
           completedDays.add(`${log.weekIndex}_${log.dayIndex}`);
         }
@@ -732,14 +738,18 @@ function LogWorkout() {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
     try {
-      const logsQuery = query(
-        collection(db, "workoutLogs"),
-        where("userId", "==", user.uid),
-        where("programId", "==", selectedProgram.id),
-        where("weekIndex", "==", selectedWeek),
-        where("dayIndex", "==", selectedDay)
+      // Use cache utility for workoutLogs
+      const logsData = await getCollectionCached(
+        'workoutLogs',
+        {
+          where: [
+            ['userId', '==', user.uid],
+            ['programId', '==', selectedProgram.id],
+            ['weekIndex', '==', selectedWeek],
+            ['dayIndex', '==', selectedDay]
+          ]
+        }
       );
-      const logsSnapshot = await getDocs(logsQuery);
 
       const logDataToSave = {
         userId: user.uid,
@@ -759,12 +769,12 @@ function LogWorkout() {
         isWorkoutFinished: false
       };
 
-      if (!logsSnapshot.empty) {
-        const logDoc = logsSnapshot.docs[0];
-        await updateDoc(doc(db, "workoutLogs", logDoc.id), logDataToSave);
+      if (logsData.length > 0) {
+        const logDocId = logsData[0].id;
+        await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
         invalidateCache('workoutLogs');
       } else {
-        await addDoc(collection(db, "workoutLogs"), logDataToSave);
+        await addDoc(doc(db, "workoutLogs"), logDataToSave);
         invalidateCache('workoutLogs');
       }
       alert('Workout saved successfully!');
@@ -780,14 +790,18 @@ function LogWorkout() {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
     try {
-      const logsQuery = query(
-        collection(db, "workoutLogs"),
-        where("userId", "==", user.uid),
-        where("programId", "==", selectedProgram.id),
-        where("weekIndex", "==", selectedWeek),
-        where("dayIndex", "==", selectedDay)
+      // Use cache utility for workoutLogs
+      const logsData = await getCollectionCached(
+        'workoutLogs',
+        {
+          where: [
+            ['userId', '==', user.uid],
+            ['programId', '==', selectedProgram.id],
+            ['weekIndex', '==', selectedWeek],
+            ['dayIndex', '==', selectedDay]
+          ]
+        }
       );
-      const logsSnapshot = await getDocs(logsQuery);
 
       const logDataToSave = {
         userId: user.uid,
@@ -807,12 +821,12 @@ function LogWorkout() {
         isWorkoutFinished: true
       };
 
-      if (!logsSnapshot.empty) {
-        const logDoc = logsSnapshot.docs[0];
-        await updateDoc(doc(db, "workoutLogs", logDoc.id), logDataToSave);
+      if (logsData.length > 0) {
+        const logDocId = logsData[0].id;
+        await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
         invalidateCache('workoutLogs');
       } else {
-        await addDoc(collection(db, "workoutLogs"), logDataToSave);
+        await addDoc(doc(db, "workoutLogs"), logDataToSave);
         invalidateCache('workoutLogs');
       }
       setIsWorkoutFinished(true);
