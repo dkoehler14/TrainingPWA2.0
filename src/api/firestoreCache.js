@@ -85,9 +85,4 @@ export function invalidateCache(path) {
       cache.delete(key);
     }
   }
-}
-
-// --- Specific implementation for exercises collection ---
-export async function getExercisesCached(ttl = DEFAULT_TTL) {
-  return getCollectionCached('exercises', {}, ttl);
 } 

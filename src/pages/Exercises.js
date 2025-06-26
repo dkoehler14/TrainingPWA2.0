@@ -4,7 +4,7 @@ import { PlusLg } from 'react-bootstrap-icons';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/Exercises.css';
-import { getExercisesCached, invalidateCache } from '../api/firestoreCache';
+import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
 
 function Exercises() {
   const [exercises, setExercises] = useState([]);
@@ -25,7 +25,7 @@ function Exercises() {
   const fetchExercises = async () => {
     setIsLoading(true);
     try {
-      const exercisesData = await getExercisesCached();
+      const exercisesData = await getCollectionCached('exercises');
       setExercises(exercisesData);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
