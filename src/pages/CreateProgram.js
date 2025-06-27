@@ -442,7 +442,7 @@ function CreateProgram({ mode = 'create' }) {
         await addDoc(collection(db, "programs"), {
           ...programData,
           userId: user.uid,
-          isPredefined: false,
+          isTemplate: false,
           createdAt: new Date()
         });
         invalidateCache('programs');

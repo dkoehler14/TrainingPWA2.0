@@ -12,7 +12,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 
 function Programs() {
   const [userPrograms, setUserPrograms] = useState([]);
-  const [predefinedPrograms, setPredefinedPrograms] = useState([]);
+  const [templatePrograms, setTemplatePrograms] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [showProgramDetails, setShowProgramDetails] = useState(false);
@@ -35,7 +35,7 @@ function Programs() {
             {
               where: [
                 ['userId', '==', user.uid],
-                ['isPredefined', '==', false]
+                ['isTemplate', '==', false]
               ],
               orderBy: [['createdAt', 'desc']]
             }
@@ -45,16 +45,16 @@ function Programs() {
             weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
           })));
 
-          // Fetch predefined programs
-          const predefinedProgramsData = await getCollectionCached(
+          // Fetch template programs
+          const templateProgramsData = await getCollectionCached(
             'programs',
             {
               where: [
-                ['isPredefined', '==', true]
+                ['isTemplate', '==', true]
               ]
             }
           );
-          setPredefinedPrograms(predefinedProgramsData.map(doc => ({
+          setTemplatePrograms(templateProgramsData.map(doc => ({
             ...doc,
             weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
           })));
@@ -103,7 +103,7 @@ function Programs() {
     try {
       await addDoc(collection(db, "programs"), {
         userId: user.uid,
-        isPredefined: false,
+        isTemplate: false,
         name: `${program.name} (Adopted)`,
         duration: program.duration,
         daysPerWeek: program.daysPerWeek,
@@ -146,7 +146,7 @@ function Programs() {
         {
           where: [
             ['userId', '==', user.uid],
-            ['isPredefined', '==', false]
+            ['isTemplate', '==', false]
           ]
         }
       );
@@ -254,7 +254,7 @@ function Programs() {
     navigate(`/edit-program/${programId}`);
   };
 
-  const renderActionButtons = (program, isPredefined) => {
+  const renderActionButtons = (program, isTemplate) => {
     const isMobile = window.innerWidth <= 767;
     
     if (isMobile) {
@@ -269,7 +269,7 @@ function Programs() {
             <FileText className="me-1" /> Details
           </Button>
           
-          {!isPredefined ? (
+          {!isTemplate ? (
             <>
               <Button
                 variant="outline-secondary"
@@ -324,7 +324,7 @@ function Programs() {
           <FileText className="me-1" /> Details
         </Button>
         
-        {!isPredefined ? (
+        {!isTemplate ? (
           <>
             <Button
               variant="outline-secondary"
@@ -364,7 +364,7 @@ function Programs() {
     );
   };
 
-  const renderProgramCard = (program, isPredefined = false) => {
+  const renderProgramCard = (program, isTemplate = false) => {
     return (
       <Card key={program.id} className="mb-3 program-card">
         <Card.Body>
@@ -375,13 +375,13 @@ function Programs() {
                 {program.duration} weeks | {program.daysPerWeek} days/week
               </Card.Subtitle>
             </div>
-            {program.isCurrent && !isPredefined && (
+            {program.isCurrent && !isTemplate && (
               <Star className="text-warning" size={24} />
             )}
           </div>
 
           <div className="d-flex justify-content-between align-items-center mt-3">
-            {renderActionButtons(program, isPredefined)}
+            {renderActionButtons(program, isTemplate)}
           </div>
         </Card.Body>
       </Card>
@@ -1241,7 +1241,7 @@ function Programs() {
                 )}
 
                 <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
-                {predefinedPrograms.map(program => renderProgramCard(program, true))}
+                {templatePrograms.map(program => renderProgramCard(program, true))}
               </>
             )}
           </div>
