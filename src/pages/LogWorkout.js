@@ -818,7 +818,8 @@ function LogWorkout() {
           bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
         })),
         date: Timestamp.fromDate(new Date()),
-        isWorkoutFinished: true
+        isWorkoutFinished: true,
+        completedDate: Timestamp.fromDate(new Date())
       };
 
       if (logsData.length > 0) {
