@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
-import { addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
@@ -194,7 +194,7 @@ function LogWorkout() {
           invalidateCache('workoutLogs');
         } else {
           // Create new log if none exists
-          await addDoc(doc(db, "workoutLogs"), logDataToSave);
+          await addDoc(collection(db, "workoutLogs"), logDataToSave);
           invalidateCache('workoutLogs');
         }
         console.log('Workout log auto-saved');
@@ -774,7 +774,7 @@ function LogWorkout() {
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
         invalidateCache('workoutLogs');
       } else {
-        await addDoc(doc(db, "workoutLogs"), logDataToSave);
+        await addDoc(collection(db, "workoutLogs"), logDataToSave);
         invalidateCache('workoutLogs');
       }
       alert('Workout saved successfully!');
@@ -826,7 +826,7 @@ function LogWorkout() {
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
         invalidateCache('workoutLogs');
       } else {
-        await addDoc(doc(db, "workoutLogs"), logDataToSave);
+        await addDoc(collection(db, "workoutLogs"), logDataToSave);
         invalidateCache('workoutLogs');
       }
       setIsWorkoutFinished(true);
