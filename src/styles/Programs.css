@@ -287,6 +287,52 @@
     margin-bottom: 0.5rem;
   }
   
+  /* Performance Metrics accordion header improvements for mobile */
+  .accordion-header .metric-box {
+    width: calc(33.333% - 0.5rem);
+    min-width: 80px;
+    padding: 0.5rem 0.25rem;
+    margin-bottom: 0;
+  }
+  
+  .accordion-header .metric-value {
+    font-size: 1rem;
+    font-weight: bold;
+    display: block;
+    line-height: 1.2;
+  }
+  
+  .accordion-header .metric-label {
+    font-size: 0.7rem;
+    display: block;
+    line-height: 1.1;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* Ensure exercise name doesn't overflow */
+  .accordion-header .fw-bold {
+    font-size: 0.9rem;
+    line-height: 1.3;
+    max-width: 100%;
+  }
+  
+  /* Accordion button padding adjustments for mobile */
+  .accordion-button {
+    font-size: 0.875rem;
+    padding: 0.75rem;
+    min-height: auto;
+  }
+  
+  /* Ensure proper spacing in accordion header */
+  .accordion-header .d-flex.flex-column {
+    width: 100%;
+  }
+  
+  .accordion-header .d-flex.flex-wrap {
+    gap: 0.25rem !important;
+  }
+  
   /* Tab navigation improvements */
   .nav-tabs {
     flex-wrap: wrap;

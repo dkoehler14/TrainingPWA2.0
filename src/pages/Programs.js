@@ -24,6 +24,7 @@ function Programs() {
   const [isLoading, setIsLoading] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
   const chartContainerRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
 
   // Function to handle chart resize
   const handleChartResize = () => {
@@ -276,8 +277,6 @@ function Programs() {
   };
 
   const renderActionButtons = (program, isTemplate) => {
-    const isMobile = window.innerWidth <= 767;
-    
     if (isMobile) {
       return (
         <div className="d-flex flex-column gap-2 w-100">
@@ -412,8 +411,6 @@ function Programs() {
   // Enhanced Program Details Modal (from Claude)
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
-    
-    const isMobile = window.innerWidth <= 767;
     
     // Calculate overall program progress
     const calculateProgramProgress = () => {
@@ -946,9 +943,9 @@ function Programs() {
                             <tbody>
                               {exerciseMetrics.slice(0, 5).map((exercise, index) => {
                                 const getWeightLabel = () => {
-                                  if (exercise.exerciseType === 'Bodyweight') return 'Max Bodyweight';
-                                  if (exercise.exerciseType === 'Bodyweight Loadable') return 'Max Total Weight';
-                                  return 'Max Weight';
+                                  if (exercise.exerciseType === 'Bodyweight') return 'Bodyweight';
+                                  if (exercise.exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                  return 'Weight';
                                 };
 
                                 return (
@@ -997,27 +994,38 @@ function Programs() {
                           <Accordion defaultActiveKey="0" alwaysOpen>
                             {exerciseMetrics.map((exercise, index) => {
                               const getWeightLabel = () => {
-                                if (exercise.exerciseType === 'Bodyweight') return 'Max Bodyweight';
-                                if (exercise.exerciseType === 'Bodyweight Loadable') return 'Max Total Weight';
-                                return 'Max Weight';
+                                if (exercise.exerciseType === 'Bodyweight') return 'Bodyweight';
+                                if (exercise.exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                return 'Weight';
                               };
 
                               return (
                                 <Accordion.Item eventKey={index.toString()} key={index} className="mb-3">
                                   <Accordion.Header>
-                                    <div className="d-flex flex-column flex-md-row w-100 justify-content-between align-items-md-center">
-                                      <span className="fw-bold">
-                                        {exercise.name}
-                                        {exercise.exerciseType && (
-                                          <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                            {exercise.exerciseType}
-                                          </span>
-                                        )}
-                                      </span>
-                                      <div className="d-flex gap-3 mt-2 mt-md-0">
+                                    <div className="d-flex flex-column w-100">
+                                      {/* Exercise name and type */}
+                                      <div className="d-flex justify-content-between align-items-start mb-2">
+                                        <span className="fw-bold text-truncate me-2">
+                                          {exercise.name}
+                                          {exercise.exerciseType && (
+                                            <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                              {exercise.exerciseType}
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                      
+                                      {/* Metrics row - responsive layout */}
+                                      <div className="d-flex flex-wrap gap-2 justify-content-between">
                                         <span className="metric-box">
                                           <span className="metric-value">{exercise.maxWeight}</span> 
-                                          <span className="metric-label">{getWeightLabel()} ({selectedProgram.weightUnit})</span>
+                                          <span className="metric-label">
+                                            {isMobile ? 
+                                              (exercise.exerciseType === 'Bodyweight' ? 'Max BW' :
+                                               exercise.exerciseType === 'Bodyweight Loadable' ? 'Max Total' : 'Max Wt') : 
+                                              getWeightLabel()
+                                            } ({selectedProgram.weightUnit})
+                                          </span>
                                         </span>
                                         <span className="metric-box">
                                           <span className="metric-value">{exercise.sessions.length}</span> 
@@ -1041,7 +1049,7 @@ function Programs() {
                                             minWidth: 320, 
                                             width: '100%', 
                                             maxWidth: '100%',
-                                            height: window.innerWidth <= 767 ? '250px' : '350px',
+                                            height: isMobile ? '250px' : '350px',
                                             position: 'relative'
                                           }}
                                         >
@@ -1082,7 +1090,7 @@ function Programs() {
                                                 legend: {
                                                   display: true,
                                                   position: 'top',
-                                                  labels: { font: { size: window.innerWidth <= 767 ? 10 : 14 } }
+                                                  labels: { font: { size: isMobile ? 10 : 14 } }
                                                 },
                                                 title: { display: false },
                                                 tooltip: {
@@ -1101,10 +1109,10 @@ function Programs() {
                                                   title: {
                                                     display: true,
                                                     text: 'Workout Sessions',
-                                                    font: { size: window.innerWidth <= 767 ? 10 : 14 }
+                                                    font: { size: isMobile ? 10 : 14 }
                                                   },
                                                   ticks: {
-                                                    font: { size: window.innerWidth <= 767 ? 9 : 12 },
+                                                    font: { size: isMobile ? 9 : 12 },
                                                     maxRotation: 45,
                                                     minRotation: 0
                                                   }
@@ -1116,11 +1124,11 @@ function Programs() {
                                                   title: {
                                                     display: true,
                                                     text: `${getWeightLabel()} (${selectedProgram.weightUnit})`,
-                                                    font: { size: window.innerWidth <= 767 ? 10 : 14 }
+                                                    font: { size: isMobile ? 10 : 14 }
                                                   },
                                                   beginAtZero: true,
                                                   grid: { drawOnChartArea: true },
-                                                  ticks: { font: { size: window.innerWidth <= 767 ? 9 : 12 } }
+                                                  ticks: { font: { size: isMobile ? 9 : 12 } }
                                                 },
                                                 y2: {
                                                   type: 'linear',
@@ -1129,11 +1137,11 @@ function Programs() {
                                                   title: {
                                                     display: true,
                                                     text: `Total Volume (${selectedProgram.weightUnit})`,
-                                                    font: { size: window.innerWidth <= 767 ? 10 : 14 }
+                                                    font: { size: isMobile ? 10 : 14 }
                                                   },
                                                   beginAtZero: true,
                                                   grid: { drawOnChartArea: false },
-                                                  ticks: { font: { size: window.innerWidth <= 767 ? 9 : 12 } }
+                                                  ticks: { font: { size: isMobile ? 9 : 12 } }
                                                 }
                                               }
                                             }}
@@ -1446,6 +1454,8 @@ function Programs() {
     const handleResize = () => {
       // Force re-render on resize for responsive updates
       setForceUpdate(prev => !prev);
+      // Update mobile state
+      setIsMobile(window.innerWidth <= 767);
     };
     
     window.addEventListener('resize', handleResize);
