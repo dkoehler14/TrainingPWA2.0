@@ -705,7 +705,28 @@ function LogWorkout() {
   const canMarkSetComplete = (exercise, setIndex) => {
     const weightValue = exercise.weights[setIndex];
     const repsValue = exercise.reps[setIndex];
-    return (weightValue !== '' && weightValue !== 0 && repsValue !== '' && repsValue !== 0);
+    const exerciseType = exercisesList.find(e => e.id === exercise.exerciseId)?.exerciseType;
+    
+    // Check if reps value is valid (not empty, not 0, not null, not undefined)
+    const hasValidReps = repsValue !== '' && repsValue !== null && repsValue !== undefined && Number(repsValue) > 0;
+    
+    // Check weight based on exercise type
+    let hasValidWeight = false;
+    
+    if (exerciseType === 'Bodyweight') {
+      // For bodyweight exercises, we need a valid bodyweight value
+      hasValidWeight = exercise.bodyweight !== '' && exercise.bodyweight !== null && exercise.bodyweight !== undefined && Number(exercise.bodyweight) > 0;
+    } else if (exerciseType === 'Bodyweight Loadable') {
+      // For bodyweight loadable, we need either bodyweight OR additional weight
+      const hasBodyweight = exercise.bodyweight !== '' && exercise.bodyweight !== null && exercise.bodyweight !== undefined && Number(exercise.bodyweight) > 0;
+      const hasAdditionalWeight = weightValue !== '' && weightValue !== null && weightValue !== undefined && Number(weightValue) >= 0;
+      hasValidWeight = hasBodyweight || hasAdditionalWeight;
+    } else {
+      // For regular exercises, we need a valid weight value
+      hasValidWeight = weightValue !== '' && weightValue !== null && weightValue !== undefined && Number(weightValue) > 0;
+    }
+    
+    return hasValidReps && hasValidWeight;
   };
 
   const handleAddSet = (exerciseIndex) => {

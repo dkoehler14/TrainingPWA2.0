@@ -137,6 +137,13 @@
   /* Subtle green glow for focus */
 }
 
+.completed-checkbox input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--card-background);
+  border-color: var(--border-color);
+}
+
 .checkbox-enabled input[type="checkbox"] {
   box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.3);
   /* Subtle green glow, same as focus */
