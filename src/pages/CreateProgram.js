@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown } from 'react-bootstrap';
-import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
+import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, Card } from 'react-bootstrap';
+import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical, Eye } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { addDoc, updateDoc, doc, collection } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
@@ -71,6 +71,14 @@ function CreateProgram({ mode = 'create' }) {
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
   const user = auth.currentUser;
   const [isLoading, setIsLoading] = useState(mode === 'edit');
+  const [step, setStep] = useState(1); // Stepper: 1=choose, 2=select, 3=edit
+  const [creationSource, setCreationSource] = useState('scratch'); // 'scratch' | 'template' | 'previous'
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [selectedPreviousProgram, setSelectedPreviousProgram] = useState(null);
+  const [templatePrograms, setTemplatePrograms] = useState([]);
+  const [userPrograms, setUserPrograms] = useState([]);
+  const [previewProgram, setPreviewProgram] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
 
   const setsRef = useRef(null);
   const repsRef = useRef(null);
@@ -234,6 +242,80 @@ function CreateProgram({ mode = 'create' }) {
     };
     loadProgram();
   }, [mode, programId]);
+
+  // Fetch templates or previous programs as needed
+  useEffect(() => {
+    if (step === 2 && creationSource === 'template') {
+      getCollectionCached('programs', { where: [['isTemplate', '==', true]] })
+        .then(setTemplatePrograms)
+        .catch(console.error);
+    }
+    if (step === 2 && creationSource === 'previous') {
+      if (user) {
+        getCollectionCached('programs', { where: [['userId', '==', user.uid], ['isTemplate', '==', false]] })
+          .then(setUserPrograms)
+          .catch(console.error);
+      }
+    }
+  }, [step, creationSource, user]);
+
+  // Prefill form state when entering step 3
+  useEffect(() => {
+    if (step === 3) {
+      if (creationSource === 'template' && selectedTemplate) {
+        setProgramName((selectedTemplate.name || '') + ' (Copy)');
+        setWeightUnit(selectedTemplate.weightUnit || 'LB');
+        // Convert template's weeklyConfigs to weeks state
+        if (selectedTemplate.weeklyConfigs && selectedTemplate.duration && selectedTemplate.daysPerWeek) {
+          // Convert flattened weeklyConfigs to weeks array
+          const weeksArr = Array.from({ length: selectedTemplate.duration }, () => ({
+            days: Array.from({ length: selectedTemplate.daysPerWeek }, () => ({ exercises: [] }))
+          }));
+          for (let key in selectedTemplate.weeklyConfigs) {
+            const match = key.match(/week(\d+)_day(\d+)_exercises/);
+            if (match) {
+              const weekIndex = parseInt(match[1], 10) - 1;
+              const dayIndex = parseInt(match[2], 10) - 1;
+              if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
+                weeksArr[weekIndex].days[dayIndex].exercises = (selectedTemplate.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+              }
+            }
+          }
+          setWeeks(weeksArr);
+        }
+      } else if (creationSource === 'previous' && selectedPreviousProgram) {
+        setProgramName((selectedPreviousProgram.name || '') + ' (Copy)');
+        setWeightUnit(selectedPreviousProgram.weightUnit || 'LB');
+        if (selectedPreviousProgram.weeklyConfigs && selectedPreviousProgram.duration && selectedPreviousProgram.daysPerWeek) {
+          const weeksArr = Array.from({ length: selectedPreviousProgram.duration }, () => ({
+            days: Array.from({ length: selectedPreviousProgram.daysPerWeek }, () => ({ exercises: [] }))
+          }));
+          for (let key in selectedPreviousProgram.weeklyConfigs) {
+            const match = key.match(/week(\d+)_day(\d+)_exercises/);
+            if (match) {
+              const weekIndex = parseInt(match[1], 10) - 1;
+              const dayIndex = parseInt(match[2], 10) - 1;
+              if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
+                weeksArr[weekIndex].days[dayIndex].exercises = (selectedPreviousProgram.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+              }
+            }
+          }
+          setWeeks(weeksArr);
+        }
+      } else if (creationSource === 'scratch') {
+        // Reset to default state
+        setProgramName('');
+        setWeightUnit('LB');
+        setWeeks([
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+        ]);
+      }
+    }
+    // eslint-disable-next-line
+  }, [step]);
 
   const openNotesModal = (weekIndex, dayIndex, exIndex) => {
     console.log('Opening notes modal:', {
@@ -709,226 +791,458 @@ function CreateProgram({ mode = 'create' }) {
 
   return (
     <Container fluid className="soft-container create-program-container">
-      <Row className="mb-4 program-misc-input">
-        <Col xs={12} md={6} className="mb-3 mb-md-0">
-          <Form.Group>
-            <Form.Label>Program Name</Form.Label>
-            <Form.Control
-              type="text"
-              value={programName}
-              onChange={(e) => setProgramName(e.target.value)}
-              className="soft-input"
-              placeholder="Enter program name"
-              required
-            />
-          </Form.Group>
-        </Col>
-        <Col xs={12} md={6}>
-          <Form.Group>
-            <Form.Label>Units</Form.Label>
-            <Form.Select
-              value={weightUnit}
-              onChange={(e) => setWeightUnit(e.target.value)}
-              className="soft-input"
-              style={{ width: '70px' }}
-            >
-              <option value="LB">LB</option>
-              <option value="KG">KG</option>
-            </Form.Select>
-          </Form.Group>
-        </Col>
-      </Row>
-      <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
-        <div className="d-flex flex-wrap week-indicators">
-          {weeks && weeks.length > 0 ? (
-            weeks.map((_, index) => (
-            <div key={index} className="me-2 mb-2">
-              <span className="badge bg-secondary">Week {index + 1}</span>
-            </div>
-            ))
-          ) : (
-            <div className="text-muted">No weeks added yet</div>
-          )}
-        </div>
-        <div className={`d-flex ${isMobile ? 'flex-column w-100 button-container' : ''}`}>
-          <Button onClick={addWeek} className={`soft-button gradient ${isMobile ? 'mb-2 w-100' : 'me-2'}`}>Add Week</Button>
-          <Button onClick={removeWeek} className={`soft-button gradient ${isMobile ? 'w-100' : ''}`} disabled={!weeks || weeks.length <= 1}>Remove Week</Button>
-        </div>
+      {/* Stepper UI */}
+      <div className="stepper mb-4 d-flex justify-content-center align-items-center" style={{gap: 0}}>
+        <div className={`step px-3 py-2 text-center${step === 1 ? ' active-step' : ''}`} style={{borderBottom: step === 1 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 1 ? 'bold' : 'normal', color: step === 1 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>1. Start</div>
+        <div className="step-separator mx-2" style={{color: '#adb5bd', fontSize: 24}}>→</div>
+        <div className={`step px-3 py-2 text-center${step === 2 ? ' active-step' : ''}`} style={{borderBottom: step === 2 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 2 ? 'bold' : 'normal', color: step === 2 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>2. Select</div>
+        <div className="step-separator mx-2" style={{color: '#adb5bd', fontSize: 24}}>→</div>
+        <div className={`step px-3 py-2 text-center${step === 3 ? ' active-step' : ''}`} style={{borderBottom: step === 3 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 3 ? 'bold' : 'normal', color: step === 3 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>3. Edit</div>
       </div>
-
-      {isMobile ? (
-        <Accordion defaultActiveKey="0" className="mb-4">
-          {weeks && weeks.length > 0 && weeks[0]?.days ? (
-            weeks[0].days.map((day, dayIndex) => (
-            <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
-              <Accordion.Header className="d-flex justify-content-between">
-                <span className="me-3">Day {dayIndex + 1}</span>
-                <div onClick={(e) => e.stopPropagation()} className="me-3">
-                  <Button onClick={() => removeDay(dayIndex)} className="preset-btn delete-btn" variant="outline-danger" size="sm"><Trash /></Button>
-                </div>
-              </Accordion.Header>
-              <Accordion.Body>
-                {day.exercises.map((exercise, exIndex) => renderMobileExerciseRow(day, dayIndex, exercise, exIndex))}
-                <div className="text-center mt-3">
-                  <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
-                </div>
-              </Accordion.Body>
-            </Accordion.Item>
-            ))
-          ) : (
-            <div className="text-center p-3">
-              <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
-            </div>
-          )}
-        </Accordion>
-      ) : (
-        <div style={{ width: `${tableWidth}px`, maxWidth: '100%', overflowX: 'auto' }}>
-          <Table responsive className="program-table">
-            <thead>
-              <tr>
-                <th style={{ width: '215px', border: 'none' }}></th>
-                {weeks && weeks.length > 0 ? (
-                  weeks.map((_, index) => (
-                  <th key={index} style={{ textAlign: 'center', width: '100px' }}>Week {index + 1}</th>
-                  ))
-                ) : (
-                  <th style={{ textAlign: 'center', width: '100px' }}>No Weeks</th>
-                )}
-                <th style={{ width: '235px' }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td colSpan={weeks.length * 2 + 2}>
-                  <Accordion defaultActiveKey="0">
-                    {weeks && weeks.length > 0 && weeks[0]?.days ? (
-                      weeks[0].days.map((day, dayIndex) => (
-                      <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
-                        <Accordion.Header>
-                          Day {dayIndex + 1}
-                          <Button
-                            onClick={(e) => { e.stopPropagation(); removeDay(dayIndex); }}
-                            className="ms-2 preset-btn delete-btn"
-                            variant="outline-danger"
-                            size="sm"
-                          >
-                            <Trash />
-                          </Button>
-                        </Accordion.Header>
-                        <Accordion.Body>
-                          {day.exercises.map((exercise, exIndex) => renderDesktopExerciseRow(day, dayIndex, exercise, exIndex))}
-                          <div className="text-center">
-                            <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
-                          </div>
-                        </Accordion.Body>
-                      </Accordion.Item>
-                      ))
-                    ) : (
-                      <div className="text-center p-3">
-                        <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
-                      </div>
-                    )}
-                  </Accordion>
-                </td>
-              </tr>
-            </tbody>
-          </Table>
+      {/* Step 1: Choose how to start */}
+      {step === 1 && (
+        <div className="step-choose-source text-center mb-5">
+          <h4>How would you like to start?</h4>
+          <div className="d-flex flex-column flex-md-row justify-content-center gap-3 mt-4">
+            <Button
+              variant="outline-primary"
+              className="stepper-choice"
+              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              onClick={() => { setCreationSource('scratch'); setStep(3); }}
+            >
+              Start from Scratch
+            </Button>
+            <Button
+              variant="outline-primary"
+              className="stepper-choice"
+              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              onClick={() => { setCreationSource('template'); setStep(2); }}
+            >
+              Use a Template
+            </Button>
+            <Button
+              variant="outline-primary"
+              className="stepper-choice"
+              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              onClick={() => { setCreationSource('previous'); setStep(2); }}
+            >
+              Use Previous Program
+            </Button>
+          </div>
         </div>
       )}
+      {/* Step 2: Select template or previous program */}
+      {step === 2 && creationSource === 'template' && (
+        <div className="step-select-template mb-5">
+          <h4>Select a Template</h4>
+          <div className="template-list d-flex flex-wrap justify-content-center gap-3 mt-4">
+            {templatePrograms.length === 0 ? (
+              <div className="text-muted">No templates found.</div>
+            ) : (
+              templatePrograms.map(template => (
+                <Card
+                  key={template.id}
+                  className={`mb-2 selectable-card ${selectedTemplate?.id === template.id ? 'border-primary' : ''}`}
+                  style={{ minWidth: 250, cursor: 'pointer', borderWidth: selectedTemplate?.id === template.id ? 2 : 1 }}
+                  onClick={(e) => { e.stopPropagation(); setPreviewProgram(template); setShowPreviewModal(true); }}
+                >
+                  <Card.Body>
+                    <Card.Title>{template.name}</Card.Title>
+                    <Card.Text>{template.duration} weeks, {template.daysPerWeek} days/week</Card.Text>
+                  </Card.Body>
+                </Card>
+              ))
+            )}
+          </div>
+          <div className="mt-4">
+            <Button
+              variant="success"
+              disabled={!selectedTemplate}
+              onClick={() => setStep(3)}
+            >
+              Next
+            </Button>
+            <Button variant="secondary" onClick={() => setStep(1)} className="ms-2">Back</Button>
+          </div>
+        </div>
+      )}
+      {step === 2 && creationSource === 'previous' && (
+        <div className="step-select-previous mb-5">
+          <h4>Select a Previous Program</h4>
+          <div className="program-list d-flex flex-wrap justify-content-center gap-3 mt-4">
+            {userPrograms.length === 0 ? (
+              <div className="text-muted">No previous programs found.</div>
+            ) : (
+              [...userPrograms].sort((a, b) => {
+                const aDate = a.updatedAt ? a.updatedAt.seconds : (a.createdAt ? a.createdAt.seconds : 0);
+                const bDate = b.updatedAt ? b.updatedAt.seconds : (b.createdAt ? b.createdAt.seconds : 0);
+                return bDate - aDate;
+              }).map(program => (
+                <Card
+                  key={program.id}
+                  className={`mb-3 selectable-card shadow-sm${selectedPreviousProgram?.id === program.id ? ' border-primary' : ''}`}
+                  style={{
+                    minWidth: 280,
+                    maxWidth: 340,
+                    cursor: 'pointer',
+                    borderWidth: selectedPreviousProgram?.id === program.id ? 2 : 1,
+                    borderColor: selectedPreviousProgram?.id === program.id ? '#0d6efd' : '#dee2e6',
+                    boxShadow: selectedPreviousProgram?.id === program.id ? '0 0 0 0.2rem #0d6efd22' : '0 2px 8px #0001',
+                    transition: 'all 0.15s',
+                    background: selectedPreviousProgram?.id === program.id ? '#f5faff' : '#fff',
+                    position: 'relative',
+                    margin: '0 8px 16px 8px',
+                  }}
+                  onClick={(e) => { e.stopPropagation(); setPreviewProgram(program); setShowPreviewModal(true); }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px #0d6efd22'}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow = selectedPreviousProgram?.id === program.id ? '0 0 0 0.2rem #0d6efd22' : '0 2px 8px #0001'}
+                >
+                  <Card.Body>
+                    <div className="d-flex align-items-center justify-content-between mb-2">
+                      <Card.Title className="mb-0" style={{fontSize: 20, fontWeight: 600, color: '#0d223a'}}>{program.name}</Card.Title>
+                      {program.isCurrent && (
+                        <span className="badge bg-success ms-2" title="Current Program" style={{fontSize: 12}}>Current</span>
+                      )}
+                    </div>
+                    <div className="mb-2" style={{fontSize: 15, color: '#495057'}}>
+                      <span className="me-3"><strong>{program.duration}</strong> weeks</span>
+                      <span><strong>{program.daysPerWeek}</strong> days/week</span>
+                    </div>
+                    <div style={{fontSize: 13, color: '#6c757d'}}>
+                      Last edited: {program.updatedAt ? new Date(program.updatedAt.seconds * 1000).toLocaleDateString() : (program.createdAt ? new Date(program.createdAt.seconds * 1000).toLocaleDateString() : '—')}
+                    </div>
+                  </Card.Body>
+                  {selectedPreviousProgram?.id === program.id && (
+                    <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: '#0d6efd', borderTopLeftRadius: 6, borderTopRightRadius: 6}} />
+                  )}
+                </Card>
+              ))
+            )}
+          </div>
+          <div className="mt-4">
+            <Button
+              variant="success"
+              disabled={!selectedPreviousProgram}
+              onClick={() => setStep(3)}
+            >
+              Next
+            </Button>
+            <Button variant="secondary" onClick={() => setStep(1)} className="ms-2">Back</Button>
+          </div>
+        </div>
+      )}
+      {/* Step 3: Main form (existing UI) */}
+      {step === 3 && (
+        <>
+          <Row className="mb-4 program-misc-input">
+            <Col xs={12} md={6} className="mb-3 mb-md-0">
+              <Form.Group>
+                <Form.Label>Program Name</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={programName}
+                  onChange={(e) => setProgramName(e.target.value)}
+                  className="soft-input"
+                  placeholder="Enter program name"
+                  required
+                />
+              </Form.Group>
+            </Col>
+            <Col xs={12} md={6}>
+              <Form.Group>
+                <Form.Label>Units</Form.Label>
+                <Form.Select
+                  value={weightUnit}
+                  onChange={(e) => setWeightUnit(e.target.value)}
+                  className="soft-input"
+                  style={{ width: '70px' }}
+                >
+                  <option value="LB">LB</option>
+                  <option value="KG">KG</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+          </Row>
+          <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
+            <div className="d-flex flex-wrap week-indicators">
+              {weeks && weeks.length > 0 ? (
+                weeks.map((_, index) => (
+                <div key={index} className="me-2 mb-2">
+                  <span className="badge bg-secondary">Week {index + 1}</span>
+                </div>
+                ))
+              ) : (
+                <div className="text-muted">No weeks added yet</div>
+              )}
+            </div>
+            <div className={`d-flex ${isMobile ? 'flex-column w-100 button-container' : ''}`}>
+              <Button onClick={addWeek} className={`soft-button gradient ${isMobile ? 'mb-2 w-100' : 'me-2'}`}>Add Week</Button>
+              <Button onClick={removeWeek} className={`soft-button gradient ${isMobile ? 'w-100' : ''}`} disabled={!weeks || weeks.length <= 1}>Remove Week</Button>
+            </div>
+          </div>
 
-      <div className={`d-flex ${isMobile ? 'flex-column program-misc-input' : 'justify-content-between'} mt-3`}>
-        <Button onClick={addDay} className={`soft-button create-program-button gradient ${isMobile ? 'mb-3 w-100' : ''}`}>Add Day</Button>
-        <Button
-          onClick={saveProgram}
-          className={`soft-button create-program-button gradient ${isMobile ? 'w-100' : ''}`}
-          disabled={isSubmitting || !programName}
-        >
-          {mode === 'edit' ? 'Update Program' : 'Save Program'}
-        </Button>
-      </div>
+          {isMobile ? (
+            <Accordion defaultActiveKey="0" className="mb-4">
+              {weeks && weeks.length > 0 && weeks[0]?.days ? (
+                weeks[0].days.map((day, dayIndex) => (
+                <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
+                  <Accordion.Header className="d-flex justify-content-between">
+                    <span className="me-3">Day {dayIndex + 1}</span>
+                    <div onClick={(e) => e.stopPropagation()} className="me-3">
+                      <Button onClick={() => removeDay(dayIndex)} className="preset-btn delete-btn" variant="outline-danger" size="sm"><Trash /></Button>
+                    </div>
+                  </Accordion.Header>
+                  <Accordion.Body>
+                    {day.exercises.map((exercise, exIndex) => renderMobileExerciseRow(day, dayIndex, exercise, exIndex))}
+                    <div className="text-center mt-3">
+                      <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
+                    </div>
+                  </Accordion.Body>
+                </Accordion.Item>
+                ))
+              ) : (
+                <div className="text-center p-3">
+                  <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
+                </div>
+              )}
+            </Accordion>
+          ) : (
+            <div style={{ width: `${tableWidth}px`, maxWidth: '100%', overflowX: 'auto' }}>
+              <Table responsive className="program-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '215px', border: 'none' }}></th>
+                    {weeks && weeks.length > 0 ? (
+                      weeks.map((_, index) => (
+                      <th key={index} style={{ textAlign: 'center', width: '100px' }}>Week {index + 1}</th>
+                      ))
+                    ) : (
+                      <th style={{ textAlign: 'center', width: '100px' }}>No Weeks</th>
+                    )}
+                    <th style={{ width: '235px' }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td colSpan={weeks.length * 2 + 2}>
+                      <Accordion defaultActiveKey="0">
+                        {weeks && weeks.length > 0 && weeks[0]?.days ? (
+                          weeks[0].days.map((day, dayIndex) => (
+                          <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
+                            <Accordion.Header>
+                              Day {dayIndex + 1}
+                              <Button
+                                onClick={(e) => { e.stopPropagation(); removeDay(dayIndex); }}
+                                className="ms-2 preset-btn delete-btn"
+                                variant="outline-danger"
+                                size="sm"
+                              >
+                                <Trash />
+                              </Button>
+                            </Accordion.Header>
+                            <Accordion.Body>
+                              {day.exercises.map((exercise, exIndex) => renderDesktopExerciseRow(day, dayIndex, exercise, exIndex))}
+                              <div className="text-center">
+                                <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
+                              </div>
+                            </Accordion.Body>
+                          </Accordion.Item>
+                          ))
+                        ) : (
+                          <div className="text-center p-3">
+                            <p className="text-muted">No days added to the program yet. Click "Add Day" to get started.</p>
+                          </div>
+                        )}
+                      </Accordion>
+                    </td>
+                  </tr>
+                </tbody>
+              </Table>
+            </div>
+          )}
 
-      <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>
-            Exercise Notes
-            {currentNoteExercise.dayIndex !== null && weeks && weeks[0]?.days?.[currentNoteExercise.dayIndex]?.exercises?.[currentNoteExercise.exIndex] ? (
-              <div className="text-muted fs-6">
-                {(() => {
-                  const exerciseId = weeks[0].days[currentNoteExercise.dayIndex].exercises[currentNoteExercise.exIndex].exerciseId;
-                  const exercise = exercises.find(e => e.value === exerciseId);
-                  console.log('Notes modal exercise lookup:', {
-                    exerciseId,
-                    foundExercise: !!exercise,
+          <div className={`d-flex ${isMobile ? 'flex-column program-misc-input' : 'justify-content-between'} mt-3`}>
+            <Button onClick={addDay} className={`soft-button create-program-button gradient ${isMobile ? 'mb-3 w-100' : ''}`}>Add Day</Button>
+            <Button
+              onClick={saveProgram}
+              className={`soft-button create-program-button gradient ${isMobile ? 'w-100' : ''}`}
+              disabled={isSubmitting || !programName}
+            >
+              {mode === 'edit' ? 'Update Program' : 'Save Program'}
+            </Button>
+          </div>
+
+          <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
+            <Modal.Header closeButton>
+              <Modal.Title>
+                Exercise Notes
+                {currentNoteExercise.dayIndex !== null && weeks && weeks[0]?.days?.[currentNoteExercise.dayIndex]?.exercises?.[currentNoteExercise.exIndex] ? (
+                  <div className="text-muted fs-6">
+                    {(() => {
+                      const exerciseId = weeks[0].days[currentNoteExercise.dayIndex].exercises[currentNoteExercise.exIndex].exerciseId;
+                      const exercise = exercises.find(e => e.value === exerciseId);
+                      console.log('Notes modal exercise lookup:', {
+                        exerciseId,
+                        foundExercise: !!exercise,
+                        currentNoteExercise,
+                        hasWeeks: !!weeks,
+                        hasDays: !!weeks?.[0]?.days,
+                        dayIndex: currentNoteExercise.dayIndex,
+                        exIndex: currentNoteExercise.exIndex
+                      });
+                      return exercise?.label || 'Exercise';
+                    })()}
+                  </div>
+                ) : (
+                  console.warn('Notes modal missing data:', {
                     currentNoteExercise,
                     hasWeeks: !!weeks,
                     hasDays: !!weeks?.[0]?.days,
-                    dayIndex: currentNoteExercise.dayIndex,
-                    exIndex: currentNoteExercise.exIndex
+                    dayIndex: currentNoteExercise?.dayIndex,
+                    exIndex: currentNoteExercise?.exIndex
+                  })
+                )}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form.Control
+                as="textarea"
+                rows={5}
+                value={currentNoteExercise.tempNotes || ''}
+                onChange={(e) => setCurrentNoteExercise(prev => ({ ...prev, tempNotes: e.target.value }))}
+                className="soft-input notes-input"
+                placeholder="Add notes about weight, form cues, or any other details for this exercise"
+              />
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Cancel</Button>
+              <Button 
+                className="soft-button gradient" 
+                onClick={() => {
+                  console.log('Saving notes:', {
+                    currentNoteExercise,
+                    hasWeeks: !!weeks,
+                    hasDays: !!weeks?.[0]?.days,
+                    dayIndex: currentNoteExercise?.dayIndex,
+                    exIndex: currentNoteExercise?.exIndex
                   });
-                  return exercise?.label || 'Exercise';
-                })()}
-              </div>
-            ) : (
-              console.warn('Notes modal missing data:', {
-                currentNoteExercise,
-                hasWeeks: !!weeks,
-                hasDays: !!weeks?.[0]?.days,
-                dayIndex: currentNoteExercise?.dayIndex,
-                exIndex: currentNoteExercise?.exIndex
-              })
+                  saveNotes();
+                }}
+              >
+                Add Note
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          <ExerciseSelectionModal
+            show={showExerciseModal}
+            onHide={() => setShowExerciseModal(false)}
+            onSelect={(selectedOption) => updateExercise(
+              currentExerciseSelection.weekIndex,
+              currentExerciseSelection.dayIndex,
+              currentExerciseSelection.exIndex,
+              'exerciseId',
+              selectedOption
             )}
-          </Modal.Title>
+            exercises={exercises}
+            onCreateNew={() => setShowExerciseCreationModal(true)}
+          />
+
+          {/* New Exercise Creation Modal */}
+          <ExerciseCreationModal
+            show={showExerciseCreationModal}
+            onHide={() => setShowExerciseCreationModal(false)}
+            onExerciseAdded={handleNewExerciseAdded}
+          />
+        </>
+      )}
+      {/* Program Preview Modal (always rendered so it works in all steps) */}
+      <Modal show={showPreviewModal} onHide={() => setShowPreviewModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Program Preview</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <Form.Control
-            as="textarea"
-            rows={5}
-            value={currentNoteExercise.tempNotes || ''}
-            onChange={(e) => setCurrentNoteExercise(prev => ({ ...prev, tempNotes: e.target.value }))}
-            className="soft-input notes-input"
-            placeholder="Add notes about weight, form cues, or any other details for this exercise"
-          />
+          {previewProgram ? (
+            <div>
+              <h5>{previewProgram.name}</h5>
+              <div className="mb-2 text-muted">
+                {previewProgram.duration} weeks, {previewProgram.daysPerWeek} days/week
+              </div>
+              <div style={{maxHeight: 350, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#f8f9fa'}}>
+                {(() => {
+                  // Convert flattened weeklyConfigs to array if needed
+                  let weeksArr = [];
+                  if (previewProgram.weeklyConfigs && previewProgram.duration && previewProgram.daysPerWeek) {
+                    weeksArr = Array.from({ length: previewProgram.duration }, () => ({
+                      days: Array.from({ length: previewProgram.daysPerWeek }, () => ({ exercises: [] }))
+                    }));
+                    for (let key in previewProgram.weeklyConfigs) {
+                      const match = key.match(/week(\d+)_day(\d+)_exercises/);
+                      if (match) {
+                        const weekIndex = parseInt(match[1], 10) - 1;
+                        const dayIndex = parseInt(match[2], 10) - 1;
+                        if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
+                          weeksArr[weekIndex].days[dayIndex].exercises = (previewProgram.weeklyConfigs[key] || []);
+                        }
+                      }
+                    }
+                  }
+                  return (
+                    <div>
+                      {weeksArr.length === 0 ? (
+                        <div className="text-muted">No structure available.</div>
+                      ) : (
+                        weeksArr.map((week, wIdx) => (
+                          <div key={wIdx} className="mb-2">
+                            <div style={{fontWeight: 600, color: '#0d6efd'}}>Week {wIdx + 1}</div>
+                            {week.days.map((day, dIdx) => (
+                              <div key={dIdx} className="ms-3 mb-1">
+                                <span style={{fontWeight: 500}}>Day {dIdx + 1}:</span>
+                                {day.exercises.length === 0 ? (
+                                  <span className="text-muted ms-2">No exercises</span>
+                                ) : (
+                                  <ul className="mb-1" style={{marginLeft: 16}}>
+                                    {day.exercises.map((ex, eIdx) => (
+                                      <li key={eIdx}>
+                                        {ex.exerciseName || ex.exerciseId || 'Exercise'}
+                                        {ex.sets && ex.reps && (
+                                          <span className="ms-2 text-muted">({ex.sets} x {ex.reps})</span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          ) : null}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Cancel</Button>
-          <Button 
-            className="soft-button gradient" 
-            onClick={() => {
-              console.log('Saving notes:', {
-                currentNoteExercise,
-                hasWeeks: !!weeks,
-                hasDays: !!weeks?.[0]?.days,
-                dayIndex: currentNoteExercise?.dayIndex,
-                exIndex: currentNoteExercise?.exIndex
-              });
-              saveNotes();
-            }}
-          >
-            Add Note
-          </Button>
+          <Button variant="secondary" onClick={() => setShowPreviewModal(false)}>Close</Button>
+          {previewProgram && (
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (creationSource === 'template') {
+                  setSelectedTemplate(previewProgram);
+                } else if (creationSource === 'previous') {
+                  setSelectedPreviousProgram(previewProgram);
+                }
+                setShowPreviewModal(false);
+              }}
+            >
+              Select This Program
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
-
-      <ExerciseSelectionModal
-        show={showExerciseModal}
-        onHide={() => setShowExerciseModal(false)}
-        onSelect={(selectedOption) => updateExercise(
-          currentExerciseSelection.weekIndex,
-          currentExerciseSelection.dayIndex,
-          currentExerciseSelection.exIndex,
-          'exerciseId',
-          selectedOption
-        )}
-        exercises={exercises}
-        onCreateNew={() => setShowExerciseCreationModal(true)}
-      />
-
-      {/* New Exercise Creation Modal */}
-      <ExerciseCreationModal
-        show={showExerciseCreationModal}
-        onHide={() => setShowExerciseCreationModal(false)}
-        onExerciseAdded={handleNewExerciseAdded}
-      />
     </Container>
   );
 }
