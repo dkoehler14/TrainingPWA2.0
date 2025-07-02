@@ -49,7 +49,7 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
   );
 };
 
-function CreateProgram({ mode = 'create' }) {
+function CreateProgram({ mode = 'create', userRole }) {
   const { programId } = useParams();
   const navigate = useNavigate();
   const [programName, setProgramName] = useState('');
@@ -79,6 +79,7 @@ function CreateProgram({ mode = 'create' }) {
   const [userPrograms, setUserPrograms] = useState([]);
   const [previewProgram, setPreviewProgram] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [isTemplate, setIsTemplate] = useState(false);
 
   const setsRef = useRef(null);
   const repsRef = useRef(null);
@@ -523,9 +524,10 @@ function CreateProgram({ mode = 'create' }) {
       } else {
         await addDoc(collection(db, "programs"), {
           ...programData,
-          userId: user.uid,
-          isTemplate: false,
-          createdAt: new Date()
+          ...(userRole === 'admin' && isTemplate
+            ? { isTemplate: true, createdAt: new Date() }
+            : { userId: user.uid, isTemplate: false, createdAt: new Date() }
+          )
         });
         invalidateCache('programs');
         alert('Program created successfully!');
@@ -538,6 +540,7 @@ function CreateProgram({ mode = 'create' }) {
           { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
           { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
         ]);
+        setIsTemplate(false);
       }
     } catch (error) {
       console.error("Error saving program:", error);
@@ -947,6 +950,18 @@ function CreateProgram({ mode = 'create' }) {
                   required
                 />
               </Form.Group>
+              {/* Admin template switch below Program Name */}
+              {userRole === 'admin' && mode !== 'edit' && (
+                <Form.Group className="mt-3">
+                  <Form.Check
+                    type="switch"
+                    id="template-switch"
+                    label="Create as Template Program (available to all users)"
+                    checked={isTemplate}
+                    onChange={e => setIsTemplate(e.target.checked)}
+                  />
+                </Form.Group>
+              )}
             </Col>
             <Col xs={12} md={6}>
               <Form.Group>
@@ -1187,6 +1202,11 @@ function CreateProgram({ mode = 'create' }) {
                       }
                     }
                   }
+                  // Helper to get exercise name from exercises list
+                  const getExerciseName = (exerciseId) => {
+                    const found = exercises.find(e => e.value === exerciseId || e.id === exerciseId);
+                    return found ? found.label || found.name : exerciseId;
+                  };
                   return (
                     <div>
                       {weeksArr.length === 0 ? (
@@ -1204,7 +1224,7 @@ function CreateProgram({ mode = 'create' }) {
                                   <ul className="mb-1" style={{marginLeft: 16}}>
                                     {day.exercises.map((ex, eIdx) => (
                                       <li key={eIdx}>
-                                        {ex.exerciseName || ex.exerciseId || 'Exercise'}
+                                        {getExerciseName(ex.exerciseId) || ex.exerciseId || 'Exercise'}
                                         {ex.sets && ex.reps && (
                                           <span className="ms-2 text-muted">({ex.sets} x {ex.reps})</span>
                                         )}
@@ -1236,6 +1256,7 @@ function CreateProgram({ mode = 'create' }) {
                   setSelectedPreviousProgram(previewProgram);
                 }
                 setShowPreviewModal(false);
+                setTimeout(() => setStep(3), 0);
               }}
             >
               Select This Program

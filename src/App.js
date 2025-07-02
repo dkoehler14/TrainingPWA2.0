@@ -70,7 +70,7 @@ function AppContent() {
       <Routes>
         <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
         <Route path="/exercises" element={user ? <Exercises user={user} userRole={userRole} /> : <Navigate to="/auth" />} />
-        <Route path="/create-program" element={user ? <CreateProgram /> : <Navigate to="/auth" />} />
+        <Route path="/create-program" element={user ? <CreateProgram userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/programs" element={user ? <Programs /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
@@ -79,7 +79,7 @@ function AppContent() {
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
         <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
-        <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
+        <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" userRole={userRole} />} />
         <Route path="/admin" element={user && userRole === 'admin' ? <Admin /> : <Navigate to="/" />} />
       </Routes>
     </Router>
