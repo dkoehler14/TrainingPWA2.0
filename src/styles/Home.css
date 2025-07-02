@@ -79,3 +79,24 @@
   color: var(--button-secondary-text);
   border: 1px solid var(--border-color);
 }
+
+/* Center header greeting and button on mobile */
+@media (max-width: 767px) {
+  .dashboard-greeting {
+    text-align: center;
+    width: 100%;
+  }
+  .home-header-row {
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center;
+  }
+  .home-header-row .col,
+  .home-header-row .col-xs-auto {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}

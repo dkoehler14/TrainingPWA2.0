@@ -53,11 +53,22 @@ function Home({ user }) {
         
         // **Data Processing (Simplified)**
         // NOTE: In a real app, these calculations might be more complex or done server-side.
+        // Calculate total volume for the week using reps and weights arrays
         const volumeThisWeek = workoutLogs.reduce((total, log) =>
-          total + log.exercises.reduce((vol, ex) => vol + (ex.sets * ex.reps * ex.weight), 0), 0);
+          total + log.exercises.reduce((vol, ex) => {
+            // If reps and weights are arrays, sum over all sets
+            if (Array.isArray(ex.reps) && Array.isArray(ex.weights)) {
+              return vol + ex.reps.reduce((setSum, r, i) => setSum + (Number(r) * Number(ex.weights[i] ?? 0)), 0);
+            }
+            // Fallback for legacy data
+            if (typeof ex.sets === 'number' && typeof ex.reps === 'number' && typeof ex.weight === 'number') {
+              return vol + (ex.sets * ex.reps * ex.weight);
+            }
+            return vol;
+          }, 0), 0);
 
         setDashboardData({
-          userName: userProfile?.displayName || user.email,
+          userName: userProfile?.name || user.email,
           workoutStreak: userProfile?.workoutStreak || 0, // Assuming this is stored in user profile
           volumeLifted: volumeThisWeek,
           prsThisMonth: 0, // Placeholder - PR calculation is complex
@@ -88,7 +99,7 @@ function Home({ user }) {
       ) : (
         <>
           {/* Header */}
-          <Row className="align-items-center mb-4">
+          <Row className="align-items-center mb-4 home-header-row">
             <Col>
               <h1 className="soft-title dashboard-greeting">
                 👋 Welcome back, {dashboardData.userName}!
@@ -147,7 +158,20 @@ function Home({ user }) {
                       {dashboardData.recentActivity.map(activity => (
                         <li key={activity.id} className="recent-activity-item">
                           <span>{activity.name || 'Workout'}</span>
-                          <span className="soft-text-secondary">{new Date(activity.date.seconds * 1000).toLocaleDateString()}</span>
+                          <span className="soft-text-secondary">{
+                            (() => {
+                              // Robust date handling: Firestore Timestamp or JS Date
+                              let d = activity.date;
+                              if (d && typeof d.toDate === 'function') {
+                                d = d.toDate();
+                              } else if (d && typeof d.seconds === 'number') {
+                                d = new Date(d.seconds * 1000);
+                              } else if (!(d instanceof Date)) {
+                                d = new Date(d);
+                              }
+                              return d && !isNaN(d) ? d.toLocaleDateString() : '';
+                            })()
+                          }</span>
                         </li>
                       ))}
                     </ul>
