@@ -23,12 +23,16 @@ function ExerciseCreationModal({
     isEditMode = false,   // Add or edit mode
     exerciseId,           // Required if isEditMode is true
     initialData,          // Optional object with name, primaryMuscleGroup
+    user,                 // The current user object
+    userRole              // The current user's role
 }) {
     const [formData, setFormData] = useState({
         name: '',
         primaryMuscleGroup: '',
         exerciseType: ''
     });
+
+    const [adminVisibility, setAdminVisibility] = useState('main'); // 'main' or 'personal'
 
     useEffect(() => {
         if (show) {
@@ -38,15 +42,21 @@ function ExerciseCreationModal({
                     primaryMuscleGroup: initialData?.primaryMuscleGroup || '',
                     exerciseType: initialData?.exerciseType || ''
                 });
+                if (userRole === 'admin' && initialData?.userId) {
+                    setAdminVisibility('personal');
+                } else {
+                    setAdminVisibility('main');
+                }
             } else {
                 setFormData({
                     name: '',
                     primaryMuscleGroup: '',
                     exerciseType: ''
                 });
+                setAdminVisibility('main');
             }
         }
-    }, [show, isEditMode, initialData]);
+    }, [show, isEditMode, initialData, userRole]);
 
     const [validationError, setValidationError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -115,6 +125,14 @@ function ExerciseCreationModal({
                 primaryMuscleGroup: formData.primaryMuscleGroup,
                 exerciseType: formData.exerciseType
             };
+            // Admin: set userId only if personal, not main
+            if (!isEditMode && userRole === 'admin' && adminVisibility === 'personal' && user && user.uid) {
+                exerciseData.userId = user.uid;
+            }
+            // Regular user: always set userId
+            if (!isEditMode && userRole !== 'admin' && user && user.uid) {
+                exerciseData.userId = user.uid;
+            }
 
             if (isEditMode) {
                 // Update in Firestore
@@ -237,6 +255,21 @@ function ExerciseCreationModal({
                             )}
                         </InputGroup>
                     ))} */}
+
+                    {/* Admin visibility select */}
+                    {userRole === 'admin' && !isEditMode && (
+                        <Form.Group className="mb-3">
+                            <Form.Label>Exercise Visibility</Form.Label>
+                            <Form.Select
+                                value={adminVisibility}
+                                onChange={e => setAdminVisibility(e.target.value)}
+                                className="soft-input"
+                            >
+                                <option value="main">Main List (Global)</option>
+                                <option value="personal">Personal (Custom)</option>
+                            </Form.Select>
+                        </Form.Group>
+                    )}
                 </Form>
             </Modal.Body>
             <Modal.Footer>

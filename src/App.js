@@ -69,7 +69,7 @@ function AppContent() {
       <NavBar user={user} userRole={userRole} />
       <Routes>
         <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
-        <Route path="/exercises" element={user ? <Exercises /> : <Navigate to="/auth" />} />
+        <Route path="/exercises" element={user ? <Exercises user={user} userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/create-program" element={user ? <CreateProgram /> : <Navigate to="/auth" />} />
         <Route path="/programs" element={user ? <Programs /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />

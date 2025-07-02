@@ -6,7 +6,7 @@ import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/Exercises.css';
 import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
 
-function Exercises() {
+function Exercises({ user, userRole }) {
   const [exercises, setExercises] = useState([]);
 
   // State for validation and feedback
@@ -21,6 +21,15 @@ function Exercises() {
   useEffect(() => {
     fetchExercises();
   }, []);
+
+  useEffect(() => {
+    // Filter exercises based on user role
+    if (userRole === 'admin') {
+      // Admin sees all exercises
+      return;
+    }
+    setExercises(prevExercises => prevExercises.filter(ex => !ex.userId || ex.userId === user?.uid));
+  }, [userRole, user]);
 
   const fetchExercises = async () => {
     setIsLoading(true);
@@ -126,6 +135,8 @@ function Exercises() {
         initialData={isEditMode ? currentExercise : null}
         onExerciseAdded={handleExerciseAdded}
         onExerciseUpdated={handleExerciseUpdated}
+        user={user}
+        userRole={userRole}
       />
     </Container>
   );
