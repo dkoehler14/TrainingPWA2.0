@@ -5,7 +5,7 @@ import { signOut } from 'firebase/auth';
 import { useTheme } from '../context/ThemeContext';
 import '../styles/Navbar.css';
 
-function NavBar({ user }) {
+function NavBar({ user, userRole }) {
   const { darkMode, toggleDarkMode } = useTheme();
 
   const handleLogout = () => {
@@ -26,6 +26,7 @@ function NavBar({ user }) {
             <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
             <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
+            {userRole === 'admin' && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
           </Nav>
           <Nav className="d-flex align-items-center">
             <Button

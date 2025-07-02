@@ -22,7 +22,8 @@ function Auth() {
         // Create user document in Firestore
         await setDoc(doc(db, "users", user.uid), {
           email: user.email,
-          createdAt: new Date()
+          createdAt: new Date(),
+          role: "user"
         });
       } else {
         await signInWithEmailAndPassword(auth, email, password);

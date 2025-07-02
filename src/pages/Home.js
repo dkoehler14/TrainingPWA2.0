@@ -43,7 +43,7 @@ const TILES = [
   }
 ];
 
-function Home() {
+function Home({ userRole }) {
   const [isLoading, setIsLoading] = useState(false); // Default: not loading
 
   useEffect(() => {
@@ -96,6 +96,22 @@ function Home() {
                     </Card>
                   </Col>
                 ))}
+                {/* Example: Admin-only feature */}
+                {userRole === 'admin' && (
+                  <Col>
+                    <Card className="soft-card tile-card shadow border-0 h-100 bg-warning">
+                      <Card.Body className="text-center d-flex flex-column">
+                        <Card.Title className="soft-title tile-title mb-2">Admin Tools</Card.Title>
+                        <Card.Text className="soft-text tile-text flex-grow-1">
+                          Access special admin features and analytics.
+                        </Card.Text>
+                        <Button as={Link} to="/admin" className="soft-button tile-button gradient mt-auto" aria-label="Navigate to Admin Tools">
+                          Go to Admin
+                        </Button>
+                      </Card.Body>
+                    </Card>
+                  </Col>
+                )}
               </Row>
             </>
           )}

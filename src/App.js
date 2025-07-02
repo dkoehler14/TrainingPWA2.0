@@ -12,10 +12,13 @@ import Auth from './pages/Auth';
 import ProgressTracker2 from './pages/ProgressTracker2';
 import Analytics from './pages/Progress3';
 import Progress4 from './pages/Progress4';
+import Admin from './pages/Admin';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
 
 function App() {
   return (
@@ -27,12 +30,24 @@ function App() {
 
 function AppContent() {
   const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const { darkMode, toggleDarkMode } = useTheme();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        // Fetch user role from Firestore
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+          setUserRole(userDoc.data().role || 'user');
+        } else {
+          setUserRole('user');
+        }
+      } else {
+        setUserRole(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -51,7 +66,7 @@ function AppContent() {
 
   return (
     <Router>
-      <NavBar user={user} />
+      <NavBar user={user} userRole={userRole} />
       <Routes>
         <Route path="/" element={user ? <Home /> : <Navigate to="/auth" />} />
         <Route path="/exercises" element={user ? <Exercises /> : <Navigate to="/auth" />} />
@@ -65,6 +80,7 @@ function AppContent() {
         <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
+        <Route path="/admin" element={user && userRole === 'admin' ? <Admin /> : <Navigate to="/" />} />
       </Routes>
     </Router>
   );
