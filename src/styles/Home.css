@@ -1,53 +1,81 @@
+/* General Dashboard Styles */
 .home-container {
-  padding: 0 1.5rem;
+  padding: 2rem 1.5rem;
 }
 
-@media (max-width: 767px) {
-  .home-container {
-    padding: 0 1.5rem !important;
-    /* Retain original padding on mobile */
-  }
-}
-
-.home-title {
-  font-weight: 600;
+.dashboard-greeting {
+  font-weight: 700;
   color: var(--text-primary);
-  margin-bottom: 3rem;
 }
 
-.tile-row {
-  gap: 1.5rem;
+.cta-button {
+  font-weight: 600;
+  font-size: 1rem;
 }
 
-.tile-card {
+/* Metric Cards */
+.metric-card {
   border-radius: 15px;
-  padding: 20px;
-  transition: transform 0.3s ease-in-out;
-  font-family: 'Roboto', sans-serif !important;
+  background-color: var(--card-background);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+  padding: 1rem;
+}
+
+.metric-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Widget Cards */
+.widget-card {
+  border-radius: 15px;
   background-color: var(--card-background);
   box-shadow: var(--card-shadow);
 }
 
-.tile-card:hover {
-  transform: translateY(-10px);
-}
-
-.tile-title {
-  color: var(--text-primary);
-  font-size: 1.5rem;
+.widget-title {
+  font-size: 1.25rem;
   font-weight: 600;
-  font-family: 'Roboto', sans-serif !important;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
 }
 
-.tile-text {
-  color: var(--text-secondary);
-  font-size: 1rem;
-  font-family: 'Roboto', sans-serif !important;
-}
-
-.tile-button {
+/* Specific Widgets */
+.progress-snapshot-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  background-color: var(--background-secondary);
   border-radius: 10px;
-  padding: 10px 20px;
-  font-weight: 500;
-  font-family: 'Roboto', sans-serif !important;
+}
+
+.recent-activity-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.recent-activity-item:last-child {
+  border-bottom: none;
+}
+
+.program-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.soft-button-secondary {
+  background-color: var(--button-secondary-background);
+  color: var(--button-secondary-text);
+  border: 1px solid var(--border-color);
 }

@@ -1,122 +1,189 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
+import { getDocCached, getCollectionCached } from '../api/firestoreCache';
+import ErrorMessage from '../components/ErrorMessage';
 import '../styles/Home.css';
 
-// Consider creating a separate JSON or config file for tiles
-const TILES = [
-  { 
-    title: 'Current Workout', 
-    path: '/log-workout', 
-    description: 'Log your workout',
-    icon: 'fitness-icon' // Optional: add icon classes
-  },
-  { 
-    title: 'Programs', 
-    path: '/programs', 
-    description: 'View your programs',
-    icon: 'program-icon'
-  },
-  { 
-    title: 'Progress', 
-    path: '/progress-tracker', 
-    description: 'View your progress',
-    icon: 'progress-icon'
-  },
-  { 
-    title: 'Create Program', 
-    path: '/create-program', 
-    description: 'Design your next program',
-    icon: 'create-icon'
-  },
-  { 
-    title: 'Profile', 
-    path: '/profile', 
-    description: 'Manage your profile',
-    icon: 'profile-icon'
-  },
-  { 
-    title: 'Exercises', 
-    path: '/exercises', 
-    description: 'View and add exercises',
-    icon: 'exercise-icon'
-  }
-];
+// A simple chart component placeholder
+const ProgressSnapshot = () => (
+  <div className="progress-snapshot-placeholder">
+    <p className="soft-text">Progress chart coming soon...</p>
+  </div>
+);
 
-function Home({ userRole }) {
-  const [isLoading, setIsLoading] = useState(false); // Default: not loading
+function Home({ user }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dashboardData, setDashboardData] = useState({
+    userName: '',
+    workoutStreak: 0,
+    volumeLifted: 0,
+    prsThisMonth: 0,
+    currentProgram: null,
+    recentActivity: [],
+  });
 
   useEffect(() => {
-    // To simulate loading, uncomment the lines below:
-    // setIsLoading(true);
-    // const timer = setTimeout(() => setIsLoading(false), 500); // 0.5s fake load
-    // return () => clearTimeout(timer);
-  }, []);
+    if (!user) return;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Fetch user profile
+        const userProfile = await getDocCached('users', user.uid);
+        
+        // Fetch workout logs for stats
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const workoutLogs = await getCollectionCached('workoutLogs', {
+          where: [['userId', '==', user.uid], ['date', '>=', sevenDaysAgo]],
+          orderBy: [['date', 'desc']],
+          limit: 5
+        });
+
+        // Fetch current program
+        let currentProgram = null;
+        if (userProfile && userProfile.activeProgramId) {
+          currentProgram = await getDocCached('programs', userProfile.activeProgramId);
+        }
+        
+        // **Data Processing (Simplified)**
+        // NOTE: In a real app, these calculations might be more complex or done server-side.
+        const volumeThisWeek = workoutLogs.reduce((total, log) =>
+          total + log.exercises.reduce((vol, ex) => vol + (ex.sets * ex.reps * ex.weight), 0), 0);
+
+        setDashboardData({
+          userName: userProfile?.displayName || user.email,
+          workoutStreak: userProfile?.workoutStreak || 0, // Assuming this is stored in user profile
+          volumeLifted: volumeThisWeek,
+          prsThisMonth: 0, // Placeholder - PR calculation is complex
+          currentProgram: currentProgram,
+          recentActivity: workoutLogs,
+        });
+
+      } catch (e) {
+        console.error("Error fetching dashboard data:", e);
+        setError("Failed to load dashboard data. Please try again later.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
 
   return (
-    <Container fluid className="soft-container home-container">
-      <Row className="justify-content-center">
-        <Col md={10}>
-          {isLoading ? (
-            <div className="text-center py-4">
-              <Spinner animation="border" className="spinner-blue" />
-              <p className="soft-text mt-2">Loading...</p>
-            </div>
-          ) : (
-            <>
-              <h1 className="soft-title home-title text-center mb-4">Welcome to Workout Tracker</h1>
-              <Row xs={1} sm={2} md={3} lg={4} className="tile-row g-3">
-                {TILES.map((tile) => (
-                  <Col key={tile.path}>
-                    <Card 
-                      className="soft-card tile-card shadow border-0 h-100" 
-                      data-testid={`tile-${tile.title.toLowerCase().replace(/\s+/g, '-')}`}
-                    >
-                      <Card.Body className="text-center d-flex flex-column">
-                        {/* Optional: Add icon support */}
-                        {tile.icon && <div className={`tile-icon ${tile.icon} mb-2`}></div>}
-                        
-                        <Card.Title className="soft-title tile-title mb-2">
-                          {tile.title}
-                        </Card.Title>
-                        
-                        <Card.Text className="soft-text tile-text flex-grow-1">
-                          {tile.description}
-                        </Card.Text>
-                        
-                        <Button 
-                          as={Link} 
-                          to={tile.path} 
-                          className="soft-button tile-button gradient mt-auto"
-                          aria-label={`Navigate to ${tile.title}`}
-                        >
-                          Go
-                        </Button>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                ))}
-                {/* Example: Admin-only feature */}
-                {userRole === 'admin' && (
-                  <Col>
-                    <Card className="soft-card tile-card shadow border-0 h-100 bg-warning">
-                      <Card.Body className="text-center d-flex flex-column">
-                        <Card.Title className="soft-title tile-title mb-2">Admin Tools</Card.Title>
-                        <Card.Text className="soft-text tile-text flex-grow-1">
-                          Access special admin features and analytics.
-                        </Card.Text>
-                        <Button as={Link} to="/admin" className="soft-button tile-button gradient mt-auto" aria-label="Navigate to Admin Tools">
-                          Go to Admin
-                        </Button>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                )}
-              </Row>
-            </>
-          )}
-        </Col>
-      </Row>
+    <Container fluid className="soft-container home-container py-4">
+      {isLoading ? (
+        <div className="text-center py-5">
+          <Spinner animation="border" className="spinner-blue" />
+          <p className="soft-text mt-2">Loading your dashboard...</p>
+        </div>
+      ) : error ? (
+        <ErrorMessage message={error} />
+      ) : (
+        <>
+          {/* Header */}
+          <Row className="align-items-center mb-4">
+            <Col>
+              <h1 className="soft-title dashboard-greeting">
+                👋 Welcome back, {dashboardData.userName}!
+              </h1>
+            </Col>
+            <Col xs="auto">
+              <Button as={Link} to="/log-workout" className="soft-button gradient cta-button">
+                🚀 Start Today's Workout
+              </Button>
+            </Col>
+          </Row>
+
+          {/* Key Metrics */}
+          <Row className="g-4 mb-4">
+            <Col md={4}>
+              <Card className="soft-card metric-card h-100">
+                <Card.Body>
+                  <Card.Title className="metric-title">Workout Streak</Card.Title>
+                  <Card.Text className="metric-value">{dashboardData.workoutStreak} Days</Card.Text>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col md={4}>
+              <Card className="soft-card metric-card h-100">
+                <Card.Body>
+                  <Card.Title className="metric-title">Volume Lifted (This Week)</Card.Title>
+                  <Card.Text className="metric-value">{dashboardData.volumeLifted.toLocaleString()} lbs</Card.Text>
+                </Card.Body>
+              </Card>
+            </Col>
+            <Col md={4}>
+              <Card className="soft-card metric-card h-100">
+                <Card.Body>
+                  <Card.Title className="metric-title">PRs This Month</Card.Title>
+                  <Card.Text className="metric-value">{dashboardData.prsThisMonth}</Card.Text>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* Main Dashboard */}
+          <Row className="g-4">
+            {/* Left Column */}
+            <Col lg={7}>
+              <Card className="soft-card widget-card mb-4">
+                <Card.Body>
+                  <Card.Title className="widget-title">Progress Snapshot</Card.Title>
+                  <ProgressSnapshot />
+                </Card.Body>
+              </Card>
+              <Card className="soft-card widget-card">
+                <Card.Body>
+                  <Card.Title className="widget-title">Recent Activity</Card.Title>
+                  {dashboardData.recentActivity.length > 0 ? (
+                    <ul className="list-unstyled">
+                      {dashboardData.recentActivity.map(activity => (
+                        <li key={activity.id} className="recent-activity-item">
+                          <span>{activity.name || 'Workout'}</span>
+                          <span className="soft-text-secondary">{new Date(activity.date.seconds * 1000).toLocaleDateString()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="soft-text">No recent workouts logged.</p>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+
+            {/* Right Column */}
+            <Col lg={5}>
+              {dashboardData.currentProgram && (
+                <Card className="soft-card widget-card mb-4">
+                  <Card.Body>
+                    <Card.Title className="widget-title">Current Program</Card.Title>
+                    <p className="program-name">{dashboardData.currentProgram.name}</p>
+                    {/* <p className="soft-text-secondary">Next: {dashboardData.currentProgram.nextWorkout}</p> */}
+                    <Button as={Link} to={`/programs/${dashboardData.currentProgram.id}`} className="soft-button-secondary mt-2">View Program</Button>
+                  </Card.Body>
+                </Card>
+              )}
+              <Card className="soft-card widget-card">
+                <Card.Body>
+                  <Card.Title className="widget-title">Navigate To...</Card.Title>
+                  <div className="d-grid gap-2">
+                    <Button as={Link} to="/create-program" className="soft-button-secondary">Create Program</Button>
+                    <Button as={Link} to="/exercises" className="soft-button-secondary">Exercises</Button>
+                    <Button as={Link} to="/profile" className="soft-button-secondary">Profile</Button>
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        </>
+      )}
     </Container>
   );
 }
