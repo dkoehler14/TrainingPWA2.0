@@ -12,7 +12,7 @@ const MUSCLE_GROUPS = [
 const EXERCISE_TYPES = [
     'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
     'Bodyweight Only', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
-    'Machine', 'Smith Machine', 'Camber Bar'
+    'Machine', 'Smith Machine', 'Camber Bar', 'Bands'
 ];
 
 const ExerciseGrid = ({

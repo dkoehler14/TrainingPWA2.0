@@ -12,7 +12,7 @@ const MUSCLE_GROUPS = [
 const EXERCISE_TYPES = [
     'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
     'Bodyweight', 'Bodyweight Loadable', 'Swiss Bar', 'Kettlebell',
-    'Machine', 'Smith Machine', 'Camber Bar'
+    'Machine', 'Smith Machine', 'Camber Bar', 'Bands'
 ];
 
 function ExerciseCreationModal({
