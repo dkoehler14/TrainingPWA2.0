@@ -861,6 +861,20 @@ function LogWorkout() {
     }
   };
 
+  // Helper to get the day name from selectedProgram.weeklyConfigs
+  const getDayName = (weekIdx, dayIdx) => {
+    if (
+      selectedProgram &&
+      selectedProgram.weeklyConfigs &&
+      selectedProgram.weeklyConfigs[weekIdx] &&
+      selectedProgram.weeklyConfigs[weekIdx][dayIdx] &&
+      selectedProgram.weeklyConfigs[weekIdx][dayIdx].name
+    ) {
+      return selectedProgram.weeklyConfigs[weekIdx][dayIdx].name;
+    }
+    return `Day ${dayIdx + 1}`;
+  };
+
   return (
     <Container fluid className="soft-container">
       <Row className="justify-content-center">
@@ -895,7 +909,7 @@ function LogWorkout() {
                   <>
                     <div className="mb-3">
                       <h5 className="soft-text" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        Week {selectedWeek + 1}, Day {selectedDay + 1}
+                        Week {selectedWeek + 1}, {getDayName(selectedWeek, selectedDay)}
                         <Button onClick={() => setShowGridModal(true)} className="soft-button">
                           Change Week/Day
                         </Button>
@@ -932,7 +946,7 @@ function LogWorkout() {
                                       }}
                                       className={isCompleted ? "completed-day" : ""}
                                     >
-                                      Day {dayIndex + 1} {isCompleted && <span>✓</span>}
+                                      {getDayName(weekIndex, dayIndex)} {isCompleted && <span>✓</span>}
                                     </Button>
                                   );
                                 })}

@@ -55,10 +55,10 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [programName, setProgramName] = useState('');
   const [weightUnit, setWeightUnit] = useState('LB');
   const [weeks, setWeeks] = useState([
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-    { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+    { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ name: 'Day 2', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ name: 'Day 3', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+    { days: [{ name: 'Day 4', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
   ]);
   const [exercises, setExercises] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,7 +71,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
   const user = auth.currentUser;
   const [isLoading, setIsLoading] = useState(mode === 'edit');
-  const [step, setStep] = useState(1); // Stepper: 1=choose, 2=select, 3=edit
+  const [step, setStep] = useState(mode === 'edit' ? 3 : 1); // Stepper: 1=choose, 2=select, 3=edit
   const [creationSource, setCreationSource] = useState('scratch'); // 'scratch' | 'template' | 'previous'
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [selectedPreviousProgram, setSelectedPreviousProgram] = useState(null);
@@ -80,6 +80,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [previewProgram, setPreviewProgram] = useState(null);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isTemplate, setIsTemplate] = useState(false);
+  const [editingDay, setEditingDay] = useState({ dayIndex: null, value: '' });
 
   const setsRef = useRef(null);
   const repsRef = useRef(null);
@@ -223,7 +224,7 @@ function CreateProgram({ mode = 'create', userRole }) {
             } else {
               console.warn('Invalid weekly configs structure, setting default');
               setWeeks([
-                { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+                { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
               ]);
             }
           } else {
@@ -234,7 +235,7 @@ function CreateProgram({ mode = 'create', userRole }) {
           console.error("Error loading program:", error);
           alert("Failed to load program data. Starting with empty program.");
           setWeeks([
-            { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+            { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
           ]);
         } finally {
           setIsLoading(false);
@@ -308,10 +309,10 @@ function CreateProgram({ mode = 'create', userRole }) {
         setProgramName('');
         setWeightUnit('LB');
         setWeeks([
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+          { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 2', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 3', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 4', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
         ]);
       }
     }
@@ -389,7 +390,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const removeDay = (dayIndex) => {
     const newWeeks = weeks.map(week => ({
       ...week,
-      days: week.days.filter((_, index) => index !== dayIndex)
+      days: week.days.filter((_, index) => index !== dayIndex).map((day, idx) => ({ ...day, name: `Day ${idx + 1}` }))
     }));
     setWeeks(newWeeks);
   };
@@ -397,7 +398,10 @@ function CreateProgram({ mode = 'create', userRole }) {
   const addDay = () => {
     const newWeeks = weeks.map(week => ({
       ...week,
-      days: [...week.days, { exercises: [{ exerciseId: '', sets: 3, reps: 8 }] }]
+      days: [
+        ...week.days,
+        { name: `Day ${week.days.length + 1}`, exercises: [{ exerciseId: '', sets: 3, reps: 8 }] }
+      ]
     }));
     setWeeks(newWeeks);
   };
@@ -499,12 +503,15 @@ function CreateProgram({ mode = 'create', userRole }) {
       const flattenedConfigs = {};
       weeks.forEach((week, weekIndex) => {
         week.days.forEach((day, dayIndex) => {
-          flattenedConfigs[`week${weekIndex + 1}_day${dayIndex + 1}_exercises`] = day.exercises.map(ex => ({
-            exerciseId: ex.exerciseId,
-            sets: ex.sets,
-            reps: ex.reps,
-            notes: ex.notes || '',
-          }));
+          flattenedConfigs[`week${weekIndex + 1}_day${dayIndex + 1}`] = {
+            name: day.name || `Day ${dayIndex + 1}`,
+            exercises: day.exercises.map(ex => ({
+              exerciseId: ex.exerciseId,
+              sets: ex.sets,
+              reps: ex.reps,
+              notes: ex.notes || '',
+            }))
+          };
         });
       });
 
@@ -535,10 +542,10 @@ function CreateProgram({ mode = 'create', userRole }) {
         setProgramName('');
         setWeightUnit('LB');
         setWeeks([
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
-          { days: [{ exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
+          { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 2', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 3', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] },
+          { days: [{ name: 'Day 4', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
         ]);
         setIsTemplate(false);
       }
@@ -779,6 +786,39 @@ function CreateProgram({ mode = 'create', userRole }) {
     });
   }, [isLoading, weeks, isMobile]);
 
+  // Inline day name editing handlers
+  const handleDayNameClick = (dayIndex, currentName) => {
+    setEditingDay({ dayIndex, value: currentName || `Day ${dayIndex + 1}` });
+  };
+
+  const handleDayNameChange = (e) => {
+    setEditingDay(prev => ({ ...prev, value: e.target.value }));
+  };
+
+  const handleDayNameBlur = (dayIndex) => {
+    if (editingDay.value.trim() === '') {
+      setEditingDay({ dayIndex: null, value: '' });
+      return;
+    }
+    // Update the name for all weeks at this day index
+    const newWeeks = weeks.map(week => ({
+      ...week,
+      days: week.days.map((day, idx) =>
+        idx === dayIndex ? { ...day, name: editingDay.value } : day
+      )
+    }));
+    setWeeks(newWeeks);
+    setEditingDay({ dayIndex: null, value: '' });
+  };
+
+  const handleDayNameKeyDown = (e, dayIndex) => {
+    if (e.key === 'Enter') {
+      handleDayNameBlur(dayIndex);
+    } else if (e.key === 'Escape') {
+      setEditingDay({ dayIndex: null, value: '' });
+    }
+  };
+
   if (isLoading) {
     return (
       <Container fluid className="soft-container create-program-container">
@@ -1002,7 +1042,29 @@ function CreateProgram({ mode = 'create', userRole }) {
                 weeks[0].days.map((day, dayIndex) => (
                 <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
                   <Accordion.Header className="d-flex justify-content-between">
-                    <span className="me-3">Day {dayIndex + 1}</span>
+                    {/* Inline editable day name */}
+                    <span className="me-3">
+                      {editingDay.dayIndex === dayIndex ? (
+                        <Form.Control
+                          type="text"
+                          value={editingDay.value}
+                          autoFocus
+                          onChange={(e) => handleDayNameChange(e)}
+                          onBlur={() => handleDayNameBlur(dayIndex)}
+                          onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
+                          style={{ maxWidth: 160, display: 'inline-block' }}
+                          size="sm"
+                        />
+                      ) : (
+                        <span
+                          style={{ cursor: 'pointer', fontWeight: 500 }}
+                          onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
+                          title="Click to edit day name"
+                        >
+                          {day.name || `Day ${dayIndex + 1}`}
+                        </span>
+                      )}
+                    </span>
                     <div onClick={(e) => e.stopPropagation()} className="me-3">
                       <Button onClick={() => removeDay(dayIndex)} className="preset-btn delete-btn" variant="outline-danger" size="sm"><Trash /></Button>
                     </div>
@@ -1045,7 +1107,27 @@ function CreateProgram({ mode = 'create', userRole }) {
                           weeks[0].days.map((day, dayIndex) => (
                           <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
                             <Accordion.Header>
-                              Day {dayIndex + 1}
+                              {/* Inline editable day name */}
+                              {editingDay.dayIndex === dayIndex ? (
+                                <Form.Control
+                                  type="text"
+                                  value={editingDay.value}
+                                  autoFocus
+                                  onChange={(e) => handleDayNameChange(e)}
+                                  onBlur={() => handleDayNameBlur(dayIndex)}
+                                  onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
+                                  style={{ maxWidth: 160, display: 'inline-block' }}
+                                  size="sm"
+                                />
+                              ) : (
+                                <span
+                                  style={{ cursor: 'pointer', fontWeight: 500 }}
+                                  onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
+                                  title="Click to edit day name"
+                                >
+                                  {day.name || `Day ${dayIndex + 1}`}
+                                </span>
+                              )}
                               <Button
                                 onClick={(e) => { e.stopPropagation(); removeDay(dayIndex); }}
                                 className="ms-2 preset-btn delete-btn"
@@ -1207,6 +1289,12 @@ function CreateProgram({ mode = 'create', userRole }) {
                     const found = exercises.find(e => e.value === exerciseId || e.id === exerciseId);
                     return found ? found.label || found.name : exerciseId;
                   };
+                  // Ensure all days have a name
+                  weeksArr.forEach((week, wIdx) => {
+                    week.days.forEach((day, dIdx) => {
+                      if (!day.name) day.name = `Day ${dIdx + 1}`;
+                    });
+                  });
                   return (
                     <div>
                       {weeksArr.length === 0 ? (
