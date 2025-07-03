@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Alert, Spinner } from 'react-bootstrap';
 import { auth, db } from '../firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
+import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, GoogleAuthProvider, linkWithPopup } from 'firebase/auth';
 import '../styles/UserProfile.css'
 
 function UserProfile() {
@@ -21,6 +21,8 @@ function UserProfile() {
   const [heightErrors, setHeightErrors] = useState({ feet: '', inches: '' });
   const user = auth.currentUser;
   const [isLoading, setIsLoading] = useState(true);
+  const [googleLinked, setGoogleLinked] = useState(false);
+  const [linking, setLinking] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -45,6 +47,15 @@ function UserProfile() {
       setIsLoading(false);
     };
     fetchUserData();
+  }, [user]);
+
+  useEffect(() => {
+    const checkGoogleLinked = () => {
+      if (user) {
+        setGoogleLinked(user.providerData.some((provider) => provider.providerId === 'google.com'));
+      }
+    };
+    checkGoogleLinked();
   }, [user]);
 
   const handleChange = (e) => {
@@ -133,6 +144,22 @@ function UserProfile() {
     }
   };
 
+  const handleLinkGoogle = async () => {
+    setError('');
+    setSuccess('');
+    setLinking(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await linkWithPopup(user, provider);
+      setGoogleLinked(true);
+      setSuccess('Google account linked successfully!');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLinking(false);
+    }
+  };
+
   return (
     <Container fluid className="soft-container profile-container">
       <Row className="justify-content-center">
@@ -148,6 +175,23 @@ function UserProfile() {
               <>
                 {error && <Alert variant="danger" className="soft-alert profile-alert">{error}</Alert>}
                 {success && <Alert variant="success" className="soft-alert profile-alert">{success}</Alert>}
+
+                <div className="mb-4">
+                  {googleLinked ? (
+                    <Alert variant="info" className="soft-alert profile-alert mb-0">
+                      Google account is already linked to your profile.
+                    </Alert>
+                  ) : (
+                    <Button
+                      variant="outline-primary"
+                      onClick={handleLinkGoogle}
+                      disabled={linking}
+                      className="mb-2"
+                    >
+                      {linking ? 'Linking...' : 'Link Google Account'}
+                    </Button>
+                  )}
+                </div>
 
                 <Form onSubmit={handleProfileUpdate}>
                   <Form.Group controlId="formEmail" className="profile-form-group">
