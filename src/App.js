@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import Exercises from './pages/Exercises';
@@ -14,12 +14,13 @@ import ProgressTracker3 from './pages/Progress3';
 import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
+import CacheDemo from './components/CacheDemo';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { getDocCached, getCacheStats } from './api/enhancedFirestoreCache';
+import cacheWarmingService from './services/cacheWarmingService';
 
 function App() {
   return (
@@ -33,18 +34,60 @@ function AppContent() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [cacheInitialized, setCacheInitialized] = useState(false);
   const { darkMode, toggleDarkMode } = useTheme();
+
+  // Initialize app cache on startup
+  useEffect(() => {
+    const initializeCache = async () => {
+      try {
+        console.log('🚀 Initializing app cache...');
+        await cacheWarmingService.initializeAppCache();
+        setCacheInitialized(true);
+        
+        // Add cache stats to window for debugging in development
+        if (process.env.NODE_ENV === 'development') {
+          window.getCacheStats = getCacheStats;
+          window.cacheWarmingService = cacheWarmingService;
+          console.log('🔧 Cache debugging tools available: window.getCacheStats(), window.cacheWarmingService');
+        }
+      } catch (error) {
+        console.error('❌ Cache initialization failed:', error);
+        setCacheInitialized(true); // Continue anyway
+      }
+    };
+
+    initializeCache();
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Fetch user role from Firestore
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-          setUserRole(userDoc.data().role || 'user');
-        } else {
-          setUserRole('user');
+        try {
+          // Fetch user role using enhanced cache
+          const userDoc = await getDocCached('users', currentUser.uid, 30 * 60 * 1000); // 30-minute cache
+          if (userDoc) {
+            setUserRole(userDoc.role || 'user');
+          } else {
+            setUserRole('user');
+          }
+
+          // Smart cache warming based on user context
+          if (cacheInitialized) {
+            const context = {
+              timeOfDay: new Date().getHours(),
+              dayOfWeek: new Date().getDay(),
+              isNewSession: true
+            };
+            
+            // Warm user cache in background
+            cacheWarmingService.smartWarmCache(currentUser.uid, context)
+              .catch(error => console.warn('⚠️ Cache warming failed:', error));
+          }
+        } catch (error) {
+          console.error('❌ User initialization failed:', error);
+          setUserRole('user'); // Fallback
         }
       } else {
         setUserRole(null);
@@ -52,7 +95,28 @@ function AppContent() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [cacheInitialized]);
+
+  // Track page navigation for smart cache warming
+  useEffect(() => {
+    if (user && cacheInitialized) {
+      const currentPath = window.location.pathname;
+      const pageName = currentPath.split('/')[1] || 'home';
+      
+      // Warm cache based on page context
+      const pageContext = {
+        lastVisitedPage: pageName,
+        timeOfDay: new Date().getHours(),
+        dayOfWeek: new Date().getDay()
+      };
+
+      // Progressive warming for heavy pages
+      if (['progress-tracker', 'log-workout', 'programs'].includes(pageName)) {
+        cacheWarmingService.progressiveWarmCache(user.uid)
+          .catch(error => console.warn('⚠️ Progressive cache warming failed:', error));
+      }
+    }
+  }, [user, cacheInitialized, window.location.pathname]);
 
   if (loading) {
     return (
@@ -83,6 +147,8 @@ function AppContent() {
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" userRole={userRole} />} />
         <Route path="/admin" element={user && userRole === 'admin' ? <Admin /> : <Navigate to="/" />} />
+        <Route path="/cache-demo" element={user && (userRole === 'admin' || process.env.NODE_ENV === 'development') ?
+          <CacheDemo /> : <Navigate to="/" />} />
       </Routes>
     </Router>
   );

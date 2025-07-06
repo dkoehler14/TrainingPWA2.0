@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import { getDocCached, getCollectionCached } from '../api/firestoreCache';
+import {
+  getDocCached,
+  getCollectionCached,
+  warmUserCache,
+  getCacheStats
+} from '../api/enhancedFirestoreCache';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/Home.css';
 
@@ -15,6 +20,7 @@ const ProgressSnapshot = () => (
 function Home({ user }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [cacheWarmed, setCacheWarmed] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     userName: '',
     volumeLifted: 0,
@@ -22,6 +28,32 @@ function Home({ user }) {
     currentProgram: null,
     recentActivity: [],
   });
+
+  // Cache warming effect - runs once when user is available
+  useEffect(() => {
+    if (!user || cacheWarmed) return;
+
+    const warmCache = async () => {
+      try {
+        console.log('🔥 Warming cache for Home dashboard...');
+        
+        // Warm user-specific cache with high priority for dashboard
+        await warmUserCache(user.uid, 'high');
+        setCacheWarmed(true);
+        
+        // Log cache stats for debugging
+        if (process.env.NODE_ENV === 'development') {
+          const stats = getCacheStats();
+          console.log('📊 Cache stats after warming:', stats);
+        }
+      } catch (error) {
+        console.warn('⚠️ Cache warming failed, continuing with normal loading:', error);
+        setCacheWarmed(true); // Continue anyway
+      }
+    };
+
+    warmCache();
+  }, [user, cacheWarmed]);
 
   useEffect(() => {
     if (!user) return;
@@ -31,10 +63,10 @@ function Home({ user }) {
         setIsLoading(true);
         setError(null);
 
-        // Fetch user profile
-        const userProfile = await getDocCached('users', user.uid);
+        // Enhanced cache usage with longer TTL for user profile (30 minutes)
+        const userProfile = await getDocCached('users', user.uid, 30 * 60 * 1000);
         
-        // Fetch workout logs for stats
+        // Fetch workout logs for stats with optimized caching (15 minutes)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
@@ -42,12 +74,12 @@ function Home({ user }) {
           where: [['userId', '==', user.uid], ['date', '>=', sevenDaysAgo]],
           orderBy: [['date', 'desc']],
           limit: 5
-        });
+        }, 15 * 60 * 1000); // 15-minute cache for recent activity
 
-        // Fetch current program
+        // Fetch current program with extended cache (1 hour)
         let currentProgram = null;
         if (userProfile && userProfile.activeProgramId) {
-          currentProgram = await getDocCached('programs', userProfile.activeProgramId);
+          currentProgram = await getDocCached('programs', userProfile.activeProgramId, 60 * 60 * 1000);
         }
         
         // **Data Processing (Simplified)**
@@ -83,7 +115,7 @@ function Home({ user }) {
     };
 
     fetchData();
-  }, [user]);
+  }, [user, cacheWarmed]); // Include cacheWarmed to ensure data loads after cache warming
 
   return (
     <Container fluid className="soft-container home-container py-4">
