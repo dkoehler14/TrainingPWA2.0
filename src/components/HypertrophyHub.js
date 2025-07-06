@@ -25,7 +25,7 @@ const HypertrophyHub = () => {
         'Biceps': { color: '#9b59b6', position: 'arms' },
         'Triceps': { color: '#9b59b6', position: 'arms' },
         //'Legs': { color: '#27ae60', position: 'legs' },
-        'Quadriceps': { color: '#27ae60', position: 'legs' },
+        'Quads': { color: '#27ae60', position: 'legs' },
         'Hamstrings': { color: '#2ecc71', position: 'legs' },
         'Glutes': { color: '#16a085', position: 'glutes' },
         'Calves': { color: '#1abc9c', position: 'calves' },
