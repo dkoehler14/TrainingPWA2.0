@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -32,14 +33,16 @@ if (missingEnvVars.length > 0) {
 let app;
 let db;
 let auth;
+let functions;
 
 try {
   app = initializeApp(firebaseConfig);
   db = getFirestore(app);
   auth = getAuth(app);
+  functions = getFunctions(app);
 } catch (error) {
   console.error('Error initializing Firebase:', error);
   throw new Error('Failed to initialize Firebase. Please check your configuration.');
 }
 
-export { db, auth };
+export { db, auth, functions };

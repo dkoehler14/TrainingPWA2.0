@@ -3,7 +3,7 @@ import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { auth } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useTheme } from '../context/ThemeContext';
-import '../styles/Navbar.css';
+import '../styles/NavBar.css';
 
 function NavBar({ user, userRole }) {
   const { darkMode, toggleDarkMode } = useTheme();
@@ -22,7 +22,9 @@ function NavBar({ user, userRole }) {
             <Nav.Link href="/" className="nav-link">Home</Nav.Link>
             {user && <Nav.Link href="/log-workout" className="nav-link">Current Workout</Nav.Link>}
             <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>
-            {user && <Nav.Link href="/progress-tracker" className="nav-link">Progress</Nav.Link>}
+            {user && <Nav.Link href="/progress-tracker" className="nav-link">Analytics</Nav.Link>}
+            {user && <Nav.Link href="/progress-coach" className="nav-link">Progress & AI Coach</Nav.Link>}
+            {/* {user && <Nav.Link href="/analytics" className="nav-link">Analytics</Nav.Link>} */}
             <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
             <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}

@@ -1,0 +1,399 @@
+.compound-lift-tracker {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    border-radius: 16px;
+    padding: 24px;
+    margin: 24px 0;
+    color: white;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* Loading State */
+.compound-lift-tracker.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top: 4px solid white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Header */
+.tracker-header {
+    margin-bottom: 24px;
+    text-align: center;
+}
+
+.tracker-header h3 {
+    margin: 0 0 8px 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.tracker-subtitle {
+    margin: 0;
+    font-size: 1rem;
+    opacity: 0.8;
+    font-style: italic;
+}
+
+/* Controls */
+.tracker-controls {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 150px;
+}
+
+.control-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.lift-select,
+.time-range-select {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 1rem;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.lift-select:focus,
+.time-range-select:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.lift-select option,
+.time-range-select option {
+    background: #2c3e50;
+    color: white;
+}
+
+/* Lift Summary Cards */
+.lift-summary-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.lift-card {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.lift-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.lift-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.lift-header h4 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.lift-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.lift-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.stat {
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #f39c12;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-sublabel {
+    font-size: 0.7rem;
+    opacity: 0.6;
+    margin-top: 2px;
+}
+
+/* Charts Section */
+.charts-section {
+    margin-bottom: 32px;
+}
+
+.chart-container {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.chart-container h4 {
+    margin: 0 0 20px 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    text-align: center;
+    opacity: 0.9;
+}
+
+/* PR History Section */
+.pr-history-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 24px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pr-history-section h4 {
+    margin: 0 0 20px 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+    text-align: center;
+    opacity: 0.9;
+}
+
+.pr-table-container {
+    overflow-x: auto;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.pr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.pr-table th {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.8rem;
+    opacity: 0.9;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pr-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background-color 0.2s ease;
+}
+
+.pr-table tr:hover td {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.exercise-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.exercise-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.pr-table strong {
+    color: #f39c12;
+}
+
+/* Empty and Auth States */
+.compound-lift-tracker.empty,
+.compound-lift-tracker.auth-required {
+    text-align: center;
+    padding: 60px 24px;
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+}
+
+.compound-lift-tracker.empty h3,
+.compound-lift-tracker.auth-required h3 {
+    margin-bottom: 16px;
+    font-size: 1.5rem;
+}
+
+.compound-lift-tracker.empty p,
+.compound-lift-tracker.auth-required p {
+    margin: 0;
+    font-size: 1rem;
+    opacity: 0.8;
+    line-height: 1.5;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .compound-lift-tracker {
+        padding: 20px;
+        margin: 16px 0;
+    }
+    
+    .tracker-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 16px;
+    }
+    
+    .control-group {
+        min-width: auto;
+    }
+    
+    .lift-summary-cards {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .lift-stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    
+    .chart-container {
+        padding: 16px;
+    }
+    
+    .pr-history-section {
+        padding: 16px;
+    }
+    
+    .pr-table {
+        font-size: 0.8rem;
+    }
+    
+    .pr-table th,
+    .pr-table td {
+        padding: 8px 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .compound-lift-tracker {
+        padding: 16px;
+        margin: 12px 0;
+    }
+    
+    .tracker-header h3 {
+        font-size: 1.5rem;
+    }
+    
+    .tracker-subtitle {
+        font-size: 0.9rem;
+    }
+    
+    .lift-stats {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+    
+    .stat-value {
+        font-size: 1.2rem;
+    }
+    
+    .chart-container h4,
+    .pr-history-section h4 {
+        font-size: 1.1rem;
+    }
+    
+    .pr-table {
+        font-size: 0.75rem;
+    }
+    
+    .pr-table th,
+    .pr-table td {
+        padding: 6px 8px;
+    }
+}
+
+/* Chart Customizations */
+.recharts-tooltip-wrapper {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 8px !important;
+}
+
+.recharts-default-tooltip {
+    background: rgba(0, 0, 0, 0.9) !important;
+    border: none !important;
+    border-radius: 8px !important;
+    color: white !important;
+}
+
+.recharts-legend-wrapper {
+    padding-top: 20px !important;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+    stroke: rgba(255, 255, 255, 0.1) !important;
+}
+
+.recharts-xAxis .recharts-cartesian-axis-tick-value,
+.recharts-yAxis .recharts-cartesian-axis-tick-value {
+    fill: rgba(255, 255, 255, 0.8) !important;
+    font-size: 12px !important;
+}

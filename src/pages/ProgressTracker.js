@@ -589,7 +589,7 @@ function ProgressTracker() {
 			<Button 
                 variant="primary" 
                 size="lg" 
-                onClick={() => navigate('/analytics')}
+                onClick={() => navigate('/progress-tracker-3')}
             >
                 Progress Tracker v3.0
             </Button>

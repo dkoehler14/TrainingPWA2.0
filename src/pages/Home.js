@@ -17,7 +17,6 @@ function Home({ user }) {
   const [error, setError] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     userName: '',
-    workoutStreak: 0,
     volumeLifted: 0,
     prsThisMonth: 0,
     currentProgram: null,
@@ -69,7 +68,6 @@ function Home({ user }) {
 
         setDashboardData({
           userName: userProfile?.name || user.email,
-          workoutStreak: userProfile?.workoutStreak || 0, // Assuming this is stored in user profile
           volumeLifted: volumeThisWeek,
           prsThisMonth: 0, // Placeholder - PR calculation is complex
           currentProgram: currentProgram,
@@ -114,14 +112,6 @@ function Home({ user }) {
 
           {/* Key Metrics */}
           <Row className="g-4 mb-4">
-            <Col md={4}>
-              <Card className="soft-card metric-card h-100">
-                <Card.Body>
-                  <Card.Title className="metric-title">Workout Streak</Card.Title>
-                  <Card.Text className="metric-value">{dashboardData.workoutStreak} Days</Card.Text>
-                </Card.Body>
-              </Card>
-            </Col>
             <Col md={4}>
               <Card className="soft-card metric-card h-100">
                 <Card.Body>

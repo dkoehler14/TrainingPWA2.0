@@ -10,7 +10,8 @@ import LogWorkout from './pages/LogWorkout';
 import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
 import ProgressTracker2 from './pages/ProgressTracker2';
-import Analytics from './pages/Progress3';
+import ProgressTracker3 from './pages/Progress3';
+import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
 import { auth } from './firebase';
@@ -75,9 +76,10 @@ function AppContent() {
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
+        <Route path="/progress-coach" element={user ? <ProgressCoach /> : <Navigate to="/auth" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
-        <Route path="/analytics" element={user ? <Analytics /> : <Navigate to="/auth" />} />
+        <Route path="/progress-tracker-3" element={user ? <ProgressTracker3 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" userRole={userRole} />} />
         <Route path="/admin" element={user && userRole === 'admin' ? <Admin /> : <Navigate to="/" />} />
