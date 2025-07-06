@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash } from 'react-bootstrap-icons';
-import { db, auth } from '../firebase';
+import { db, auth, functions } from '../firebase';
 import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 import { getCollectionCached, getDocCached, invalidateCache } from '../api/firestoreCache';
+import { httpsCallable } from 'firebase/functions';
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -194,7 +195,7 @@ function LogWorkout() {
           invalidateCache('workoutLogs');
         } else {
           // Create new log if none exists
-          await addDoc(collection(db, "workoutLogs"), logDataToSave);
+          const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
           invalidateCache('workoutLogs');
         }
         console.log('Workout log auto-saved');
@@ -843,14 +844,28 @@ function LogWorkout() {
         completedDate: Timestamp.fromDate(new Date())
       };
 
+      let logDocId;
       if (logsData.length > 0) {
-        const logDocId = logsData[0].id;
+        logDocId = logsData[0].id;
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
         invalidateCache('workoutLogs');
       } else {
-        await addDoc(collection(db, "workoutLogs"), logDataToSave);
+        const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
+        logDocId = docRef.id;
         invalidateCache('workoutLogs');
       }
+
+      // Trigger manual processing
+      try {
+        const processWorkout = httpsCallable(functions, 'processWorkoutManually');
+        await processWorkout({ workoutLogId: logDocId });
+        console.log('Workout processing triggered successfully');
+      } catch (processingError) {
+        console.error('Error triggering workout processing:', processingError);
+        // Don't fail the workout completion if processing fails
+        // You could show a warning to the user here if needed
+      }
+
       setIsWorkoutFinished(true);
       setShowSummaryModal(true);
     } catch (error) {
