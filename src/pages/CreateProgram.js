@@ -118,128 +118,241 @@ function CreateProgram({ mode = 'create', userRole }) {
 
   useEffect(() => {
     const loadProgram = async () => {
-      console.log('Starting loadProgram:', { mode, programId });
+      console.log('🔄 Starting loadProgram:', { mode, programId, timestamp: new Date().toISOString() });
       if (mode === 'edit' && programId) {
         try {
+          console.log('📡 Fetching program document...');
           const programDoc = await getDocCached('programs', programId);
+          console.log('📄 Raw program document:', programDoc);
+          
           if (programDoc) {
             const programData = programDoc;
-            console.log('Loaded program data:', {
+            console.log('✅ Program data loaded successfully:', {
+              id: programData.id,
               name: programData.name,
               duration: programData.duration,
               daysPerWeek: programData.daysPerWeek,
+              weightUnit: programData.weightUnit,
               hasWeeklyConfigs: !!programData.weeklyConfigs,
-              weeklyConfigsKeys: programData.weeklyConfigs ? Object.keys(programData.weeklyConfigs) : []
+              weeklyConfigsType: typeof programData.weeklyConfigs,
+              weeklyConfigsKeys: programData.weeklyConfigs ? Object.keys(programData.weeklyConfigs) : [],
+              weeklyConfigsLength: programData.weeklyConfigs ? Object.keys(programData.weeklyConfigs).length : 0,
+              rawWeeklyConfigs: programData.weeklyConfigs
             });
             
-            // Validate required fields
-            if (!programData.duration || !programData.daysPerWeek || !programData.weeklyConfigs) {
-              console.error('Invalid program structure:', {
+            // Validate required fields with detailed logging
+            console.log('🔍 Validating program structure...');
+            const validationErrors = [];
+            
+            if (!programData.duration) validationErrors.push('Missing duration');
+            if (!programData.daysPerWeek) validationErrors.push('Missing daysPerWeek');
+            if (!programData.weeklyConfigs) validationErrors.push('Missing weeklyConfigs');
+            
+            if (validationErrors.length > 0) {
+              console.error('❌ Program validation failed:', {
+                errors: validationErrors,
                 duration: programData.duration,
                 daysPerWeek: programData.daysPerWeek,
-                hasWeeklyConfigs: !!programData.weeklyConfigs
+                hasWeeklyConfigs: !!programData.weeklyConfigs,
+                weeklyConfigsType: typeof programData.weeklyConfigs,
+                fullProgramData: programData
               });
-              throw new Error("Invalid program data structure");
+              throw new Error(`Invalid program data structure: ${validationErrors.join(', ')}`);
             }
+            
+            console.log('✅ Program structure validation passed');
 
             setProgramName(programData.name || '');
             setWeightUnit(programData.weightUnit || 'LB');
             
             // Create the correct structure for weeks
-            const weeklyConfigs = Array.from({ length: programData.duration }, () => ({
-              days: Array.from({ length: programData.daysPerWeek }, () => ({
+            console.log('🏗️ Creating weeks structure...');
+            const weeklyConfigs = Array.from({ length: programData.duration }, (_, weekIdx) => ({
+              days: Array.from({ length: programData.daysPerWeek }, (_, dayIdx) => ({
+                name: `Day ${dayIdx + 1}`, // Default name
                 exercises: []
               }))
             }));
 
-            console.log('Created empty weeklyConfigs structure:', {
+            console.log('📋 Created empty weeklyConfigs structure:', {
               weeksLength: weeklyConfigs.length,
               firstWeekDaysLength: weeklyConfigs[0]?.days?.length,
-              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length
+              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length,
+              structurePreview: {
+                week0: {
+                  daysCount: weeklyConfigs[0]?.days?.length,
+                  day0ExercisesCount: weeklyConfigs[0]?.days?.[0]?.exercises?.length
+                }
+              }
             });
 
-            // Ensure weeklyConfigs is an object
-            if (typeof programData.weeklyConfigs === 'object') {
-              console.log('Processing weeklyConfigs object:', {
-                configKeys: Object.keys(programData.weeklyConfigs),
-                configValues: Object.values(programData.weeklyConfigs).map(exercises => exercises?.length)
+            // Process weeklyConfigs object
+            console.log('🔄 Processing weeklyConfigs object...');
+            if (typeof programData.weeklyConfigs === 'object' && programData.weeklyConfigs !== null) {
+              const configKeys = Object.keys(programData.weeklyConfigs);
+              console.log('📊 WeeklyConfigs analysis:', {
+                configKeys,
+                configCount: configKeys.length,
+                configValues: Object.values(programData.weeklyConfigs).map(item => ({
+                  type: typeof item,
+                  isArray: Array.isArray(item),
+                  length: Array.isArray(item) ? item.length : 'N/A',
+                  hasName: item && typeof item === 'object' && 'name' in item,
+                  hasExercises: item && typeof item === 'object' && 'exercises' in item
+                }))
               });
 
               for (let key in programData.weeklyConfigs) {
-                const match = key.match(/week(\d+)_day(\d+)_exercises/);
+                console.log(`🔑 Processing key: ${key}`);
+                
+                // Handle both old format (week1_day1_exercises) and new format (week1_day1)
+                let match = key.match(/week(\d+)_day(\d+)_exercises/);
+                if (!match) {
+                  match = key.match(/week(\d+)_day(\d+)$/);
+                }
+                
                 if (match) {
                   const weekIndex = parseInt(match[1], 10) - 1;
                   const dayIndex = parseInt(match[2], 10) - 1;
+                  const configData = programData.weeklyConfigs[key];
                   
-                  console.log('Processing config key:', {
+                  console.log('📝 Processing config key:', {
                     key,
                     weekIndex,
                     dayIndex,
-                    exercisesCount: programData.weeklyConfigs[key]?.length
+                    configDataType: typeof configData,
+                    isArray: Array.isArray(configData),
+                    configData: configData,
+                    exercisesCount: Array.isArray(configData) ? configData.length :
+                                   (configData && configData.exercises ? configData.exercises.length : 'N/A')
                   });
                   
                   // Validate indices are within bounds
                   if (weekIndex >= 0 && weekIndex < programData.duration &&
                       dayIndex >= 0 && dayIndex < programData.daysPerWeek) {
-                    // Ensure each exercise has a notes field
-                    const processedExercises = (programData.weeklyConfigs[key] || []).map(ex => ({
-                      ...ex,
-                      notes: ex.notes || '' // Ensure notes field exists with empty string as default
+                    
+                    let exercisesToProcess = [];
+                    let dayName = `Day ${dayIndex + 1}`; // Default name
+                    
+                    // Handle different data formats
+                    if (Array.isArray(configData)) {
+                      // Old format: direct exercises array
+                      exercisesToProcess = configData;
+                    } else if (configData && typeof configData === 'object') {
+                      // New format: object with name and exercises
+                      if (configData.exercises && Array.isArray(configData.exercises)) {
+                        exercisesToProcess = configData.exercises;
+                      }
+                      if (configData.name) {
+                        dayName = configData.name;
+                      }
+                    }
+                    
+                    // Ensure each exercise has required fields
+                    const processedExercises = exercisesToProcess.map(ex => ({
+                      exerciseId: ex.exerciseId || '',
+                      sets: ex.sets || 3,
+                      reps: ex.reps || 8,
+                      notes: ex.notes || '' // Ensure notes field exists
                     }));
                     
-                    console.log('Setting exercises for week/day:', {
+                    console.log('✅ Setting exercises for week/day:', {
                       weekIndex,
                       dayIndex,
+                      dayName,
                       exercisesCount: processedExercises.length,
-                      firstExercise: processedExercises[0]
+                      firstExercise: processedExercises[0],
+                      allExercises: processedExercises
                     });
                     
-                    // Update the structure to use the correct path
+                    // Update the structure
+                    weeklyConfigs[weekIndex].days[dayIndex].name = dayName;
                     weeklyConfigs[weekIndex].days[dayIndex].exercises = processedExercises;
                   } else {
-                    console.warn('Invalid indices:', {
+                    console.warn('⚠️ Invalid indices - skipping:', {
+                      key,
                       weekIndex,
                       dayIndex,
                       duration: programData.duration,
-                      daysPerWeek: programData.daysPerWeek
+                      daysPerWeek: programData.daysPerWeek,
+                      boundsCheck: {
+                        weekValid: weekIndex >= 0 && weekIndex < programData.duration,
+                        dayValid: dayIndex >= 0 && dayIndex < programData.daysPerWeek
+                      }
                     });
                   }
+                } else {
+                  console.warn('⚠️ Key does not match expected pattern:', key);
                 }
               }
             }
 
             // Log final structure before setting state
-            console.log('Final weeklyConfigs structure:', {
+            console.log('🏁 Final weeklyConfigs structure analysis:', {
               weeksLength: weeklyConfigs.length,
               firstWeekDaysLength: weeklyConfigs[0]?.days?.length,
               firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length,
               firstExercise: weeklyConfigs[0]?.days?.[0]?.exercises?.[0],
-              structure: weeklyConfigs[0] // Log the first week's structure to verify
+              firstDayName: weeklyConfigs[0]?.days?.[0]?.name,
+              fullFirstWeek: weeklyConfigs[0],
+              allWeeksPreview: weeklyConfigs.map((week, idx) => ({
+                weekIndex: idx,
+                daysCount: week.days?.length,
+                firstDayName: week.days?.[0]?.name,
+                firstDayExercisesCount: week.days?.[0]?.exercises?.length
+              }))
             });
 
             // Validate the structure before setting state
-            if (weeklyConfigs.length > 0 && weeklyConfigs[0].days?.length > 0) {
-              console.log('Setting weeks state with valid structure');
+            const isValidStructure = weeklyConfigs.length > 0 &&
+                                   weeklyConfigs[0].days?.length > 0 &&
+                                   Array.isArray(weeklyConfigs[0].days);
+                                   
+            console.log('🔍 Structure validation:', {
+              hasWeeks: weeklyConfigs.length > 0,
+              hasDays: weeklyConfigs[0]?.days?.length > 0,
+              daysIsArray: Array.isArray(weeklyConfigs[0]?.days),
+              isValidStructure
+            });
+
+            if (isValidStructure) {
+              console.log('✅ Setting weeks state with valid structure');
               setWeeks(weeklyConfigs);
             } else {
-              console.warn('Invalid weekly configs structure, setting default');
-              setWeeks([
+              console.error('❌ Invalid weekly configs structure, setting default fallback');
+              const fallbackWeeks = [
                 { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
-              ]);
+              ];
+              console.log('🔄 Fallback structure:', fallbackWeeks);
+              setWeeks(fallbackWeeks);
             }
           } else {
-            console.error('Program not found:', programId);
+            console.error('❌ Program document not found:', {
+              programId,
+              docExists: !!programDoc,
+              docType: typeof programDoc
+            });
             throw new Error("Program not found");
           }
         } catch (error) {
-          console.error("Error loading program:", error);
-          alert("Failed to load program data. Starting with empty program.");
-          setWeeks([
+          console.error("💥 Error loading program:", {
+            error: error.message,
+            stack: error.stack,
+            programId,
+            mode
+          });
+          alert(`Failed to load program data: ${error.message}. Starting with empty program.`);
+          const errorFallbackWeeks = [
             { days: [{ name: 'Day 1', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
-          ]);
+          ];
+          console.log('🔄 Error fallback structure:', errorFallbackWeeks);
+          setWeeks(errorFallbackWeeks);
         } finally {
+          console.log('🏁 Load program completed, setting isLoading to false');
           setIsLoading(false);
         }
+      } else {
+        console.log('ℹ️ Skipping loadProgram - not in edit mode or no programId:', { mode, programId });
       }
     };
     loadProgram();
@@ -1173,31 +1286,14 @@ function CreateProgram({ mode = 'create', userRole }) {
             <Modal.Header closeButton>
               <Modal.Title>
                 Exercise Notes
-                {currentNoteExercise.dayIndex !== null && weeks && weeks[0]?.days?.[currentNoteExercise.dayIndex]?.exercises?.[currentNoteExercise.exIndex] ? (
+                {currentNoteExercise.dayIndex !== null && weeks && weeks[0]?.days?.[currentNoteExercise.dayIndex]?.exercises?.[currentNoteExercise.exIndex] && (
                   <div className="text-muted fs-6">
                     {(() => {
                       const exerciseId = weeks[0].days[currentNoteExercise.dayIndex].exercises[currentNoteExercise.exIndex].exerciseId;
                       const exercise = exercises.find(e => e.value === exerciseId);
-                      console.log('Notes modal exercise lookup:', {
-                        exerciseId,
-                        foundExercise: !!exercise,
-                        currentNoteExercise,
-                        hasWeeks: !!weeks,
-                        hasDays: !!weeks?.[0]?.days,
-                        dayIndex: currentNoteExercise.dayIndex,
-                        exIndex: currentNoteExercise.exIndex
-                      });
                       return exercise?.label || 'Exercise';
                     })()}
                   </div>
-                ) : (
-                  console.warn('Notes modal missing data:', {
-                    currentNoteExercise,
-                    hasWeeks: !!weeks,
-                    hasDays: !!weeks?.[0]?.days,
-                    dayIndex: currentNoteExercise?.dayIndex,
-                    exIndex: currentNoteExercise?.exIndex
-                  })
                 )}
               </Modal.Title>
             </Modal.Header>
