@@ -93,16 +93,35 @@ function Programs() {
 
   const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
     const weeklyConfigs = Array.from({ length: duration }, () =>
-      Array.from({ length: daysPerWeek }, () => ({ exercises: [] }))
+      Array.from({ length: daysPerWeek }, () => ({ name: undefined, exercises: [] }))
     );
 
     for (let key in flattenedConfigs) {
       if (flattenedConfigs.hasOwnProperty(key)) {
-        const match = key.match(/week(\d+)_day(\d+)_exercises/);
+        let match = key.match(/week(\d+)_day(\d+)_exercises/);
+        let weekIndex, dayIndex, exercises = [], dayName = undefined;
         if (match) {
-          const weekIndex = parseInt(match[1], 10) - 1;
-          const dayIndex = parseInt(match[2], 10) - 1;
-          weeklyConfigs[weekIndex][dayIndex].exercises = flattenedConfigs[key];
+          weekIndex = parseInt(match[1], 10) - 1;
+          dayIndex = parseInt(match[2], 10) - 1;
+          exercises = flattenedConfigs[key] || [];
+        } else {
+          match = key.match(/week(\d+)_day(\d+)$/);
+          if (match) {
+            weekIndex = parseInt(match[1], 10) - 1;
+            dayIndex = parseInt(match[2], 10) - 1;
+            const dayObj = flattenedConfigs[key];
+            if (dayObj && typeof dayObj === 'object') {
+              exercises = dayObj.exercises || [];
+              dayName = dayObj.name;
+            }
+          }
+        }
+        if (
+          typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
+          weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeklyConfigs.length && dayIndex < weeklyConfigs[weekIndex].length
+        ) {
+          weeklyConfigs[weekIndex][dayIndex].exercises = exercises;
+          if (dayName) weeklyConfigs[weekIndex][dayIndex].name = dayName;
         }
       }
     }

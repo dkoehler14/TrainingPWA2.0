@@ -142,6 +142,13 @@ function LogWorkout() {
   useNumberInput(repsInputRef);
   useNumberInput(weightInputRef);
 
+  // Helper function to detect if a value is a rep range
+  const isRepRange = (value) => {
+    if (!value || typeof value !== 'string') return false;
+    // Check for patterns like "8-10", "5/3/1", "8-12", etc.
+    return /[^\d\s]/.test(value.toString()) && value.toString().trim() !== '';
+  };
+
   // Check window size on resize
   useEffect(() => {
     const handleResize = () => {
@@ -301,9 +308,29 @@ function LogWorkout() {
   // Fetch existing workout log when program, week, or day changes
   useEffect(() => {
     if (!user || !selectedProgram || selectedWeek === null || selectedDay === null) return;
+    
+    // Validate that the selected week/day indices are within program bounds
+    if (selectedWeek >= selectedProgram.duration || selectedDay >= selectedProgram.daysPerWeek) {
+      console.error(`Invalid week/day selection: Week ${selectedWeek}, Day ${selectedDay} for program with ${selectedProgram.duration} weeks and ${selectedProgram.daysPerWeek} days per week`);
+      return;
+    }
+
+    // Validate that the program structure exists
+    if (!selectedProgram.weeklyConfigs ||
+        !selectedProgram.weeklyConfigs[selectedWeek] ||
+        !selectedProgram.weeklyConfigs[selectedWeek][selectedDay] ||
+        !selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises) {
+      console.error(`Program structure missing for Week ${selectedWeek}, Day ${selectedDay}`);
+      setLogData([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     const key = `${selectedWeek}_${selectedDay}`;
+    
     if (programLogs[key]) {
+      // Load existing log data
       setLogData(programLogs[key].exercises.map(ex => {
         const exercise = exercisesList.find(e => e.id === ex.exerciseId);
         if (exercise?.exerciseType === 'Bodyweight' && ex.bodyweight) {
@@ -313,22 +340,37 @@ function LogWorkout() {
       }));
       setIsWorkoutFinished(programLogs[key].isWorkoutFinished);
     } else {
+      // Initialize from program configuration
       setIsWorkoutFinished(false);
-      const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
-        const exercise = exercisesList.find(e => e.id === ex.exerciseId);
-        const isBodyweightType = ['Bodyweight', 'Bodyweight Loadable'].includes(exercise?.exerciseType);
-        return {
-          ...ex,
-          reps: Array(ex.sets).fill(ex.reps),
-          weights: Array(ex.sets).fill(''),
-          completed: Array(ex.sets).fill(false),
-          notes: ex.notes || '',
-          bodyweight: isBodyweightType ? '' : ''
-        };
-      });
-      setLogData(dayExercises);
-      // Optionally pre-populate programLogs with initialized data
-      setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
+      console.log("selectedWeek, selectedDay", selectedWeek, selectedDay);
+      console.log(selectedProgram.weeklyConfigs);
+      try {
+        const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
+          const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+          const isBodyweightType = ['Bodyweight', 'Bodyweight Loadable'].includes(exercise?.exerciseType);
+          
+          // Check if reps is a range and handle accordingly
+          const repValue = ex.reps;
+          const isRange = isRepRange(repValue);
+          
+          return {
+            ...ex,
+            reps: Array(ex.sets).fill(isRange ? '' : repValue), // Empty if range, otherwise use value
+            repRange: isRange ? repValue : null, // Store the range separately
+            weights: Array(ex.sets).fill(''),
+            completed: Array(ex.sets).fill(false),
+            notes: ex.notes || '',
+            bodyweight: isBodyweightType ? '' : ''
+          };
+        });
+        setLogData(dayExercises);
+        // Pre-populate programLogs with initialized data
+        setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
+        console.log(`Initialized workout data for Week ${selectedWeek + 1}, Day ${selectedDay + 1} with ${dayExercises.length} exercises`);
+      } catch (error) {
+        console.error(`Error initializing workout data for Week ${selectedWeek}, Day ${selectedDay}:`, error);
+        setLogData([]);
+      }
     }
     setIsLoading(false);
   }, [user, selectedProgram, selectedWeek, selectedDay, programLogs, exercisesList]);
@@ -601,16 +643,35 @@ function LogWorkout() {
 
   const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
     const weeklyConfigs = Array.from({ length: duration }, () =>
-      Array.from({ length: daysPerWeek }, () => ({ exercises: [] }))
+      Array.from({ length: daysPerWeek }, () => ({ name: undefined, exercises: [] }))
     );
 
     for (let key in flattenedConfigs) {
       if (flattenedConfigs.hasOwnProperty(key)) {
-        const match = key.match(/week(\d+)_day(\d+)_exercises/);
+        let match = key.match(/week(\d+)_day(\d+)_exercises/);
+        let weekIndex, dayIndex, exercises = [], dayName = undefined;
         if (match) {
-          const weekIndex = parseInt(match[1], 10) - 1; // Convert to 0-based index
-          const dayIndex = parseInt(match[2], 10) - 1; // Convert to 0-based index
-          weeklyConfigs[weekIndex][dayIndex].exercises = flattenedConfigs[key];
+          weekIndex = parseInt(match[1], 10) - 1;
+          dayIndex = parseInt(match[2], 10) - 1;
+          exercises = flattenedConfigs[key] || [];
+        } else {
+          match = key.match(/week(\d+)_day(\d+)$/);
+          if (match) {
+            weekIndex = parseInt(match[1], 10) - 1;
+            dayIndex = parseInt(match[2], 10) - 1;
+            const dayObj = flattenedConfigs[key];
+            if (dayObj && typeof dayObj === 'object') {
+              exercises = dayObj.exercises || [];
+              dayName = dayObj.name;
+            }
+          }
+        }
+        if (
+          typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
+          weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeklyConfigs.length && dayIndex < weeklyConfigs[weekIndex].length
+        ) {
+          weeklyConfigs[weekIndex][dayIndex].exercises = exercises;
+          if (dayName) weeklyConfigs[weekIndex][dayIndex].name = dayName;
         }
       }
     }
@@ -664,13 +725,21 @@ function LogWorkout() {
   };
 
   const handleWeekChange = (weekIndex) => {
-    setSelectedWeek(weekIndex);
-    // The useEffect will handle loading or initializing logData
+    if (selectedProgram && weekIndex >= 0 && weekIndex < selectedProgram.duration) {
+      setSelectedWeek(weekIndex);
+      // The useEffect will handle loading or initializing logData
+    } else {
+      console.error(`Invalid week index: ${weekIndex}. Program has ${selectedProgram?.duration || 0} weeks.`);
+    }
   };
 
   const handleDayChange = (dayIndex) => {
-    setSelectedDay(dayIndex);
-    // The useEffect will handle loading or initializing logData
+    if (selectedProgram && dayIndex >= 0 && dayIndex < selectedProgram.daysPerWeek) {
+      setSelectedDay(dayIndex);
+      // The useEffect will handle loading or initializing logData
+    } else {
+      console.error(`Invalid day index: ${dayIndex}. Program has ${selectedProgram?.daysPerWeek || 0} days per week.`);
+    }
   };
 
   const handleFocus = (e) => {
@@ -735,7 +804,9 @@ function LogWorkout() {
 
     const newLogData = [...logData];
     newLogData[exerciseIndex].sets += 1;
-    newLogData[exerciseIndex].reps.push(newLogData[exerciseIndex].reps[0]);
+    // For rep ranges, push empty string; for numeric values, push the first rep value
+    const firstRepValue = newLogData[exerciseIndex].repRange ? '' : newLogData[exerciseIndex].reps[0];
+    newLogData[exerciseIndex].reps.push(firstRepValue);
     const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
     newLogData[exerciseIndex].weights.push(exercise?.exerciseType === 'Bodyweight' ? newLogData[exerciseIndex].bodyweight : '');
     newLogData[exerciseIndex].completed.push(false);
@@ -1165,7 +1236,19 @@ function LogWorkout() {
                             <thead>
                               <tr>
                                 <th>Set</th>
-                                <th>Reps</th>
+                                <th>
+                                  Reps
+                                  {ex.repRange && (
+                                    <div style={{
+                                      fontSize: '0.75em',
+                                      fontWeight: 'normal',
+                                      color: '#6c757d',
+                                      marginTop: '2px'
+                                    }}>
+                                      Target: {ex.repRange}
+                                    </div>
+                                  )}
+                                </th>
                                 <th>{exerciseType === 'Bodyweight Loadable' ? '+Weight' : 'Weight'}</th>
                               </tr>
                             </thead>

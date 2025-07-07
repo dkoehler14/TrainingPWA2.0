@@ -387,13 +387,30 @@ function CreateProgram({ mode = 'create', userRole }) {
             days: Array.from({ length: selectedTemplate.daysPerWeek }, () => ({ exercises: [] }))
           }));
           for (let key in selectedTemplate.weeklyConfigs) {
-            const match = key.match(/week(\d+)_day(\d+)_exercises/);
+            let match = key.match(/week(\d+)_day(\d+)_exercises/);
+            let weekIndex, dayIndex, exercises = [], dayName = undefined;
             if (match) {
-              const weekIndex = parseInt(match[1], 10) - 1;
-              const dayIndex = parseInt(match[2], 10) - 1;
-              if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
-                weeksArr[weekIndex].days[dayIndex].exercises = (selectedTemplate.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+              weekIndex = parseInt(match[1], 10) - 1;
+              dayIndex = parseInt(match[2], 10) - 1;
+              exercises = (selectedTemplate.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+            } else {
+              match = key.match(/week(\d+)_day(\d+)$/);
+              if (match) {
+                weekIndex = parseInt(match[1], 10) - 1;
+                dayIndex = parseInt(match[2], 10) - 1;
+                const dayObj = selectedTemplate.weeklyConfigs[key];
+                if (dayObj && typeof dayObj === 'object') {
+                  exercises = (dayObj.exercises || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+                  dayName = dayObj.name;
+                }
               }
+            }
+            if (
+              typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
+              weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length
+            ) {
+              weeksArr[weekIndex].days[dayIndex].exercises = exercises;
+              if (dayName) weeksArr[weekIndex].days[dayIndex].name = dayName;
             }
           }
           setWeeks(weeksArr);
@@ -406,13 +423,30 @@ function CreateProgram({ mode = 'create', userRole }) {
             days: Array.from({ length: selectedPreviousProgram.daysPerWeek }, () => ({ exercises: [] }))
           }));
           for (let key in selectedPreviousProgram.weeklyConfigs) {
-            const match = key.match(/week(\d+)_day(\d+)_exercises/);
+            let match = key.match(/week(\d+)_day(\d+)_exercises/);
+            let weekIndex, dayIndex, exercises = [], dayName = undefined;
             if (match) {
-              const weekIndex = parseInt(match[1], 10) - 1;
-              const dayIndex = parseInt(match[2], 10) - 1;
-              if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
-                weeksArr[weekIndex].days[dayIndex].exercises = (selectedPreviousProgram.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+              weekIndex = parseInt(match[1], 10) - 1;
+              dayIndex = parseInt(match[2], 10) - 1;
+              exercises = (selectedPreviousProgram.weeklyConfigs[key] || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+            } else {
+              match = key.match(/week(\d+)_day(\d+)$/);
+              if (match) {
+                weekIndex = parseInt(match[1], 10) - 1;
+                dayIndex = parseInt(match[2], 10) - 1;
+                const dayObj = selectedPreviousProgram.weeklyConfigs[key];
+                if (dayObj && typeof dayObj === 'object') {
+                  exercises = (dayObj.exercises || []).map(ex => ({ ...ex, notes: ex.notes || '' }));
+                  dayName = dayObj.name;
+                }
               }
+            }
+            if (
+              typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
+              weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length
+            ) {
+              weeksArr[weekIndex].days[dayIndex].exercises = exercises;
+              if (dayName) weeksArr[weekIndex].days[dayIndex].name = dayName;
             }
           }
           setWeeks(weeksArr);
@@ -1370,13 +1404,30 @@ function CreateProgram({ mode = 'create', userRole }) {
                       days: Array.from({ length: previewProgram.daysPerWeek }, () => ({ exercises: [] }))
                     }));
                     for (let key in previewProgram.weeklyConfigs) {
-                      const match = key.match(/week(\d+)_day(\d+)_exercises/);
+                      let match = key.match(/week(\d+)_day(\d+)_exercises/);
+                      let weekIndex, dayIndex, exercises = [], dayName = undefined;
                       if (match) {
-                        const weekIndex = parseInt(match[1], 10) - 1;
-                        const dayIndex = parseInt(match[2], 10) - 1;
-                        if (weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length) {
-                          weeksArr[weekIndex].days[dayIndex].exercises = (previewProgram.weeklyConfigs[key] || []);
+                        weekIndex = parseInt(match[1], 10) - 1;
+                        dayIndex = parseInt(match[2], 10) - 1;
+                        exercises = (previewProgram.weeklyConfigs[key] || []);
+                      } else {
+                        match = key.match(/week(\d+)_day(\d+)$/);
+                        if (match) {
+                          weekIndex = parseInt(match[1], 10) - 1;
+                          dayIndex = parseInt(match[2], 10) - 1;
+                          const dayObj = previewProgram.weeklyConfigs[key];
+                          if (dayObj && typeof dayObj === 'object') {
+                            exercises = (dayObj.exercises || []);
+                            dayName = dayObj.name;
+                          }
                         }
+                      }
+                      if (
+                        typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
+                        weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeksArr.length && dayIndex < weeksArr[weekIndex].days.length
+                      ) {
+                        weeksArr[weekIndex].days[dayIndex].exercises = exercises;
+                        if (dayName) weeksArr[weekIndex].days[dayIndex].name = dayName;
                       }
                     }
                   }
@@ -1401,7 +1452,7 @@ function CreateProgram({ mode = 'create', userRole }) {
                             <div style={{fontWeight: 600, color: '#0d6efd'}}>Week {wIdx + 1}</div>
                             {week.days.map((day, dIdx) => (
                               <div key={dIdx} className="ms-3 mb-1">
-                                <span style={{fontWeight: 500}}>Day {dIdx + 1}:</span>
+                                <span style={{fontWeight: 500}}>Day {day.name || `Day ${dIdx + 1}`}:</span>
                                 {day.exercises.length === 0 ? (
                                   <span className="text-muted ms-2">No exercises</span>
                                 ) : (
