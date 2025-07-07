@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Spinner } from 'react-bootstrap';
 import { db, auth } from '../firebase';
 import '../styles/Progress4.css';
-import { getCollectionCached } from '../api/firestoreCache';
+import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 // Utility functions
 const calculateVolume = (sets, reps, weights) => {
@@ -77,17 +77,31 @@ function Progress4() {
     const fetchData = async () => {
       const user = auth.currentUser;
       setIsLoading(true);
-      if (!user) {
+      if (!user?.uid) {
         setIsLoading(false);
         return;
       }
 
-      const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
-      setWorkoutLogs(logsData);
+      try {
+        // Enhanced cache warming before data fetching
+        await warmUserCache(user.uid, 'normal')
+          .then(() => {
+            console.log('Cache warming completed for Progress4');
+          })
+          .catch((error) => {
+            console.warn('Cache warming failed, proceeding with data fetch:', error);
+          });
 
-      const exercisesData = await getCollectionCached('exercises');
-      setExercises(exercisesData);
-      setIsLoading(false);
+        const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
+        setWorkoutLogs(logsData);
+
+        const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
+        setExercises(exercisesData);
+      } catch (error) {
+        console.error("Error fetching data: ", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     fetchData();
   }, []);

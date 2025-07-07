@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { getCollectionCached, getSubcollectionCached } from '../api/firestoreCache';
+import { getCollectionCached, getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import EnhancedAICoach from '../components/EnhancedAICoach';
 import CompoundLiftTracker from '../components/CompoundLiftTracker';
@@ -104,6 +104,16 @@ const ProgressCoach = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
+                // Add cache warming before data fetching
+                if (userId) {
+                    try {
+                        await warmUserCache(userId, 'normal');
+                        console.log('Cache warming completed for ProgressCoach');
+                    } catch (error) {
+                        console.warn('Cache warming failed, proceeding with data fetch:', error);
+                    }
+                }
+
                 // Fetch workout logs
                 const workoutLogs = await getCollectionCached('workoutLogs', {
                     where: [['userId', '==', userId], ['isWorkoutFinished', '==', true]],

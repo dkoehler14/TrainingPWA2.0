@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, where, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { getCollectionCached, invalidateExerciseCache } from '../api/enhancedFirestoreCache';
 
 const MUSCLE_GROUPS = [
     'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
@@ -86,16 +87,19 @@ function ExerciseCreationModal({
             return false;
         }
 
-        // Check for duplicate exercise name
-        let exerciseQuery;
-        if (isEditMode) {
-            exerciseQuery = query(collection(db, "exercises"), where("name", "==", formData.name.trim()), where("__name__", "!=", exerciseId));
-        } else {
-            exerciseQuery = query(collection(db, "exercises"), where("name", "==", formData.name.trim()));
-        }
-        const querySnapshot = await getDocs(exerciseQuery);
+        // Check for duplicate exercise name using enhanced cache
+        const exerciseQuery = {
+            where: [['name', '==', formData.name.trim()]]
+        };
+        
+        const existingExercises = await getCollectionCached('exercises', exerciseQuery, 60 * 60 * 1000); // 1 hour TTL
+        
+        // Filter out current exercise if in edit mode
+        const duplicates = isEditMode
+            ? existingExercises.filter(ex => ex.id !== exerciseId)
+            : existingExercises;
 
-        if (!querySnapshot.empty) {
+        if (duplicates.length > 0) {
             setValidationError('An exercise with this name already exists.');
             return false;
         }
@@ -138,12 +142,20 @@ function ExerciseCreationModal({
                 // Update in Firestore
                 const exerciseRef = doc(db, "exercises", exerciseId);
                 await updateDoc(exerciseRef, exerciseData);
+                
+                // Invalidate exercise cache after update
+                invalidateExerciseCache();
+                
                 if (onExerciseUpdated) {
                     onExerciseUpdated({ id: exerciseId, ...exerciseData });
                 }
             } else {
                 // Add to Firestore
                 const docRef = await addDoc(collection(db, "exercises"), exerciseData);
+                
+                // Invalidate exercise cache after creation
+                invalidateExerciseCache();
+                
                 // Call the callback with the new exercise data
                 if (onExerciseAdded) {
                     onExerciseAdded({

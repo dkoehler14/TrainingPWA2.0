@@ -4,7 +4,7 @@ import { PlusLg } from 'react-bootstrap-icons';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/Exercises.css';
-import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
+import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 function Exercises({ user, userRole }) {
   const [exercises, setExercises] = useState([]);
@@ -19,8 +19,12 @@ function Exercises({ user, userRole }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchExercises();
-  }, []);
+    if (user) {
+      warmUserCache(user.uid, 'high').then(() => {
+        fetchExercises();
+      });
+    }
+  }, [user]);
 
   useEffect(() => {
     // Filter exercises based on user role
@@ -34,7 +38,7 @@ function Exercises({ user, userRole }) {
   const fetchExercises = async () => {
     setIsLoading(true);
     try {
-      const exercisesData = await getCollectionCached('exercises');
+      const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour
       setExercises(exercisesData);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
@@ -60,7 +64,7 @@ function Exercises({ user, userRole }) {
 
   // Callback for when a new exercise is added
   const handleExerciseAdded = (newExercise) => {
-    invalidateCache('exercises');
+    // Cache invalidation is now handled in ExerciseCreationModal
     setExercises(prev => [...prev, newExercise]);
     setSuccessMessage(`Exercise "${newExercise.name}" added successfully!`);
     setShowModal(false);
@@ -68,7 +72,7 @@ function Exercises({ user, userRole }) {
 
   // Callback for when an exercise is updated
   const handleExerciseUpdated = (updatedExercise) => {
-    invalidateCache('exercises');
+    // Cache invalidation is now handled in ExerciseCreationModal
     setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex));
     setSuccessMessage(`Exercise "${updatedExercise.name}" updated successfully!`);
     setShowModal(false);

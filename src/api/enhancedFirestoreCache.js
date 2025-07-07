@@ -664,15 +664,15 @@ export async function warmUserCache(userId, priority = 'normal') {
     }
     
     // Normal priority: Analytics data
-    if (priority === 'normal') {
-      warmingPromises.push(
-        // User analytics
-        getSubcollectionCached(`userAnalytics/${userId}`, 'exerciseAnalytics', {}, 15 * 60 * 1000),
+    // if (priority === 'normal') {
+    //   warmingPromises.push(
+    //     // User analytics
+    //     getSubcollectionCached(`userAnalytics/${userId}`, 'exerciseAnalytics', {}, 15 * 60 * 1000),
         
-        // Monthly analytics
-        getSubcollectionCached(`userAnalytics/${userId}`, 'monthlyAnalytics', {}, 30 * 60 * 1000)
-      );
-    }
+    //     // Monthly analytics
+    //     getSubcollectionCached(`userAnalytics/${userId}`, 'monthlyAnalytics', {}, 30 * 60 * 1000)
+    //   );
+    // }
     
     // Execute warming promises
     const results = await Promise.allSettled(warmingPromises);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { getSubcollectionCached } from '../api/firestoreCache';
+import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import '../styles/CompoundLiftTracker.css';
 
@@ -37,7 +37,13 @@ const CompoundLiftTracker = () => {
             return;
         }
 
-        fetchCompoundLiftData();
+        // Warm cache before fetching data for better performance
+        warmUserCache(userId, 'normal').then(() => {
+            fetchCompoundLiftData();
+        }).catch(() => {
+            // If cache warming fails, still fetch data
+            fetchCompoundLiftData();
+        });
     }, [userId, timeRange]);
 
     const fetchCompoundLiftData = async () => {

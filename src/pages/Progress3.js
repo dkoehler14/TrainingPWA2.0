@@ -4,7 +4,7 @@ import { db, auth } from '../firebase';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
-import { getCollectionCached } from '../api/firestoreCache';
+import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 
@@ -37,9 +37,18 @@ function Analytics() {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (user) {
+            if (user?.uid) {
                 setIsLoading(true);
                 try {
+                    // Enhanced cache warming before data fetching
+                    await warmUserCache(user.uid, 'normal')
+                        .then(() => {
+                            console.log('Cache warming completed for Progress3');
+                        })
+                        .catch((error) => {
+                            console.warn('Cache warming failed, proceeding with data fetch:', error);
+                        });
+
                     const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
                     const logsWithDate = logsData.map(log => ({
                         ...log,
@@ -47,7 +56,7 @@ function Analytics() {
                     }));
                     setWorkoutLogs(logsWithDate);
 
-                    const exercisesData = await getCollectionCached('exercises');
+                    const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
                     setExercises(exercisesData);
 
                     if (exercisesData.length > 0) {

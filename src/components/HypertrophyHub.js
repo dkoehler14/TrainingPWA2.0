@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { getSubcollectionCached } from '../api/firestoreCache';
+import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import '../styles/HypertrophyHub.css';
 
@@ -46,7 +46,13 @@ const HypertrophyHub = () => {
             return;
         }
 
-        fetchHypertrophyData();
+        // Warm cache before fetching data for better performance
+        warmUserCache(userId, 'normal').then(() => {
+            fetchHypertrophyData();
+        }).catch(() => {
+            // If cache warming fails, still fetch data
+            fetchHypertrophyData();
+        });
     }, [userId, selectedTimeRange]);
 
     const fetchHypertrophyData = async () => {

@@ -5,7 +5,8 @@ import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
-import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
+import { getCollectionCached, invalidateProgramCache, invalidateExerciseCache, warmUserCache } from '../api/enhancedFirestoreCache';
+import { parseWeeklyConfigs } from '../utils/programUtils';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -45,6 +46,9 @@ function Programs() {
       if (user) {
         setIsLoading(true);
         try {
+          // Warm cache before fetching data
+          await warmUserCache(user.uid, 'high');
+          
           // Fetch user programs
           const userProgramsData = await getCollectionCached(
             'programs',
@@ -54,7 +58,8 @@ function Programs() {
                 ['isTemplate', '==', false]
               ],
               orderBy: [['createdAt', 'desc']]
-            }
+            },
+            30 * 60 * 1000
           );
           setUserPrograms(userProgramsData.map(doc => ({
             ...doc,
@@ -68,7 +73,8 @@ function Programs() {
               where: [
                 ['isTemplate', '==', true]
               ]
-            }
+            },
+            30 * 60 * 1000
           );
           setTemplatePrograms(templateProgramsData.map(doc => ({
             ...doc,
@@ -76,7 +82,7 @@ function Programs() {
           })));
 
           // Fetch exercises
-          const exercisesData = await getCollectionCached('exercises');
+          const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
           setExercises(exercisesData);
         } catch (error) {
           console.error("Error fetching data: ", error);
@@ -91,43 +97,6 @@ function Programs() {
     // eslint-disable-next-line
   }, [user]);
 
-  const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
-    const weeklyConfigs = Array.from({ length: duration }, () =>
-      Array.from({ length: daysPerWeek }, () => ({ name: undefined, exercises: [] }))
-    );
-
-    for (let key in flattenedConfigs) {
-      if (flattenedConfigs.hasOwnProperty(key)) {
-        let match = key.match(/week(\d+)_day(\d+)_exercises/);
-        let weekIndex, dayIndex, exercises = [], dayName = undefined;
-        if (match) {
-          weekIndex = parseInt(match[1], 10) - 1;
-          dayIndex = parseInt(match[2], 10) - 1;
-          exercises = flattenedConfigs[key] || [];
-        } else {
-          match = key.match(/week(\d+)_day(\d+)$/);
-          if (match) {
-            weekIndex = parseInt(match[1], 10) - 1;
-            dayIndex = parseInt(match[2], 10) - 1;
-            const dayObj = flattenedConfigs[key];
-            if (dayObj && typeof dayObj === 'object') {
-              exercises = dayObj.exercises || [];
-              dayName = dayObj.name;
-            }
-          }
-        }
-        if (
-          typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
-          weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeklyConfigs.length && dayIndex < weeklyConfigs[weekIndex].length
-        ) {
-          weeklyConfigs[weekIndex][dayIndex].exercises = exercises;
-          if (dayName) weeklyConfigs[weekIndex][dayIndex].name = dayName;
-        }
-      }
-    }
-
-    return weeklyConfigs;
-  };
 
   const getExerciseName = (exerciseId) => {
     return exercises.find(ex => ex.id === exerciseId)?.name || 'Unknown';
@@ -147,7 +116,7 @@ function Programs() {
         createdAt: new Date(),
         isCurrent: false
       });
-      invalidateCache('programs');
+      invalidateProgramCache(user.uid);
       alert('Program adopted successfully!');
     } catch (error) {
       console.error("Error adopting program: ", error);
@@ -161,7 +130,7 @@ function Programs() {
     try {
       await deleteDoc(doc(db, "programs", programId));
       setUserPrograms(userPrograms.filter(p => p.id !== programId));
-      invalidateCache('programs');
+      invalidateProgramCache(user.uid);
       alert('Program deleted successfully!');
     } catch (error) {
       console.error("Error deleting program: ", error);
@@ -183,7 +152,8 @@ function Programs() {
             ['userId', '==', user.uid],
             ['isTemplate', '==', false]
           ]
-        }
+        },
+        30 * 60 * 1000
       );
       // Batch update to set all programs to not current
       const batch = [];
@@ -199,7 +169,7 @@ function Programs() {
       });
       
       // Invalidate cache after all updates are complete
-      invalidateCache('programs');
+      invalidateProgramCache(user.uid);
       
       setUserPrograms(userPrograms.map(program => ({
         ...program,
@@ -224,7 +194,8 @@ function Programs() {
             ['userId', '==', user.uid],
             ['programId', '==', program.id]
           ]
-        }
+        },
+        15 * 60 * 1000
       );
 
       const logs = {};

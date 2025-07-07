@@ -6,8 +6,10 @@ import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestor
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
-import { getCollectionCached, getDocCached, invalidateCache } from '../api/firestoreCache';
+import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidateProgramCache, warmUserCache } from '../api/enhancedFirestoreCache';
+import { parseWeeklyConfigs } from '../utils/programUtils';
 import { httpsCallable } from 'firebase/functions';
+import ExerciseGrid from '../components/ExerciseGrid';
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -174,7 +176,8 @@ function LogWorkout() {
               ['weekIndex', '==', weekIndex],
               ['dayIndex', '==', dayIndex]
             ]
-          }
+          },
+          15 * 60 * 1000
         );
 
         const logDataToSave = {
@@ -199,11 +202,11 @@ function LogWorkout() {
           // Update existing log
           const logDocId = logsData[0].id;
           await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-          invalidateCache('workoutLogs');
+          invalidateWorkoutCache(user.uid);
         } else {
           // Create new log if none exists
           const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
-          invalidateCache('workoutLogs');
+          invalidateWorkoutCache(user.uid);
         }
         console.log('Workout log auto-saved');
       } catch (error) {
@@ -217,6 +220,9 @@ function LogWorkout() {
     const fetchData = async () => {
       if (user) {
         try {
+          // Warm user cache before fetching data
+          await warmUserCache(user.uid, 'high');
+          
           // Fetch all user programs, ordered by createdAt (most recent first)
           const programsData = await getCollectionCached(
             'programs',
@@ -225,7 +231,8 @@ function LogWorkout() {
                 ['userId', '==', user.uid]
               ],
               orderBy: [['createdAt', 'desc']]
-            }
+            },
+            30 * 60 * 1000
           );
           const parsedPrograms = programsData.map(data => {
             data.weeklyConfigs = parseWeeklyConfigs(data.weeklyConfigs, data.duration, data.daysPerWeek);
@@ -234,7 +241,7 @@ function LogWorkout() {
           setPrograms(parsedPrograms);
 
           // Fetch exercises
-          const exercisesData = await getCollectionCached('exercises');
+          const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
           setExercisesList(exercisesData);
 
           // Check for a current program first, then fall back to most recent if none is marked current
@@ -277,7 +284,8 @@ function LogWorkout() {
               ['userId', '==', user.uid],
               ['programId', '==', selectedProgram.id]
             ]
-          }
+          },
+          15 * 60 * 1000
         );
         const logsMap = {};
         logsData.forEach(log => {
@@ -391,7 +399,8 @@ function LogWorkout() {
           ],
           orderBy: [['date', 'desc']],
           limit: 20
-        }
+        },
+        15 * 60 * 1000
       );
       console.log(`Found ${logsData.length} workout logs`);
 
@@ -508,39 +517,13 @@ function LogWorkout() {
     setShowNotesModal(false);
   };
 
-  const openReplaceExerciseModal = async (exercise) => {
+  const openReplaceExerciseModal = (exercise) => {
     setExerciseToReplace(exercise);
     setIsLoadingAlternatives(true);
     setShowReplaceModal(true);
-
-    try {
-      // Find the original exercise to get its primary muscle groups
-      const originalExercise = exercisesList.find(ex => ex.id === exercise.exerciseId);
-
-      if (originalExercise && originalExercise.primaryMuscleGroup) {
-        // Use cache utility to get alternatives
-        const alternatives = (await getCollectionCached(
-          'exercises',
-          {
-            where: [
-              ['primaryMuscleGroup', '==', originalExercise.primaryMuscleGroup],
-              ['id', '!=', exercise.exerciseId]
-            ]
-          }
-        )) || [];
-        // Remove duplicates
-        const uniqueAlternatives = alternatives.filter((ex, index, self) =>
-          self.findIndex(t => t.id === ex.id) === index
-        );
-        setAlternativeExercises(uniqueAlternatives);
-      }
-    }
-    catch (error) {
-      console.error("Error fetching alternative exercises: ", error);
-      setAlternativeExercises([]);
-    } finally {
-      setIsLoadingAlternatives(false);
-    }
+    // Show all exercises for replacement
+    setAlternativeExercises(exercisesList);
+    setIsLoadingAlternatives(false);
   };
 
   const replaceExercise = async (alternativeExercise) => {
@@ -576,15 +559,32 @@ function LogWorkout() {
 
       const currentProgramData = programDoc;
 
-      // Create the correct key for the flattened structure
-      const configKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
-      console.log("Updating config key:", configKey);
+      // Try both format keys for backward compatibility
+      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
+      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
+      
+      console.log("Trying config keys:", { newFormatKey, oldFormatKey });
 
-      // Get current exercises for this week/day from the flattened structure
-      const currentExercises = currentProgramData.weeklyConfigs?.[configKey];
+      // First try new format, then fall back to old format
+      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
+      let configKey = newFormatKey;
+      let isOldFormat = false;
 
       if (!currentExercises) {
-        throw new Error(`No exercises found for ${configKey}`);
+        // Try old format
+        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
+        if (oldFormatData && oldFormatData.exercises) {
+          currentExercises = oldFormatData.exercises;
+          configKey = oldFormatKey;
+          isOldFormat = true;
+          console.log("Using old format structure");
+        }
+      } else {
+        console.log("Using new format structure");
+      }
+
+      if (!currentExercises) {
+        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Tried keys: ${newFormatKey}, ${oldFormatKey}`);
       }
 
       // Create updated exercises array with the replacement
@@ -597,11 +597,19 @@ function LogWorkout() {
       console.log("Original exercises:", currentExercises);
       console.log("Updated exercises:", updatedExercises);
 
-      // Update Firestore with the correct nested path
-      await updateDoc(doc(db, "programs", selectedProgram.id), {
-        [`weeklyConfigs.${configKey}`]: updatedExercises
-      });
-      invalidateCache('programs');
+      // Update Firestore with the correct nested path based on format
+      if (isOldFormat) {
+        // For old format, update the exercises array within the day object
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
+        });
+      } else {
+        // For new format, update the exercises array directly
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}`]: updatedExercises
+        });
+      }
+      invalidateProgramCache(user.uid);
 
       console.log(`Successfully updated program config for ${configKey}`);
 
@@ -641,43 +649,6 @@ function LogWorkout() {
     }
   };
 
-  const parseWeeklyConfigs = (flattenedConfigs, duration, daysPerWeek) => {
-    const weeklyConfigs = Array.from({ length: duration }, () =>
-      Array.from({ length: daysPerWeek }, () => ({ name: undefined, exercises: [] }))
-    );
-
-    for (let key in flattenedConfigs) {
-      if (flattenedConfigs.hasOwnProperty(key)) {
-        let match = key.match(/week(\d+)_day(\d+)_exercises/);
-        let weekIndex, dayIndex, exercises = [], dayName = undefined;
-        if (match) {
-          weekIndex = parseInt(match[1], 10) - 1;
-          dayIndex = parseInt(match[2], 10) - 1;
-          exercises = flattenedConfigs[key] || [];
-        } else {
-          match = key.match(/week(\d+)_day(\d+)$/);
-          if (match) {
-            weekIndex = parseInt(match[1], 10) - 1;
-            dayIndex = parseInt(match[2], 10) - 1;
-            const dayObj = flattenedConfigs[key];
-            if (dayObj && typeof dayObj === 'object') {
-              exercises = dayObj.exercises || [];
-              dayName = dayObj.name;
-            }
-          }
-        }
-        if (
-          typeof weekIndex === 'number' && typeof dayIndex === 'number' &&
-          weekIndex >= 0 && dayIndex >= 0 && weekIndex < weeklyConfigs.length && dayIndex < weeklyConfigs[weekIndex].length
-        ) {
-          weeklyConfigs[weekIndex][dayIndex].exercises = exercises;
-          if (dayName) weeklyConfigs[weekIndex][dayIndex].name = dayName;
-        }
-      }
-    }
-
-    return weeklyConfigs;
-  };
 
   const findEarliestUncompletedDay = async (program) => {
     if (!user || !program) return null;
@@ -865,10 +836,10 @@ function LogWorkout() {
       if (logsData.length > 0) {
         const logDocId = logsData[0].id;
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateCache('workoutLogs');
+        invalidateWorkoutCache(user.uid);
       } else {
         await addDoc(collection(db, "workoutLogs"), logDataToSave);
-        invalidateCache('workoutLogs');
+        invalidateWorkoutCache(user.uid);
       }
       alert('Workout saved successfully!');
     } catch (error) {
@@ -919,11 +890,11 @@ function LogWorkout() {
       if (logsData.length > 0) {
         logDocId = logsData[0].id;
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateCache('workoutLogs');
+        invalidateWorkoutCache(user.uid);
       } else {
         const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
         logDocId = docRef.id;
-        invalidateCache('workoutLogs');
+        invalidateWorkoutCache(user.uid);
       }
 
       // Trigger manual processing
@@ -1340,29 +1311,11 @@ function LogWorkout() {
                       </Modal.Header>
                       <Modal.Body>
                         <h6>Select an Alternative Exercise:</h6>
-                        {alternativeExercises.length > 0 ? (
-                          <div className="d-grid gap-2">
-                            {alternativeExercises.map(alt => (
-                              <Button
-                                key={alt.id}
-                                variant="outline-primary"
-                                onClick={() => replaceExercise(alt)}
-                              >
-                                {alt.name}
-                                {alt.exerciseType && (
-                                  <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                    {alt.exerciseType}
-                                  </span>
-                                )}
-                                <small className="text-muted d-block">
-                                  {(alt.primaryMuscleGroups || []).join(', ')}
-                                </small>
-                              </Button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p>No alternative exercises found.</p>
-                        )}
+                        <ExerciseGrid
+                          exercises={alternativeExercises}
+                          onExerciseClick={replaceExercise}
+                          emptyMessage="No exercises found."
+                        />
                       </Modal.Body>
                     </Modal>
 

@@ -7,7 +7,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import '../styles/ProgressTracker.css'; // Ensure this CSS file exists
-import { getCollectionCached } from '../api/firestoreCache';
+import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
@@ -30,7 +30,18 @@ function ProgressTracker2() {
 		const fetchExercises = async () => {
 			setIsExercisesLoading(true);
 			try {
-				const exercisesData = await getCollectionCached('exercises');
+				// Enhanced cache warming before data fetching
+				if (auth.currentUser?.uid) {
+					await warmUserCache(auth.currentUser.uid, 'normal')
+						.then(() => {
+							console.log('Cache warming completed for ProgressTracker2');
+						})
+						.catch((error) => {
+							console.warn('Cache warming failed, proceeding with data fetch:', error);
+						});
+				}
+
+				const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
 				const fetchedExercises = exercisesData.map(doc => ({
 					value: doc.id,
 					label: doc.name,
