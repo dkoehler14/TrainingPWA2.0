@@ -32,7 +32,7 @@ function Programs({ userRole }) {
     if (chartContainerRef.current) {
       // Force chart to resize by triggering a window resize event
       window.dispatchEvent(new Event('resize'));
-      
+
       // Also try to find and resize any Chart.js instances
       const canvas = chartContainerRef.current.querySelector('canvas');
       if (canvas && canvas.chart) {
@@ -48,7 +48,7 @@ function Programs({ userRole }) {
         try {
           // Warm cache before fetching data
           await warmUserCache(user.uid, 'high');
-          
+
           // Fetch user programs
           const userProgramsData = await getCollectionCached(
             'programs',
@@ -167,10 +167,10 @@ function Programs({ userRole }) {
       await updateDoc(doc(db, "programs", programId), {
         isCurrent: true
       });
-      
+
       // Invalidate cache after all updates are complete
       invalidateProgramCache(user.uid);
-      
+
       setUserPrograms(userPrograms.map(program => ({
         ...program,
         isCurrent: program.id === programId
@@ -310,6 +310,16 @@ function Programs({ userRole }) {
                   <Trash className="me-1" /> Delete
                 </Button>
               )}
+              {isTemplate && (
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => adoptProgram(program)}
+                  className="w-100"
+                >
+                  <Copy className="me-1" /> Adopt
+                </Button>
+              )}
             </>
           ) : (
             <Button
@@ -363,6 +373,16 @@ function Programs({ userRole }) {
                 <Trash className="me-1" /> Delete
               </Button>
             )}
+            {isTemplate && (
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => adoptProgram(program)}
+                  className="w-100"
+                >
+                  <Copy className="me-1" /> Adopt
+                </Button>
+              )}
           </>
         ) : (
           <Button
@@ -404,7 +424,7 @@ function Programs({ userRole }) {
   // Enhanced Program Details Modal (from Claude)
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
-    
+
     // Calculate overall program progress
     const calculateProgramProgress = () => {
       let totalWorkouts = 0;
@@ -675,7 +695,7 @@ function Programs({ userRole }) {
                           //     </span>
                           //   );
                           // }
-                          
+
                           // If not complete, show basic progress
                           return (
                             <span className="text-muted">
@@ -1007,25 +1027,25 @@ function Programs({ userRole }) {
                                           )}
                                         </span>
                                       </div>
-                                      
+
                                       {/* Metrics row - responsive layout */}
                                       <div className="d-flex flex-wrap gap-2 justify-content-between">
                                         <span className="metric-box">
-                                          <span className="metric-value">{exercise.maxWeight}</span> 
+                                          <span className="metric-value">{exercise.maxWeight}</span>
                                           <span className="metric-label">
-                                            {isMobile ? 
+                                            {isMobile ?
                                               (exercise.exerciseType === 'Bodyweight' ? 'Max BW' :
-                                               exercise.exerciseType === 'Bodyweight Loadable' ? 'Max Total' : 'Max Wt') : 
+                                                exercise.exerciseType === 'Bodyweight Loadable' ? 'Max Total' : 'Max Wt') :
                                               getWeightLabel()
                                             } ({selectedProgram.weightUnit})
                                           </span>
                                         </span>
                                         <span className="metric-box">
-                                          <span className="metric-value">{exercise.sessions.length}</span> 
+                                          <span className="metric-value">{exercise.sessions.length}</span>
                                           <span className="metric-label">Sessions</span>
                                         </span>
                                         <span className="metric-box">
-                                          <span className="metric-value">{Math.round(exercise.totalVolume)}</span> 
+                                          <span className="metric-value">{Math.round(exercise.totalVolume)}</span>
                                           <span className="metric-label">Total Volume</span>
                                         </span>
                                       </div>
@@ -1035,12 +1055,12 @@ function Programs({ userRole }) {
                                     {exercise.sessions.length > 1 && (
                                       <div className="progression-chart mb-4" style={{ overflowX: 'auto' }}>
                                         <h6 className="mb-2">Progression Chart</h6>
-                                        <div 
+                                        <div
                                           ref={chartContainerRef}
-                                          className="chart-container" 
-                                          style={{ 
-                                            minWidth: 320, 
-                                            width: '100%', 
+                                          className="chart-container"
+                                          style={{
+                                            minWidth: 320,
+                                            width: '100%',
                                             maxWidth: '100%',
                                             height: isMobile ? '250px' : '350px',
                                             position: 'relative'
@@ -1450,7 +1470,7 @@ function Programs({ userRole }) {
       // Update mobile state
       setIsMobile(window.innerWidth <= 767);
     };
-    
+
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
