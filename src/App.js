@@ -136,7 +136,7 @@ function AppContent() {
         <Route path="/" element={user ? <Home user={user} /> : <Navigate to="/auth" />} />
         <Route path="/exercises" element={user ? <Exercises user={user} userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/create-program" element={user ? <CreateProgram userRole={userRole} /> : <Navigate to="/auth" />} />
-        <Route path="/programs" element={user ? <Programs /> : <Navigate to="/auth" />} />
+        <Route path="/programs" element={user ? <Programs userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />

@@ -11,7 +11,7 @@ import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-function Programs() {
+function Programs({ userRole }) {
   const [userPrograms, setUserPrograms] = useState([]);
   const [templatePrograms, setTemplatePrograms] = useState([]);
   const [exercises, setExercises] = useState([]);
@@ -278,8 +278,8 @@ function Programs() {
           >
             <FileText className="me-1" /> Details
           </Button>
-          
-          {!isTemplate ? (
+          {/* Allow edit for admin on template programs */}
+          {(!isTemplate || userRole === 'admin') ? (
             <>
               <Button
                 variant="outline-secondary"
@@ -289,7 +289,7 @@ function Programs() {
               >
                 <Pencil className="me-1" /> Edit
               </Button>
-              {!program.isCurrent && (
+              {!isTemplate && !program.isCurrent && (
                 <Button
                   variant="outline-success"
                   size="sm"
@@ -299,15 +299,17 @@ function Programs() {
                   <Clock className="me-1" /> Set Current
                 </Button>
               )}
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => deleteProgram(program.id)}
-                disabled={isDeleting}
-                className="w-100"
-              >
-                <Trash className="me-1" /> Delete
-              </Button>
+              {!isTemplate && (
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => deleteProgram(program.id)}
+                  disabled={isDeleting}
+                  className="w-100"
+                >
+                  <Trash className="me-1" /> Delete
+                </Button>
+              )}
             </>
           ) : (
             <Button
@@ -322,8 +324,7 @@ function Programs() {
         </div>
       );
     }
-    
-    // Desktop layout (existing code)
+    // Desktop layout
     return (
       <div className="d-flex gap-2">
         <Button
@@ -333,8 +334,8 @@ function Programs() {
         >
           <FileText className="me-1" /> Details
         </Button>
-        
-        {!isTemplate ? (
+        {/* Allow edit for admin on template programs */}
+        {(!isTemplate || userRole === 'admin') ? (
           <>
             <Button
               variant="outline-secondary"
@@ -343,7 +344,7 @@ function Programs() {
             >
               <Pencil className="me-1" /> Edit
             </Button>
-            {!program.isCurrent && (
+            {!isTemplate && !program.isCurrent && (
               <Button
                 variant="outline-success"
                 size="sm"
@@ -352,14 +353,16 @@ function Programs() {
                 <Clock className="me-1" /> Set Current
               </Button>
             )}
-            <Button
-              variant="outline-danger"
-              size="sm"
-              onClick={() => deleteProgram(program.id)}
-              disabled={isDeleting}
-            >
-              <Trash className="me-1" /> Delete
-            </Button>
+            {!isTemplate && (
+              <Button
+                variant="outline-danger"
+                size="sm"
+                onClick={() => deleteProgram(program.id)}
+                disabled={isDeleting}
+              >
+                <Trash className="me-1" /> Delete
+              </Button>
+            )}
           </>
         ) : (
           <Button
