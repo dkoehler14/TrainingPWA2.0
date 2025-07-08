@@ -632,7 +632,7 @@ function CreateProgram({ mode = 'create', userRole }) {
         await addDoc(collection(db, "programs"), {
           ...programData,
           ...(userRole === 'admin' && isTemplate
-            ? { isTemplate: true, createdAt: new Date() }
+            ? { isTemplate: true, userId: user.uid, createdAt: new Date() }
             : { userId: user.uid, isTemplate: false, createdAt: new Date() }
           )
         });

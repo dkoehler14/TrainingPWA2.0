@@ -20,7 +20,7 @@ service cloud.firestore {
       allow read: if resource.data.isTemplate == true || (request.auth != null && request.auth.uid == resource.data.userId);
       allow write: if request.auth != null && (
         (!request.resource.data.isTemplate && request.auth.uid == request.resource.data.userId) ||
-        (resource.data.isTemplate == true && request.auth.uid == resource.data.userId)
+        (request.resource.data.isTemplate == true && request.auth.uid == request.resource.data.userId)
       );
     }
     match /workoutLogs/{logId} {
