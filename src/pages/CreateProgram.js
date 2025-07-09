@@ -607,8 +607,8 @@ function CreateProgram({ mode = 'create', userRole }) {
             name: day.name || `Day ${dayIndex + 1}`,
             exercises: day.exercises.map(ex => ({
               exerciseId: ex.exerciseId,
-              sets: ex.sets,
-              reps: ex.reps,
+              sets: isNaN(Number(ex.sets)) ? String(ex.sets) : Number(ex.sets),
+              reps: isNaN(Number(ex.reps)) ? String(ex.reps) : Number(ex.reps),
               notes: ex.notes || '',
             }))
           };
