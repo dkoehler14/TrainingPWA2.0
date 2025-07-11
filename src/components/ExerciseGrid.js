@@ -21,11 +21,14 @@ const ExerciseGrid = ({
     showEditButton = false,
     onEditClick = null,
     emptyMessage = "No exercises found.",
-    className = ""
+    className = "",
+    initialTypeFilter = '',
+    initialMuscleFilter = '',
+    initialSearchTerm = ''
 }) => {
-    const [searchTerm, setSearchTerm] = useState('');
-    const [typeFilter, setTypeFilter] = useState('');
-    const [muscleFilter, setMuscleFilter] = useState('');
+    const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+    const [typeFilter, setTypeFilter] = useState(initialTypeFilter);
+    const [muscleFilter, setMuscleFilter] = useState(initialMuscleFilter);
     const [sortOption, setSortOption] = useState('name-asc');
 
     // Filtering and sorting logic

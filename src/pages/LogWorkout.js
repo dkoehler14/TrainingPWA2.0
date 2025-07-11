@@ -521,7 +521,6 @@ function LogWorkout() {
     setExerciseToReplace(exercise);
     setIsLoadingAlternatives(true);
     setShowReplaceModal(true);
-    // Show all exercises for replacement
     setAlternativeExercises(exercisesList);
     setIsLoadingAlternatives(false);
   };
@@ -1315,6 +1314,31 @@ function LogWorkout() {
                           exercises={alternativeExercises}
                           onExerciseClick={replaceExercise}
                           emptyMessage="No exercises found."
+                          initialTypeFilter=''
+                          // This is useful for other files maybe
+                          // {(() => {
+                          //   if (!exerciseToReplace) return '';
+                          //   const currentExercise = exercisesList.find(e => e.id === exerciseToReplace.exerciseId);
+                          //   if (!currentExercise) return '';
+                            
+                          //   // Check if there are other exercises with the same type (excluding current exercise)
+                          //   const sameTypeExercises = exercisesList.filter(ex =>
+                          //     ex.exerciseType === currentExercise.exerciseType && ex.id !== exerciseToReplace.exerciseId
+                          //   );
+                            
+                          //   // Return type filter if there are matching exercises
+                          //   return sameTypeExercises.length > 0 ? currentExercise.exerciseType : '';
+                          // })()}
+                          initialMuscleFilter={(() => {
+                            if (!exerciseToReplace) return '';
+                            const currentExercise = exercisesList.find(e => e.id === exerciseToReplace.exerciseId);
+                            if (!currentExercise) return '';
+                            
+                            if (currentExercise.primaryMuscleGroup) return currentExercise.primaryMuscleGroup;
+                            
+                            return '';
+
+                          })()}
                         />
                       </Modal.Body>
                     </Modal>
