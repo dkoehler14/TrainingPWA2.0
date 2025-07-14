@@ -1,0 +1,16 @@
+{
+  "name": "exercise-tracker-functions",
+  "description": "Cloud Functions for the Exercise Tracker app",
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "start": "firebase emulators:start --only functions",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.0.0",
+    "firebase-functions": "^4.0.0"
+  }
+} 

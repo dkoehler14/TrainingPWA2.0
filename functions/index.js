@@ -879,7 +879,7 @@ exports.migrateWorkoutLogsCompletedDate = functions.https.onCall(async (data, co
 //       });
 
 //       functions.logger.info(`Successfully processed workout ${logId} for user ${userId}.`);
-//       return null;
+//       return { success: true, message: 'Workout processed successfully.' };
 
 //     } catch (error) {
 //       functions.logger.error(`Error processing workout ${logId} for user ${userId}:`, error);
@@ -1197,11 +1197,25 @@ exports.processWorkoutManually = functions.https.onCall(async (data, context) =>
       if (exerciseMetadataCache.has(exerciseId)) {
         return exerciseMetadataCache.get(exerciseId);
       }
-      
       try {
-        const doc = await db.collection('exercises').doc(exerciseId).get();
-        if (doc.exists) {
-          const data = doc.data();
+        // Fetch all exercises from metadata document
+        const docRef = db.collection('exercises_metadata').doc('all_exercises');
+        const docSnap = await docRef.get();
+        if (!docSnap.exists) {
+          const defaultMetadata = {
+            name: 'Unknown',
+            muscleGroup: 'Unknown',
+            exerciseType: 'Unknown',
+            isCompoundLift: false,
+            movementPattern: 'Unknown',
+            equipment: 'Unknown'
+          };
+          exerciseMetadataCache.set(exerciseId, defaultMetadata);
+          return defaultMetadata;
+        }
+        const exercisesMap = docSnap.data().exercises || {};
+        const data = exercisesMap[exerciseId];
+        if (data) {
           const exerciseName = data.name || 'Unknown';
           const metadata = {
             name: exerciseName,
@@ -1900,3 +1914,54 @@ exports.processWorkoutManually = functions.https.onCall(async (data, context) =>
     throw new functions.https.HttpsError('internal', 'Failed to process workout.', error.message);
   }
 });
+
+// Helper to update the all_exercises metadata doc
+async function updateExercisesMetadata(exerciseId, exerciseData, action) {
+  const docRef = db.collection('exercises_metadata').doc('all_exercises');
+  await db.runTransaction(async (transaction) => {
+    const docSnap = await transaction.get(docRef);
+    let exercises = {};
+    if (docSnap.exists) {
+      exercises = docSnap.data().exercises || {};
+    }
+    if (action === 'add' || action === 'update') {
+      exercises[exerciseId] = exerciseData;
+    } else if (action === 'delete') {
+      delete exercises[exerciseId];
+    }
+    transaction.set(docRef, {
+      exercises,
+      lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+
+const region = 'us-west8'; // Change to your Firestore region
+
+exports.onExerciseCreate = onDocumentCreated(
+  { document: 'exercises/{exerciseId}', region },
+  async (event) => {
+    const exerciseId = event.params.exerciseId;
+    const exerciseData = event.data.data();
+    await updateExercisesMetadata(exerciseId, exerciseData, 'add');
+  }
+);
+
+exports.onExerciseUpdate = onDocumentUpdated(
+  { document: 'exercises/{exerciseId}', region },
+  async (event) => {
+    const exerciseId = event.params.exerciseId;
+    const exerciseData = event.data.after.data();
+    await updateExercisesMetadata(exerciseId, exerciseData, 'update');
+  }
+);
+
+exports.onExerciseDelete = onDocumentDeleted(
+  { document: 'exercises/{exerciseId}', region },
+  async (event) => {
+    const exerciseId = event.params.exerciseId;
+    await updateExercisesMetadata(exerciseId, null, 'delete');
+  }
+);
