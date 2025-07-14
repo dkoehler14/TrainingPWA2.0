@@ -861,3 +861,25 @@ setInterval(cleanupCache, 5 * 60 * 1000);
 
 // Export legacy functions for backward compatibility
 export { invalidateCache as invalidateCacheLegacy };
+
+// Fetch all exercises from the exercises_metadata/all_exercises document
+export async function getAllExercisesMetadata(ttl = DEFAULT_TTL) {
+  const cacheKey = getCacheKey('exercises_metadata', 'all_exercises', {});
+  const cached = cache.get(cacheKey);
+  if (cached && !isExpired(cached)) {
+    return cached.data;
+  }
+
+  // Fetch the single metadata document
+  const docRef = doc(db, 'exercises_metadata', 'all_exercises');
+  const docSnap = await getDoc(docRef);
+  if (!docSnap.exists()) {
+    throw new Error('exercises_metadata/all_exercises document does not exist');
+  }
+  const data = docSnap.data();
+  // Convert the map to an array, including the id
+  const exercisesMap = data.exercises || {};
+  const exercisesArr = Object.entries(exercisesMap).map(([id, ex]) => ({ id, ...ex }));
+  cache.set(cacheKey, { data: exercisesArr, expiry: Date.now() + ttl });
+  return exercisesArr;
+}

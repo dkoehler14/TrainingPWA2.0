@@ -897,15 +897,15 @@ function LogWorkout() {
       }
 
       // Trigger manual processing
-      try {
-        const processWorkout = httpsCallable(functions, 'processWorkoutManually');
-        await processWorkout({ workoutLogId: logDocId });
-        console.log('Workout processing triggered successfully');
-      } catch (processingError) {
-        console.error('Error triggering workout processing:', processingError);
-        // Don't fail the workout completion if processing fails
-        // You could show a warning to the user here if needed
-      }
+      // try {
+      //   const processWorkout = httpsCallable(functions, 'processWorkoutManually');
+      //   await processWorkout({ workoutLogId: logDocId });
+      //   console.log('Workout processing triggered successfully');
+      // } catch (processingError) {
+      //   console.error('Error triggering workout processing:', processingError);
+      //   // Don't fail the workout completion if processing fails
+      //   // You could show a warning to the user here if needed
+      // }
 
       setIsWorkoutFinished(true);
       setShowSummaryModal(true);

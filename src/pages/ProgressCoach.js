@@ -425,7 +425,8 @@ const ProgressCoach = () => {
                 <HypertrophyHub />
 
                 {/* PR Tracker - Personal records and achievements */}
-                <PRTracker />
+                {/* 07/14/2025 - Removed PR Tracker for now, need to reduce reads on database */}
+                {/* <PRTracker /> */}
             </div>
         </div>
     );
