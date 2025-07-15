@@ -164,6 +164,7 @@ function Exercises({ user, userRole }) {
                   showEditButton={true}
                   onEditClick={openEditModal}
                   className="exercises-organizer"
+                  userRole={userRole}
                 />
               </>
             )}

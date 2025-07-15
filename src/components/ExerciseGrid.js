@@ -40,7 +40,7 @@ const ExerciseGrid = ({
     const [muscleFilter, setMuscleFilter] = useState(initialMuscleFilter);
     const [sourceFilter, setSourceFilter] = useState(initialSourceFilter);
     const [sortOption, setSortOption] = useState('name-asc');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
 
     // Enhanced filtering and sorting logic
     const filteredExercises = exercises
@@ -104,18 +104,6 @@ const ExerciseGrid = ({
 
             {/* Source Filter Buttons */}
             <div className="mb-3">
-                <div className="d-flex justify-content-between align-items-center mb-2">
-                    <small className="text-muted fw-bold">FILTER BY SOURCE</small>
-                    <Button
-                        variant="link"
-                        size="sm"
-                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                        className="p-0 text-decoration-none"
-                    >
-                        <FunnelFill className="me-1" size={12} />
-                        {showAdvancedFilters ? 'Hide' : 'Show'} Advanced
-                    </Button>
-                </div>
                 <ButtonGroup className="w-100 mb-2">
                     {SOURCE_FILTERS.map(filter => {
                         const IconComponent = filter.icon;
@@ -133,6 +121,18 @@ const ExerciseGrid = ({
                         );
                     })}
                 </ButtonGroup>
+                {/* <div className="d-flex justify-content-between align-items-center mb-2">
+                    <small className="text-muted fw-bold">FILTER BY SOURCE</small>
+                    <Button
+                        variant="link"
+                        size="sm"
+                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                        className="p-0 text-decoration-none"
+                    >
+                        <FunnelFill className="me-1" size={12} />
+                        {showAdvancedFilters ? 'Hide' : 'Show'} Advanced
+                    </Button>
+                </div> */}
             </div>
 
             {/* Advanced Filters */}
@@ -203,7 +203,7 @@ const ExerciseGrid = ({
                         size="sm"
                         onClick={clearAllFilters}
                     >
-                        Clear All
+                        Clear Filters
                     </Button>
                 )}
             </div>

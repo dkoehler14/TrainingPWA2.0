@@ -9,7 +9,8 @@ const ExerciseOrganizer = ({
     onExerciseClick, 
     showEditButton = false, 
     onEditClick = null,
-    className = ""
+    className = "",
+    userRole = "user"
 }) => {
     const [viewMode, setViewMode] = useState('grid'); // 'grid', 'list', 'grouped'
     const [showStats, setShowStats] = useState(false);
@@ -147,7 +148,7 @@ const ExerciseOrganizer = ({
                                     <span>Custom:</span>
                                     <Badge bg="success">{stats.custom}</Badge>
                                 </div>
-                                <div className="d-flex justify-content-between">
+                                <div className="d-flex justify-content-between last">
                                     <strong>Total:</strong>
                                     <Badge bg="secondary">{stats.total}</Badge>
                                 </div>
@@ -184,10 +185,10 @@ const ExerciseOrganizer = ({
     };
 
     return (
-        <div className={className}>
+        <div className={`exercises-organizer${className ? ` ${className}` : ''}`}>
             {/* View Controls */}
             <div className="d-flex justify-content-between align-items-center mb-3">
-                <div className="d-flex gap-2">
+                {/* <div className="d-flex gap-2">
                     <ButtonGroup>
                         <Button
                             variant={viewMode === 'grid' ? 'primary' : 'outline-secondary'}
@@ -240,21 +241,23 @@ const ExerciseOrganizer = ({
                             </Button>
                         </ButtonGroup>
                     )}
-                </div>
+                </div> */}
 
-                <Button
-                    variant="outline-secondary"
-                    size="sm"
-                    onClick={() => setShowStats(!showStats)}
-                >
-                    <BarChart className="me-1" size={14} />
-                    Stats
-                    {showStats ? <ChevronUp className="ms-1" size={12} /> : <ChevronDown className="ms-1" size={12} />}
-                </Button>
+                {userRole === 'admin' && (
+                    <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => setShowStats(!showStats)}
+                    >
+                        <BarChart className="me-1" size={14} />
+                        Stats
+                        {showStats ? <ChevronUp className="ms-1" size={12} /> : <ChevronDown className="ms-1" size={12} />}
+                    </Button>
+                )}
             </div>
 
             {/* Statistics Panel */}
-            {renderStatsPanel()}
+            {userRole === 'admin' && renderStatsPanel()}
 
             {/* Exercise Display */}
             {viewMode === 'grid' && (
