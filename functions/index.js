@@ -904,6 +904,60 @@ exports.generateCoachingInsights = functions.https.onCall(async (data, context) 
   const userId = context.auth.uid;
   functions.logger.info(`Generating coaching insights for user ${userId}`);
 
+  // Define calculateMuscleBalance function at the top
+  async function calculateMuscleBalance(userId) {
+    try {
+      const exerciseAnalytics = await db.collection('userAnalytics')
+        .doc(userId)
+        .collection('exerciseAnalytics')
+        .get();
+
+      const muscleGroupStrength = {};
+      
+      exerciseAnalytics.docs.forEach(doc => {
+        const data = doc.data();
+        const muscleGroup = data.muscleGroup;
+        const e1RM = data.e1RM || 0;
+        
+        if (!muscleGroupStrength[muscleGroup]) {
+          muscleGroupStrength[muscleGroup] = [];
+        }
+        muscleGroupStrength[muscleGroup].push(e1RM);
+      });
+
+      // Calculate average strength per muscle group
+      const avgStrength = {};
+      for (const [muscle, strengths] of Object.entries(muscleGroupStrength)) {
+        avgStrength[muscle] = strengths.reduce((sum, s) => sum + s, 0) / strengths.length;
+      }
+
+      // Calculate key ratios
+      const ratios = {};
+      
+      // Push/Pull ratio
+      const pushMuscles = ['Chest', 'Shoulders', 'Triceps'];
+      const pullMuscles = ['Back', 'Biceps'];
+      
+      const pushStrength = pushMuscles.reduce((sum, muscle) => sum + (avgStrength[muscle] || 0), 0);
+      const pullStrength = pullMuscles.reduce((sum, muscle) => sum + (avgStrength[muscle] || 0), 0);
+      
+      if (pullStrength > 0) {
+        ratios.pushPullRatio = pushStrength / pullStrength;
+      }
+
+      // Quad/Hamstring ratio
+      if (avgStrength['Quadriceps'] && avgStrength['Hamstrings']) {
+        ratios.quadHamstringRatio = avgStrength['Quadriceps'] / avgStrength['Hamstrings'];
+      }
+
+      return { muscleGroupStrength: avgStrength, ratios };
+      
+    } catch (error) {
+      functions.logger.error(`Error calculating muscle balance for user ${userId}:`, error);
+      return { muscleGroupStrength: {}, ratios: {} };
+    }
+  }
+
   try {
     // Fetch user analytics
     const userAnalyticsRef = db.collection('userAnalytics').doc(userId);
@@ -1198,36 +1252,62 @@ exports.processWorkoutManually = functions.https.onCall(async (data, context) =>
         return exerciseMetadataCache.get(exerciseId);
       }
       try {
-        // Fetch all exercises from metadata document
-        const docRef = db.collection('exercises_metadata').doc('all_exercises');
-        const docSnap = await docRef.get();
-        if (!docSnap.exists) {
-          const defaultMetadata = {
-            name: 'Unknown',
-            muscleGroup: 'Unknown',
-            exerciseType: 'Unknown',
-            isCompoundLift: false,
-            movementPattern: 'Unknown',
-            equipment: 'Unknown'
-          };
-          exerciseMetadataCache.set(exerciseId, defaultMetadata);
-          return defaultMetadata;
+        // First, try to fetch from global exercises metadata
+        const globalDocRef = db.collection('exercises_metadata').doc('all_exercises');
+        const globalDocSnap = await globalDocRef.get();
+        let exerciseData = null;
+        
+        if (globalDocSnap.exists) {
+          const globalExercisesMap = globalDocSnap.data().exercises || {};
+          exerciseData = globalExercisesMap[exerciseId];
         }
-        const exercisesMap = docSnap.data().exercises || {};
-        const data = exercisesMap[exerciseId];
-        if (data) {
-          const exerciseName = data.name || 'Unknown';
+        
+        // If not found in global, try user-specific exercises
+        if (!exerciseData) {
+          const userDocRef = db.collection('exercises_metadata').doc(userId);
+          const userDocSnap = await userDocRef.get();
+          
+          if (userDocSnap.exists) {
+            const userExercises = userDocSnap.data().exercises || [];
+            exerciseData = userExercises.find(ex => ex.id === exerciseId);
+          }
+        }
+        
+        if (exerciseData) {
+          const exerciseName = exerciseData.name || 'Unknown';
           const metadata = {
             name: exerciseName,
-            muscleGroup: data.primaryMuscleGroup || 'Unknown',
-            exerciseType: data.exerciseType || 'Unknown',
+            muscleGroup: exerciseData.primaryMuscleGroup || 'Unknown',
+            exerciseType: exerciseData.exerciseType || 'Unknown',
             isCompoundLift: COMPOUND_LIFTS.has(exerciseName.toLowerCase()),
-            movementPattern: data.movementPattern || 'Unknown',
-            equipment: data.equipment || 'Unknown'
+            movementPattern: exerciseData.movementPattern || 'Unknown',
+            equipment: exerciseData.equipment || 'Unknown'
           };
           exerciseMetadataCache.set(exerciseId, metadata);
           return metadata;
         } else {
+          // Fallback: try to fetch from the original exercises collection
+          try {
+            const exerciseDoc = await db.collection('exercises').doc(exerciseId).get();
+            if (exerciseDoc.exists) {
+              const data = exerciseDoc.data();
+              const exerciseName = data.name || 'Unknown';
+              const metadata = {
+                name: exerciseName,
+                muscleGroup: data.primaryMuscleGroup || 'Unknown',
+                exerciseType: data.exerciseType || 'Unknown',
+                isCompoundLift: COMPOUND_LIFTS.has(exerciseName.toLowerCase()),
+                movementPattern: data.movementPattern || 'Unknown',
+                equipment: data.equipment || 'Unknown'
+              };
+              exerciseMetadataCache.set(exerciseId, metadata);
+              return metadata;
+            }
+          } catch (fallbackError) {
+            functions.logger.warn(`Fallback to exercises collection failed for ${exerciseId}:`, fallbackError);
+          }
+          
+          // Final fallback to default metadata
           const defaultMetadata = {
             name: 'Unknown',
             muscleGroup: 'Unknown',
@@ -1936,32 +2016,32 @@ async function updateExercisesMetadata(exerciseId, exerciseData, action) {
   });
 }
 
-const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+//const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require('firebase-functions/v2/firestore');
 
-const region = 'us-west8'; // Change to your Firestore region
+//const region = 'us-west8'; // Change to your Firestore region
 
-exports.onExerciseCreate = onDocumentCreated(
-  { document: 'exercises/{exerciseId}', region },
-  async (event) => {
-    const exerciseId = event.params.exerciseId;
-    const exerciseData = event.data.data();
-    await updateExercisesMetadata(exerciseId, exerciseData, 'add');
-  }
-);
+// exports.onExerciseCreate = onDocumentCreated(
+//   { document: 'exercises/{exerciseId}', region },
+//   async (event) => {
+//     const exerciseId = event.params.exerciseId;
+//     const exerciseData = event.data.data();
+//     await updateExercisesMetadata(exerciseId, exerciseData, 'add');
+//   }
+// );
 
-exports.onExerciseUpdate = onDocumentUpdated(
-  { document: 'exercises/{exerciseId}', region },
-  async (event) => {
-    const exerciseId = event.params.exerciseId;
-    const exerciseData = event.data.after.data();
-    await updateExercisesMetadata(exerciseId, exerciseData, 'update');
-  }
-);
+// exports.onExerciseUpdate = onDocumentUpdated(
+//   { document: 'exercises/{exerciseId}', region },
+//   async (event) => {
+//     const exerciseId = event.params.exerciseId;
+//     const exerciseData = event.data.after.data();
+//     await updateExercisesMetadata(exerciseId, exerciseData, 'update');
+//   }
+// );
 
-exports.onExerciseDelete = onDocumentDeleted(
-  { document: 'exercises/{exerciseId}', region },
-  async (event) => {
-    const exerciseId = event.params.exerciseId;
-    await updateExercisesMetadata(exerciseId, null, 'delete');
-  }
-);
+// exports.onExerciseDelete = onDocumentDeleted(
+//   { document: 'exercises/{exerciseId}', region },
+//   async (event) => {
+//     const exerciseId = event.params.exerciseId;
+//     await updateExercisesMetadata(exerciseId, null, 'delete');
+//   }
+// );
