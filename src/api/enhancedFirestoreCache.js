@@ -628,8 +628,8 @@ export function invalidateProgramCache(userId) {
 }
 
 export function invalidateExerciseCache() {
-  return invalidateCache(['exercises'], { 
-    reason: 'exercise-update' 
+  return invalidateCache(['exercises', 'exercises_metadata'], {
+    reason: 'exercise-update'
   });
 }
 
@@ -643,12 +643,15 @@ export async function warmUserCache(userId, priority = 'normal') {
     // High priority: Essential data
     if (priority === 'high' || priority === 'normal') {
       warmingPromises.push(
-        // User exercises (long TTL)
-        getCollectionCached('exercises', {}, 60 * 60 * 1000), // 1 hour
+        // Global exercises metadata (long TTL)
+        getAllExercisesMetadata(60 * 60 * 1000), // 1 hour
+        
+        // User-specific exercises metadata
+        getDocCached('exercises_metadata', userId, 60 * 60 * 1000).catch(() => null), // May not exist
         
         // User programs
-        getCollectionCached('programs', { 
-          where: [['userId', '==', userId]] 
+        getCollectionCached('programs', {
+          where: [['userId', '==', userId]]
         }, 30 * 60 * 1000), // 30 minutes
         
         // Recent workout logs
@@ -693,8 +696,8 @@ export async function warmAppCache() {
   console.log('🚀 Starting app cache warming...');
   
   try {
-    // Warm global data first
-    await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
+    // Warm global exercises metadata first
+    await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
     
     console.log('✅ App cache warming completed');
   } catch (error) {

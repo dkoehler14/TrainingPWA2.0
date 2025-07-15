@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
-import { collection, addDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
 import { getCollectionCached, invalidateExerciseCache } from '../api/enhancedFirestoreCache';
 
 const MUSCLE_GROUPS = [
@@ -138,41 +138,69 @@ function ExerciseCreationModal({
                 exerciseData.userId = user.uid;
             }
 
-            if (isEditMode) {
-                // Update in Firestore
-                const exerciseRef = doc(db, "exercises", exerciseId);
-                await updateDoc(exerciseRef, exerciseData);
-                
-                // Invalidate exercise cache after update
-                invalidateExerciseCache();
-                
-                if (onExerciseUpdated) {
-                    onExerciseUpdated({ id: exerciseId, ...exerciseData });
+            // --- Begin Transaction for Exercise and Metadata ---
+            await runTransaction(db, async (transaction) => {
+                let exerciseRef;
+                let newExerciseId = exerciseId;
+                if (isEditMode) {
+                    exerciseRef = doc(db, "exercises", exerciseId);
+                    transaction.update(exerciseRef, exerciseData);
+                } else {
+                    exerciseRef = doc(collection(db, "exercises"));
+                    transaction.set(exerciseRef, exerciseData);
+                    newExerciseId = exerciseRef.id;
                 }
-            } else {
-                // Add to Firestore
-                const docRef = await addDoc(collection(db, "exercises"), exerciseData);
-                
-                // Invalidate exercise cache after creation
-                invalidateExerciseCache();
-                
-                // Call the callback with the new exercise data
-                if (onExerciseAdded) {
-                    onExerciseAdded({
-                        id: docRef.id,
-                        ...exerciseData,
-                        label: exerciseData.name,
-                        value: docRef.id,
-                    });
+
+                // --- Only update global metadata for global exercises ---
+                if (!exerciseData.userId) {
+                    const metadataRef = doc(db, "exercises_metadata", "all_exercises");
+                    const metadataDoc = await transaction.get(metadataRef);
+                    let metadata = metadataDoc.exists() ? metadataDoc.data() : { exercises: {} };
+                    if (!metadata.exercises) metadata.exercises = {};
+                    metadata.exercises[newExerciseId] = exerciseData;
+                    metadata.lastUpdated = new Date(); // client-side timestamp
+                    transaction.set(metadataRef, metadata);
                 }
-            }
+
+                // --- Per-user metadata for personal exercises ---
+                if (exerciseData.userId) {
+                    const userMetadataRef = doc(db, "exercises_metadata", exerciseData.userId);
+                    const userMetadataDoc = await transaction.get(userMetadataRef);
+                    let userMetadata = userMetadataDoc.exists() ? userMetadataDoc.data() : { exercises: {} };
+                    if (!userMetadata.exercises) userMetadata.exercises = {};
+                    userMetadata.exercises[newExerciseId] = exerciseData;
+                    userMetadata.lastUpdated = new Date();
+                    transaction.set(userMetadataRef, userMetadata);
+                }
+                // --- End per-user metadata ---
+
+                // Callbacks after transaction
+                if (isEditMode) {
+                    if (onExerciseUpdated) {
+                        onExerciseUpdated({ id: exerciseId, ...exerciseData });
+                    }
+                } else {
+                    if (onExerciseAdded) {
+                        onExerciseAdded({
+                            id: newExerciseId,
+                            ...exerciseData,
+                            label: exerciseData.name,
+                            value: newExerciseId,
+                        });
+                    }
+                }
+            });
+            // --- End Transaction ---
+
+            // Invalidate exercise cache after creation/update
+            invalidateExerciseCache();
 
             // Reset form and close modal
             resetForm();
             onHide();
         } catch (error) {
-            console.error("Error adding exercise: ", error);
-            setValidationError("Failed to add exercise. Please try again.");
+            console.error("Error adding/updating exercise: ", error);
+            setValidationError("Failed to add/update exercise. Please try again.");
         } finally {
             setIsSubmitting(false);
         }

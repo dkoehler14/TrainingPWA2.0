@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Alert, Spinner } from 'react-bootstrap';
 import { PlusLg } from 'react-bootstrap-icons';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
-import ExerciseGrid from '../components/ExerciseGrid';
+import ExerciseOrganizer from '../components/ExerciseOrganizer';
 import '../styles/Exercises.css';
-import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import '../styles/ExerciseGrid.css';
+import '../styles/ExerciseOrganizer.css';
+import { getCollectionCached, warmUserCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
 
 function Exercises({ user, userRole }) {
   const [exercises, setExercises] = useState([]);
@@ -20,26 +22,66 @@ function Exercises({ user, userRole }) {
 
   useEffect(() => {
     if (user) {
+      // Warm cache and fetch exercises
       warmUserCache(user.uid, 'high').then(() => {
         fetchExercises();
       });
+    } else {
+      // If no user, still fetch global exercises
+      fetchExercises();
     }
   }, [user]);
 
-  useEffect(() => {
-    // Filter exercises based on user role
-    if (userRole === 'admin') {
-      // Admin sees all exercises
-      return;
-    }
-    setExercises(prevExercises => prevExercises.filter(ex => !ex.userId || ex.userId === user?.uid));
-  }, [userRole, user]);
+  // Removed client-side filtering - now handled in fetchExercises
 
   const fetchExercises = async () => {
     setIsLoading(true);
     try {
-      const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour
-      setExercises(exercisesData);
+      // Fetch global exercises from metadata
+      const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+      
+      // Add source metadata to global exercises
+      const enhancedGlobalExercises = globalExercises.map(ex => ({
+        ...ex,
+        isGlobal: true,
+        source: 'global',
+        createdBy: null
+      }));
+      
+      // Fetch user-specific exercises if user exists
+      let userExercises = [];
+      if (user?.uid) {
+        try {
+          const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+          if (userMetadata && userMetadata.exercises) {
+            userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
+              id,
+              ...ex,
+              isGlobal: false,
+              source: 'custom',
+              createdBy: user.uid
+            }));
+          }
+        } catch (userError) {
+          // User metadata document doesn't exist yet - this is normal for new users
+          console.log('No user-specific exercises found');
+        }
+      }
+      
+      // Combine global and user exercises
+      const allExercises = [...enhancedGlobalExercises, ...userExercises];
+      
+      // Filter based on user role
+      let filteredExercises;
+      if (userRole === 'admin') {
+        // Admin sees all exercises
+        filteredExercises = allExercises;
+      } else {
+        // Regular users see global exercises + their own personal exercises
+        filteredExercises = allExercises.filter(ex => !ex.userId || ex.userId === user?.uid);
+      }
+      
+      setExercises(filteredExercises);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
       setValidationError("Failed to load exercises. Please refresh the page.");
@@ -116,13 +158,12 @@ function Exercises({ user, userRole }) {
                   </Button>
                 </div>
 
-                {/* Exercise Grid */}
-                <ExerciseGrid
+                {/* Exercise Organizer */}
+                <ExerciseOrganizer
                   exercises={exercises}
                   showEditButton={true}
                   onEditClick={openEditModal}
-                  emptyMessage="No exercises found. Click the 'Add New Exercise' button to create one."
-                  className="exercises-grid"
+                  className="exercises-organizer"
                 />
               </>
             )}
