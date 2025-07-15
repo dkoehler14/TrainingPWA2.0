@@ -27,5 +27,18 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
     }
+    match /userAnalytics/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      match /exerciseAnalytics/{exerciseId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+      match /monthlyAnalytics/{monthId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    match /exercises_metadata/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }

@@ -4,7 +4,7 @@ import { db, auth } from '../firebase';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
-import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 
@@ -56,7 +56,52 @@ function Analytics() {
                     }));
                     setWorkoutLogs(logsWithDate);
 
-                    const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
+                    // Use metadata approach for efficient exercise fetching
+                    let exercisesData = [];
+                    try {
+                        // Get global exercises from metadata
+                        const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+                        
+                        // Get user-specific exercises from metadata
+                        const userExercisesDoc = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                        const userExercises = userExercisesDoc?.exercises || [];
+                        
+                        // Combine global and user exercises
+                        const allExercises = [...globalExercises, ...userExercises];
+                        
+                        // Add source metadata for consistency
+                        exercisesData = allExercises.map(exercise => ({
+                            ...exercise,
+                            source: globalExercises.includes(exercise) ? 'global' : 'user'
+                        }));
+                        
+                        // Remove duplicates based on ID (user exercises override global ones)
+                        const uniqueExercises = [];
+                        const seenIds = new Set();
+                        
+                        // Process user exercises first (higher priority)
+                        exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
+                            if (!seenIds.has(exercise.id)) {
+                                uniqueExercises.push(exercise);
+                                seenIds.add(exercise.id);
+                            }
+                        });
+                        
+                        // Then process global exercises
+                        exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
+                            if (!seenIds.has(exercise.id)) {
+                                uniqueExercises.push(exercise);
+                                seenIds.add(exercise.id);
+                            }
+                        });
+                        
+                        exercisesData = uniqueExercises;
+                    } catch (error) {
+                        console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
+                        // Fallback to original method
+                        exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
+                    }
+                    
                     setExercises(exercisesData);
 
                     if (exercisesData.length > 0) {

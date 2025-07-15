@@ -7,7 +7,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import '../styles/ProgressTracker.css'; // Ensure this CSS file exists
-import { getCollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
@@ -41,7 +41,52 @@ function ProgressTracker2() {
 						});
 				}
 
-				const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour TTL
+				// Use metadata approach for efficient exercise fetching
+				let exercisesData = [];
+				try {
+					// Get global exercises from metadata
+					const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+					
+					// Get user-specific exercises from metadata
+					const userExercisesDoc = await getDocCached('exercises_metadata', auth.currentUser.uid, 60 * 60 * 1000);
+					const userExercises = userExercisesDoc?.exercises || [];
+					
+					// Combine global and user exercises
+					const allExercises = [...globalExercises, ...userExercises];
+					
+					// Add source metadata for consistency
+					exercisesData = allExercises.map(exercise => ({
+						...exercise,
+						source: globalExercises.includes(exercise) ? 'global' : 'user'
+					}));
+					
+					// Remove duplicates based on ID (user exercises override global ones)
+					const uniqueExercises = [];
+					const seenIds = new Set();
+					
+					// Process user exercises first (higher priority)
+					exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
+						if (!seenIds.has(exercise.id)) {
+							uniqueExercises.push(exercise);
+							seenIds.add(exercise.id);
+						}
+					});
+					
+					// Then process global exercises
+					exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
+						if (!seenIds.has(exercise.id)) {
+							uniqueExercises.push(exercise);
+							seenIds.add(exercise.id);
+						}
+					});
+					
+					exercisesData = uniqueExercises;
+				} catch (error) {
+					console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
+					// Fallback to original method
+					exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
+				}
+				
 				const fetchedExercises = exercisesData.map(doc => ({
 					value: doc.id,
 					label: doc.name,

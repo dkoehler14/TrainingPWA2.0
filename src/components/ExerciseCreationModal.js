@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
 import { collection, addDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
-import { getCollectionCached, invalidateExerciseCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
 
 const MUSCLE_GROUPS = [
     'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
@@ -87,21 +87,58 @@ function ExerciseCreationModal({
             return false;
         }
 
-        // Check for duplicate exercise name using enhanced cache
-        const exerciseQuery = {
-            where: [['name', '==', formData.name.trim()]]
-        };
-        
-        const existingExercises = await getCollectionCached('exercises', exerciseQuery, 60 * 60 * 1000); // 1 hour TTL
-        
-        // Filter out current exercise if in edit mode
-        const duplicates = isEditMode
-            ? existingExercises.filter(ex => ex.id !== exerciseId)
-            : existingExercises;
+        // Check for duplicate exercise name using metadata approach
+        try {
+            // Fetch global exercises from metadata
+            const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+            
+            // Fetch user-specific exercises if user exists
+            let userExercises = [];
+            if (user?.uid) {
+                try {
+                    const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                    if (userMetadata && userMetadata.exercises) {
+                        userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
+                            id,
+                            ...ex
+                        }));
+                    }
+                } catch (userError) {
+                    // User metadata document doesn't exist yet - this is normal for new users
+                    console.log('No user-specific exercises found during validation');
+                }
+            }
+            
+            // Combine all exercises for duplicate checking
+            const allExercises = [...globalExercises, ...userExercises];
+            
+            // Check for duplicates by name (case-insensitive)
+            const duplicates = allExercises.filter(ex =>
+                ex.name.toLowerCase() === formData.name.trim().toLowerCase() &&
+                (!isEditMode || ex.id !== exerciseId)
+            );
 
-        if (duplicates.length > 0) {
-            setValidationError('An exercise with this name already exists.');
-            return false;
+            if (duplicates.length > 0) {
+                setValidationError('An exercise with this name already exists.');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error checking for duplicate exercises:', error);
+            // Fall back to original method if metadata approach fails
+            const exerciseQuery = {
+                where: [['name', '==', formData.name.trim()]]
+            };
+            
+            const existingExercises = await getCollectionCached('exercises', exerciseQuery, 60 * 60 * 1000);
+            
+            const duplicates = isEditMode
+                ? existingExercises.filter(ex => ex.id !== exerciseId)
+                : existingExercises;
+
+            if (duplicates.length > 0) {
+                setValidationError('An exercise with this name already exists.');
+                return false;
+            }
         }
 
         // Validate primary muscle group

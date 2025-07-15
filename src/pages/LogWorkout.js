@@ -6,7 +6,7 @@ import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestor
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
-import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidateProgramCache, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidateProgramCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { httpsCallable } from 'firebase/functions';
 import ExerciseGrid from '../components/ExerciseGrid';
@@ -240,9 +240,48 @@ function LogWorkout() {
           });
           setPrograms(parsedPrograms);
 
-          // Fetch exercises
-          const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-          setExercisesList(exercisesData);
+          // Fetch exercises using metadata approach (same as Exercises.js)
+          try {
+            // Fetch global exercises from metadata
+            const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+            
+            // Add source metadata to global exercises
+            const enhancedGlobalExercises = globalExercises.map(ex => ({
+              ...ex,
+              isGlobal: true,
+              source: 'global',
+              createdBy: null
+            }));
+            
+            // Fetch user-specific exercises if user exists
+            let userExercises = [];
+            if (user?.uid) {
+              try {
+                const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                if (userMetadata && userMetadata.exercises) {
+                  userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
+                    id,
+                    ...ex,
+                    isGlobal: false,
+                    source: 'custom',
+                    createdBy: user.uid
+                  }));
+                }
+              } catch (userError) {
+                // User metadata document doesn't exist yet - this is normal for new users
+                console.log('No user-specific exercises found');
+              }
+            }
+            
+            // Combine global and user exercises
+            const allExercises = [...enhancedGlobalExercises, ...userExercises];
+            setExercisesList(allExercises);
+          } catch (error) {
+            console.error('Error fetching exercises metadata, falling back to original method:', error);
+            // Fallback to original method if metadata approach fails
+            const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
+            setExercisesList(exercisesData);
+          }
 
           // Check for a current program first, then fall back to most recent if none is marked current
           const currentProgram = parsedPrograms.find(program => program.isCurrent === true);
@@ -897,15 +936,15 @@ function LogWorkout() {
       }
 
       // Trigger manual processing
-      // try {
-      //   const processWorkout = httpsCallable(functions, 'processWorkoutManually');
-      //   await processWorkout({ workoutLogId: logDocId });
-      //   console.log('Workout processing triggered successfully');
-      // } catch (processingError) {
-      //   console.error('Error triggering workout processing:', processingError);
-      //   // Don't fail the workout completion if processing fails
-      //   // You could show a warning to the user here if needed
-      // }
+      try {
+        const processWorkout = httpsCallable(functions, 'processWorkoutManually');
+        await processWorkout({ workoutLogId: logDocId });
+        console.log('Workout processing triggered successfully');
+      } catch (processingError) {
+        console.error('Error triggering workout processing:', processingError);
+        // Don't fail the workout completion if processing fails
+        // You could show a warning to the user here if needed
+      }
 
       setIsWorkoutFinished(true);
       setShowSummaryModal(true);

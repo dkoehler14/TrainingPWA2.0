@@ -2,7 +2,6 @@ import React from 'react';
 import { Globe, Person } from 'react-bootstrap-icons';
 
 const ExerciseSourceBadge = ({ exercise, isGlobal, size = 'sm', showIcon = true, showText = true }) => {
-  console.log('ExerciseSourceBadge props:', { exercise, isGlobal, size, showIcon, showText });
   
   // Handle both API patterns: exercise object or direct isGlobal prop
   const exerciseIsGlobal = isGlobal !== undefined
