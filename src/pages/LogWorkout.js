@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
-import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash } from 'react-bootstrap-icons';
+import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash, X } from 'react-bootstrap-icons';
 import { db, auth, functions } from '../firebase';
 import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
@@ -134,6 +134,12 @@ function LogWorkout() {
   const [showBodyweightModal, setShowBodyweightModal] = useState(false);
   const [bodyweightInput, setBodyweightInput] = useState('');
   const [bodyweightExerciseIndex, setBodyweightExerciseIndex] = useState(null);
+  
+  // Add Exercise functionality state
+  const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
+  const [addExerciseType, setAddExerciseType] = useState('temporary');
+  const [isAddingExercise, setIsAddingExercise] = useState(false);
+  
   const user = auth.currentUser;
 
   // Refs for number inputs
@@ -192,7 +198,11 @@ function LogWorkout() {
             weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
             completed: ex.completed,
             notes: ex.notes || '',
-            bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
+            bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
+            // Include added exercise metadata
+            isAdded: ex.isAdded || false,
+            addedType: ex.addedType || null,
+            originalIndex: ex.originalIndex || -1
           })),
           date: Timestamp.fromDate(new Date()),
           isWorkoutFinished: logsData.length > 0 ? logsData[0].isWorkoutFinished || false : false
@@ -336,7 +346,11 @@ function LogWorkout() {
               weights: ex.weights || Array(ex.sets).fill(''),
               completed: ex.completed || Array(ex.sets).fill(false),
               notes: ex.notes || '',
-              bodyweight: ex.bodyweight || ''
+              bodyweight: ex.bodyweight || '',
+              // Preserve added exercise metadata
+              isAdded: ex.isAdded || false,
+              addedType: ex.addedType || null,
+              originalIndex: ex.originalIndex || -1
             })),
             isWorkoutFinished: log.isWorkoutFinished || false
           };
@@ -865,7 +879,11 @@ function LogWorkout() {
           weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
           completed: ex.completed,
           notes: ex.notes || '',
-          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
+          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
+          // Include added exercise metadata
+          isAdded: ex.isAdded || false,
+          addedType: ex.addedType || null,
+          originalIndex: ex.originalIndex || -1
         })),
         date: Timestamp.fromDate(new Date()),
         isWorkoutFinished: false
@@ -917,7 +935,11 @@ function LogWorkout() {
           weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
           completed: ex.completed,
           notes: ex.notes || '',
-          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
+          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
+          // Include added exercise metadata
+          isAdded: ex.isAdded || false,
+          addedType: ex.addedType || null,
+          originalIndex: ex.originalIndex || -1
         })),
         date: Timestamp.fromDate(new Date()),
         isWorkoutFinished: true,
@@ -953,6 +975,205 @@ function LogWorkout() {
       alert('Error finishing workout. Please try again.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Add Exercise functionality
+  const handleAddExercise = async (exercise, type) => {
+    if (!exercise || !selectedProgram || isAddingExercise) return;
+    
+    setIsAddingExercise(true);
+    try {
+      const newExercise = {
+        exerciseId: exercise.id,
+        sets: 3, // Default sets
+        reps: Array(3).fill(''),
+        weights: Array(3).fill(''),
+        completed: Array(3).fill(false),
+        notes: '',
+        bodyweight: ['Bodyweight', 'Bodyweight Loadable'].includes(exercise.exerciseType) ? '' : '',
+        isAdded: true,
+        addedType: type,
+        originalIndex: logData.length
+      };
+
+      const newLogData = [...logData, newExercise];
+      setLogData(newLogData);
+
+      // If permanent, also update the program structure
+      if (type === 'permanent') {
+        await addExerciseToProgram(exercise);
+      }
+
+      // Update programLogs
+      const key = `${selectedWeek}_${selectedDay}`;
+      setProgramLogs(prev => ({
+        ...prev,
+        [key]: {
+          exercises: newLogData,
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+        }
+      }));
+
+      // Trigger auto-save
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+      
+      setShowAddExerciseModal(false);
+    } catch (error) {
+      console.error('Error adding exercise:', error);
+      alert('Failed to add exercise. Please try again.');
+    } finally {
+      setIsAddingExercise(false);
+    }
+  };
+
+  const addExerciseToProgram = async (exercise) => {
+    try {
+      // Get the latest program document
+      const programDoc = await getDocCached('programs', selectedProgram.id);
+      if (!programDoc) {
+        throw new Error("Program document not found");
+      }
+
+      const currentProgramData = programDoc;
+
+      // Try both format keys for backward compatibility
+      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
+      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
+
+      // First try new format, then fall back to old format
+      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
+      let configKey = newFormatKey;
+      let isOldFormat = false;
+
+      if (!currentExercises) {
+        // Try old format
+        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
+        if (oldFormatData && oldFormatData.exercises) {
+          currentExercises = oldFormatData.exercises;
+          configKey = oldFormatKey;
+          isOldFormat = true;
+        }
+      }
+
+      if (!currentExercises) {
+        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}`);
+      }
+
+      // Create new exercise entry for program
+      const newProgramExercise = {
+        exerciseId: exercise.id,
+        sets: 3,
+        reps: 8, // Default reps
+        notes: ''
+      };
+
+      // Add the exercise to the existing exercises array
+      const updatedExercises = [...currentExercises, newProgramExercise];
+
+      // Update Firestore with the correct nested path based on format
+      if (isOldFormat) {
+        // For old format, update the exercises array within the day object
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
+        });
+      } else {
+        // For new format, update the exercises array directly
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}`]: updatedExercises
+        });
+      }
+
+      invalidateProgramCache(user.uid);
+      console.log('Successfully added exercise to program structure');
+    } catch (error) {
+      console.error('Error adding exercise to program:', error);
+      throw error;
+    }
+  };
+
+  const removeAddedExercise = (exerciseIndex) => {
+    if (isWorkoutFinished) return;
+    
+    const exerciseToRemove = logData[exerciseIndex];
+    if (!exerciseToRemove.isAdded) return;
+
+    // Remove from logData
+    const newLogData = logData.filter((_, index) => index !== exerciseIndex);
+    setLogData(newLogData);
+
+    // If it was a permanent addition, also remove from program
+    if (exerciseToRemove.addedType === 'permanent') {
+      removeExerciseFromProgram(exerciseToRemove.exerciseId);
+    }
+
+    // Update programLogs
+    const key = `${selectedWeek}_${selectedDay}`;
+    setProgramLogs(prev => ({
+      ...prev,
+      [key]: {
+        exercises: newLogData,
+        isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+      }
+    }));
+
+    // Trigger auto-save
+    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+  };
+
+  const removeExerciseFromProgram = async (exerciseId) => {
+    try {
+      // Get the latest program document
+      const programDoc = await getDocCached('programs', selectedProgram.id);
+      if (!programDoc) {
+        throw new Error("Program document not found");
+      }
+
+      const currentProgramData = programDoc;
+
+      // Try both format keys for backward compatibility
+      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
+      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
+
+      // First try new format, then fall back to old format
+      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
+      let configKey = newFormatKey;
+      let isOldFormat = false;
+
+      if (!currentExercises) {
+        // Try old format
+        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
+        if (oldFormatData && oldFormatData.exercises) {
+          currentExercises = oldFormatData.exercises;
+          configKey = oldFormatKey;
+          isOldFormat = true;
+        }
+      }
+
+      if (!currentExercises) {
+        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}`);
+      }
+
+      // Remove the exercise from the exercises array
+      const updatedExercises = currentExercises.filter(ex => ex.exerciseId !== exerciseId);
+
+      // Update Firestore with the correct nested path based on format
+      if (isOldFormat) {
+        // For old format, update the exercises array within the day object
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
+        });
+      } else {
+        // For new format, update the exercises array directly
+        await updateDoc(doc(db, "programs", selectedProgram.id), {
+          [`weeklyConfigs.${configKey}`]: updatedExercises
+        });
+      }
+
+      invalidateProgramCache(user.uid);
+      console.log('Successfully removed exercise from program structure');
+    } catch (error) {
+      console.error('Error removing exercise from program:', error);
     }
   };
 
@@ -1085,6 +1306,7 @@ function LogWorkout() {
                       const exercise = exercisesList.find(e => e.id === ex.exerciseId);
                       const exerciseType = exercise?.exerciseType || '';
                       const bodyweightDisplay = ex.bodyweight ? `${ex.bodyweight} ${selectedProgram?.weightUnit || 'LB'}` : 'Click to Set';
+                      const isAddedExercise = ex.isAdded || false;
                       return (
                         <div key={exIndex} className="mb-4">
                           <div className="d-flex justify-content-between align-items-center">
@@ -1110,13 +1332,15 @@ function LogWorkout() {
                                       {ex.notes ? 'Edit Notes' : 'Add Notes'}
                                       {ex.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
                                     </Dropdown.Item>
-                                    <Dropdown.Item
-                                      onClick={() => openReplaceExerciseModal(ex)}
-                                      className="d-flex align-items-center"
-                                    >
-                                      <ArrowLeftRight />
-                                      Replace Exercise
-                                    </Dropdown.Item>
+                                    {!isAddedExercise && (
+                                      <Dropdown.Item
+                                        onClick={() => openReplaceExerciseModal(ex)}
+                                        className="d-flex align-items-center"
+                                      >
+                                        <ArrowLeftRight />
+                                        Replace Exercise
+                                      </Dropdown.Item>
+                                    )}
                                     <Dropdown.Item
                                       onClick={() => handleAddSet(exIndex)}
                                       className="d-flex align-items-center"
@@ -1132,6 +1356,16 @@ function LogWorkout() {
                                       <Dash />
                                       Remove Set
                                     </Dropdown.Item>
+                                    {isAddedExercise && (
+                                      <Dropdown.Item
+                                        onClick={() => removeAddedExercise(exIndex)}
+                                        className="d-flex align-items-center text-danger"
+                                        disabled={isWorkoutFinished}
+                                      >
+                                        <X />
+                                        Remove Added Exercise
+                                      </Dropdown.Item>
+                                    )}
                                     <Dropdown.Item
                                       onClick={() => openHistoryModal(ex)}
                                       className="d-flex align-items-center"
@@ -1167,6 +1401,11 @@ function LogWorkout() {
                               <>
                                 <h5 className="soft-label">
                                   {exercise?.name || 'Loading...'}
+                                  {isAddedExercise && (
+                                    <span className="ms-2 badge bg-warning text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                      {ex.addedType === 'permanent' ? 'Added (Permanent)' : 'Added (Temporary)'}
+                                    </span>
+                                  )}
                                   {exerciseType && (
                                     <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
                                       {exerciseType}
@@ -1195,14 +1434,16 @@ function LogWorkout() {
                                   >
                                     {ex.notes ? 'View/Edit Notes' : 'Add Notes'}
                                   </Button>
-                                  <Button
-                                    variant="outline-secondary"
-                                    size="sm"
-                                    onClick={() => openReplaceExerciseModal(ex)}
-                                    className="me-2"
-                                  >
-                                    Replace Exercise
-                                  </Button>
+                                  {!isAddedExercise && (
+                                    <Button
+                                      variant="outline-secondary"
+                                      size="sm"
+                                      onClick={() => openReplaceExerciseModal(ex)}
+                                      className="me-2"
+                                    >
+                                      Replace Exercise
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="outline-success"
                                     size="sm"
@@ -1220,6 +1461,18 @@ function LogWorkout() {
                                   >
                                     Remove Set
                                   </Button>
+                                  {isAddedExercise && (
+                                    <Button
+                                      variant="outline-danger"
+                                      size="sm"
+                                      onClick={() => removeAddedExercise(exIndex)}
+                                      className="me-2"
+                                      disabled={isWorkoutFinished}
+                                    >
+                                      <X className="me-1" />
+                                      Remove Added
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="outline-primary"
                                     size="sm"
@@ -1334,6 +1587,21 @@ function LogWorkout() {
                         </div>
                       );
                     })}
+                    
+                    {/* Add Exercise Button */}
+                    {!isWorkoutFinished && (
+                      <div className="text-center mt-4 mb-3">
+                        <Button
+                          onClick={() => setShowAddExerciseModal(true)}
+                          className="soft-button gradient"
+                          disabled={isAddingExercise}
+                        >
+                          <Plus className="me-2" />
+                          {isAddingExercise ? 'Adding Exercise...' : 'Add Exercise'}
+                        </Button>
+                      </div>
+                    )}
+
                     <div className="text-center mt-3">
                       {!isWorkoutFinished ? (
                         <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
@@ -1548,6 +1816,64 @@ function LogWorkout() {
           </div>
         </Col>
       </Row>
+
+      {/* Add Exercise Modal */}
+      <Modal show={showAddExerciseModal} onHide={() => setShowAddExerciseModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Add Exercise to Workout</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {/* Exercise Type Selection */}
+          <Form.Group className="mb-4">
+            <Form.Label className="fw-bold">How would you like to add this exercise?</Form.Label>
+            <div className="mt-2">
+              <Form.Check
+                type="radio"
+                id="temporary"
+                name="exerciseType"
+                label={
+                  <div>
+                    <strong>Temporary</strong> - Only for this workout session
+                    <div className="text-muted small">Exercise will be logged but not added to your program</div>
+                  </div>
+                }
+                checked={addExerciseType === 'temporary'}
+                onChange={() => setAddExerciseType('temporary')}
+                className="mb-2"
+              />
+              <Form.Check
+                type="radio"
+                id="permanent"
+                name="exerciseType"
+                label={
+                  <div>
+                    <strong>Permanent</strong> - Add to program for future workouts
+                    <div className="text-muted small">Exercise will be added to this day in your program</div>
+                  </div>
+                }
+                checked={addExerciseType === 'permanent'}
+                onChange={() => setAddExerciseType('permanent')}
+              />
+            </div>
+          </Form.Group>
+          
+          {/* Exercise Selection Grid */}
+          <div>
+            <Form.Label className="fw-bold mb-3">Select an Exercise</Form.Label>
+            <ExerciseGrid
+              exercises={exercisesList}
+              onExerciseClick={(exercise) => handleAddExercise(exercise, addExerciseType)}
+              emptyMessage="No exercises found."
+            />
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowAddExerciseModal(false)}>
+            Cancel
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
       <WorkoutSummaryModal
         show={showSummaryModal}
         onHide={() => setShowSummaryModal(false)}
