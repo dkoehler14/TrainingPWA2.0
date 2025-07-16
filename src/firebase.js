@@ -14,7 +14,8 @@ import {
   updateServiceStatus,
   handleEmulatorFallback,
   initializeDevelopmentErrorHandling,
-  attemptServiceRecovery
+  attemptServiceRecovery,
+  handleServiceInitializationFallback
 } from "./utils/developmentErrorHandler";
 
 // Initialize development error handling system
@@ -49,9 +50,46 @@ let emulatorsConnected = false;
 // Enhanced Firebase initialization with error handling
 try {
   app = initializeApp(firebaseConfig);
-  db = getFirestore(app);
-  auth = getAuth(app);
-  functions = getFunctions(app);
+  
+  // Initialize Firebase services with enhanced error handling
+  try {
+    db = getFirestore(app);
+    console.log('✅ Firestore service initialized');
+    updateServiceStatus('firestore', true);
+  } catch (firestoreError) {
+    reportDevelopmentError(firestoreError, ERROR_TYPES.FIREBASE_INIT, 'firestore');
+    const fallback = handleServiceInitializationFallback('firestore', firestoreError);
+    if (!fallback.canContinue) {
+      throw firestoreError;
+    }
+    db = fallback.fallbackService;
+  }
+
+  try {
+    auth = getAuth(app);
+    console.log('✅ Auth service initialized');
+    updateServiceStatus('auth', true);
+  } catch (authError) {
+    reportDevelopmentError(authError, ERROR_TYPES.FIREBASE_INIT, 'auth');
+    const fallback = handleServiceInitializationFallback('auth', authError);
+    if (!fallback.canContinue) {
+      throw authError;
+    }
+    auth = fallback.fallbackService;
+  }
+
+  try {
+    functions = getFunctions(app);
+    console.log('✅ Functions service initialized');
+    updateServiceStatus('functions', true);
+  } catch (functionsError) {
+    reportDevelopmentError(functionsError, ERROR_TYPES.FIREBASE_INIT, 'functions');
+    const fallback = handleServiceInitializationFallback('functions', functionsError);
+    if (!fallback.canContinue) {
+      throw functionsError;
+    }
+    functions = fallback.fallbackService;
+  }
 
   console.log('✅ Firebase services initialized successfully');
 
