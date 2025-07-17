@@ -4,6 +4,106 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 
+// Development debugging utilities for Firebase Functions
+const isDevelopment = process.env.NODE_ENV === 'development' || process.env.FUNCTIONS_EMULATOR === 'true';
+
+/**
+ * Enhanced development logger for Firebase Functions
+ */
+class FunctionsLogger {
+  constructor(context = 'Functions') {
+    this.context = context;
+    this.startTime = Date.now();
+  }
+
+  log(level, message, data = null, options = {}) {
+    const timestamp = new Date().toISOString();
+    const elapsed = Date.now() - this.startTime;
+    
+    // Enhanced log entry with source information
+    const logEntry = {
+      timestamp,
+      elapsed,
+      level: level.toUpperCase(),
+      context: this.context,
+      message,
+      data,
+      environment: isDevelopment ? 'development' : 'production',
+      emulator: process.env.FUNCTIONS_EMULATOR === 'true'
+    };
+
+    // Use Firebase Functions logger with enhanced formatting
+    const logMessage = `[${level.toUpperCase()}] ${this.context} (+${elapsed}ms): ${message}`;
+    
+    switch (level.toLowerCase()) {
+      case 'error':
+        functions.logger.error(logMessage, data);
+        break;
+      case 'warn':
+        functions.logger.warn(logMessage, data);
+        break;
+      case 'info':
+        functions.logger.info(logMessage, data);
+        break;
+      case 'debug':
+        if (isDevelopment) {
+          functions.logger.info(`[DEBUG] ${logMessage}`, data);
+        }
+        break;
+      default:
+        functions.logger.info(logMessage, data);
+    }
+
+    // In development, also log to console for immediate feedback
+    if (isDevelopment) {
+      console.log(`🔧 ${logMessage}`, data || '');
+    }
+  }
+
+  error(message, data, options) { this.log('error', message, data, { includeStack: true, ...options }); }
+  warn(message, data, options) { this.log('warn', message, data, options); }
+  info(message, data, options) { this.log('info', message, data, options); }
+  debug(message, data, options) { this.log('debug', message, data, options); }
+}
+
+// Global functions logger instance
+const functionsLogger = new FunctionsLogger('Global');
+
+// Enhanced error handling for development
+const handleFunctionError = (error, functionName, context = {}) => {
+  const errorInfo = {
+    function: functionName,
+    message: error.message,
+    stack: error.stack,
+    context,
+    timestamp: new Date().toISOString(),
+    environment: isDevelopment ? 'development' : 'production'
+  };
+
+  functionsLogger.error(`Function ${functionName} failed`, errorInfo);
+  
+  // In development, provide more detailed error information
+  if (isDevelopment) {
+    console.error('🚨 Function Error Details:', {
+      function: functionName,
+      error: error.message,
+      stack: error.stack,
+      context
+    });
+  }
+
+  return errorInfo;
+};
+
+// Log environment information on startup
+if (isDevelopment) {
+  functionsLogger.info('🚀 Firebase Functions starting in development mode', {
+    nodeEnv: process.env.NODE_ENV,
+    functionsEmulator: process.env.FUNCTIONS_EMULATOR,
+    timestamp: new Date().toISOString()
+  });
+}
+
 // Initialize Firebase Admin SDK if it hasn't been initialized already.
 // When deployed as a Cloud Function, admin.initializeApp() will automatically
 // pick up the project configuration. For local testing, you might need to

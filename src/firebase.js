@@ -17,10 +17,17 @@ import {
   attemptServiceRecovery,
   handleServiceInitializationFallback
 } from "./utils/developmentErrorHandler";
+import {
+  initializeDevelopmentDebugging,
+  serviceStatusLogger,
+  developmentLogger
+} from "./utils/developmentDebugger";
 
-// Initialize development error handling system
+// Initialize development debugging and error handling systems
 if (process.env.NODE_ENV === 'development') {
   initializeDevelopmentErrorHandling();
+  initializeDevelopmentDebugging();
+  developmentLogger.info('🚀 Starting Firebase initialization with enhanced debugging');
 }
 
 // Validate environment configuration with enhanced error handling
@@ -51,12 +58,16 @@ let emulatorsConnected = false;
 try {
   app = initializeApp(firebaseConfig);
   
-  // Initialize Firebase services with enhanced error handling
+  // Initialize Firebase services with enhanced debugging and error handling
   try {
+    const firestoreInit = serviceStatusLogger.logServiceInitialization('firestore', { 
+      emulatorMode: shouldUseEmulators() 
+    });
     db = getFirestore(app);
-    console.log('✅ Firestore service initialized');
+    serviceStatusLogger.logServiceSuccess('firestore', { initialized: true });
     updateServiceStatus('firestore', true);
   } catch (firestoreError) {
+    serviceStatusLogger.logServiceFailure('firestore', firestoreError);
     reportDevelopmentError(firestoreError, ERROR_TYPES.FIREBASE_INIT, 'firestore');
     const fallback = handleServiceInitializationFallback('firestore', firestoreError);
     if (!fallback.canContinue) {
@@ -66,10 +77,14 @@ try {
   }
 
   try {
+    const authInit = serviceStatusLogger.logServiceInitialization('auth', { 
+      emulatorMode: shouldUseEmulators() 
+    });
     auth = getAuth(app);
-    console.log('✅ Auth service initialized');
+    serviceStatusLogger.logServiceSuccess('auth', { initialized: true });
     updateServiceStatus('auth', true);
   } catch (authError) {
+    serviceStatusLogger.logServiceFailure('auth', authError);
     reportDevelopmentError(authError, ERROR_TYPES.FIREBASE_INIT, 'auth');
     const fallback = handleServiceInitializationFallback('auth', authError);
     if (!fallback.canContinue) {
@@ -79,10 +94,14 @@ try {
   }
 
   try {
+    const functionsInit = serviceStatusLogger.logServiceInitialization('functions', { 
+      emulatorMode: shouldUseEmulators() 
+    });
     functions = getFunctions(app);
-    console.log('✅ Functions service initialized');
+    serviceStatusLogger.logServiceSuccess('functions', { initialized: true });
     updateServiceStatus('functions', true);
   } catch (functionsError) {
+    serviceStatusLogger.logServiceFailure('functions', functionsError);
     reportDevelopmentError(functionsError, ERROR_TYPES.FIREBASE_INIT, 'functions');
     const fallback = handleServiceInitializationFallback('functions', functionsError);
     if (!fallback.canContinue) {
@@ -142,11 +161,16 @@ async function connectToEmulatorsWithErrorHandling() {
 
   for (const service of services) {
     try {
+      // Log emulator connection attempt with enhanced debugging
+      serviceStatusLogger.logEmulatorConnection(service.name, 'localhost', service.port);
+      
       // Check if emulator is available before attempting connection
       const isAvailable = await attemptServiceRecovery(service.name);
       
       if (!isAvailable) {
         const fallback = handleEmulatorFallback(service.name, new Error(`${service.name} emulator not available`));
+        serviceStatusLogger.logEmulatorFailure(service.name, 'localhost', service.port, 
+          new Error(`Port ${service.port} not available`));
         failedServices.push({ service: service.name, fallback });
         updateServiceStatus(service.name, false, new Error(`Port ${service.port} not available`));
         continue;
@@ -154,11 +178,12 @@ async function connectToEmulatorsWithErrorHandling() {
 
       // Attempt to connect to the emulator
       service.connect();
-      console.log(`✅ Connected to ${service.name} emulator on localhost:${service.port}`);
+      serviceStatusLogger.logEmulatorSuccess(service.name, 'localhost', service.port);
       updateServiceStatus(service.name, true);
       connectedServices++;
       
     } catch (emulatorError) {
+      serviceStatusLogger.logEmulatorFailure(service.name, 'localhost', service.port, emulatorError);
       reportDevelopmentError(
         emulatorError, 
         ERROR_TYPES.EMULATOR_CONNECTION, 

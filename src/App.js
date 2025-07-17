@@ -21,6 +21,12 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
 import { getDocCached, getCacheStats } from './api/enhancedFirestoreCache';
 import cacheWarmingService from './services/cacheWarmingService';
+import { 
+  getDevelopmentDebuggingStatus, 
+  developmentLogger,
+  serviceStatusLogger 
+} from './utils/developmentDebugger';
+import DevelopmentDebugPanel from './components/DevelopmentDebugPanel';
 
 function App() {
   return (
@@ -37,22 +43,42 @@ function AppContent() {
   const [cacheInitialized, setCacheInitialized] = useState(false);
   const { darkMode, toggleDarkMode } = useTheme();
 
-  // Initialize app cache on startup
+  // Initialize app cache and development debugging on startup
   useEffect(() => {
     const initializeCache = async () => {
       try {
-        console.log('🚀 Initializing app cache...');
+        developmentLogger.info('🚀 Initializing app cache...');
         await cacheWarmingService.initializeAppCache();
         setCacheInitialized(true);
+        developmentLogger.info('✅ App cache initialized successfully');
         
-        // Add cache stats to window for debugging in development
+        // Add debugging tools to window for development
         if (process.env.NODE_ENV === 'development') {
           window.getCacheStats = getCacheStats;
           window.cacheWarmingService = cacheWarmingService;
-          console.log('🔧 Cache debugging tools available: window.getCacheStats(), window.cacheWarmingService');
+          window.getDevelopmentDebuggingStatus = getDevelopmentDebuggingStatus;
+          window.serviceStatusLogger = serviceStatusLogger;
+          window.developmentLogger = developmentLogger;
+          
+          developmentLogger.info('🔧 Development debugging tools available', {
+            tools: [
+              'window.getCacheStats()',
+              'window.cacheWarmingService',
+              'window.getDevelopmentDebuggingStatus()',
+              'window.serviceStatusLogger',
+              'window.developmentLogger'
+            ]
+          });
+
+          // Log initial debugging status
+          const debugStatus = getDevelopmentDebuggingStatus();
+          developmentLogger.info('📊 Development debugging status', debugStatus, {
+            group: true,
+            includeSourceMap: true
+          });
         }
       } catch (error) {
-        console.error('❌ Cache initialization failed:', error);
+        developmentLogger.error('❌ Cache initialization failed', error);
         setCacheInitialized(true); // Continue anyway
       }
     };
@@ -150,6 +176,7 @@ function AppContent() {
         <Route path="/cache-demo" element={user && (userRole === 'admin' || process.env.NODE_ENV === 'development') ?
           <CacheDemo /> : <Navigate to="/" />} />
       </Routes>
+      <DevelopmentDebugPanel />
     </Router>
   );
 }
