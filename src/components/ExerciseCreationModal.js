@@ -179,37 +179,48 @@ function ExerciseCreationModal({
             await runTransaction(db, async (transaction) => {
                 let exerciseRef;
                 let newExerciseId = exerciseId;
+
+                // Prepare refs
                 if (isEditMode) {
                     exerciseRef = doc(db, "exercises", exerciseId);
-                    transaction.update(exerciseRef, exerciseData);
                 } else {
                     exerciseRef = doc(collection(db, "exercises"));
-                    transaction.set(exerciseRef, exerciseData);
                     newExerciseId = exerciseRef.id;
                 }
 
-                // --- Only update global metadata for global exercises ---
+                // Prepare metadata refs
+                let metadataRef, metadataDoc, userMetadataRef, userMetadataDoc;
                 if (!exerciseData.userId) {
-                    const metadataRef = doc(db, "exercises_metadata", "all_exercises");
-                    const metadataDoc = await transaction.get(metadataRef);
+                    metadataRef = doc(db, "exercises_metadata", "all_exercises");
+                    metadataDoc = await transaction.get(metadataRef);
+                }
+                if (exerciseData.userId) {
+                    userMetadataRef = doc(db, "exercises_metadata", exerciseData.userId);
+                    userMetadataDoc = await transaction.get(userMetadataRef);
+                }
+
+                // Now do writes
+                if (isEditMode) {
+                    transaction.update(exerciseRef, exerciseData);
+                } else {
+                    transaction.set(exerciseRef, exerciseData);
+                }
+
+                if (!exerciseData.userId) {
                     let metadata = metadataDoc.exists() ? metadataDoc.data() : { exercises: {} };
                     if (!metadata.exercises) metadata.exercises = {};
                     metadata.exercises[newExerciseId] = exerciseData;
-                    metadata.lastUpdated = new Date(); // client-side timestamp
+                    metadata.lastUpdated = new Date();
                     transaction.set(metadataRef, metadata);
                 }
 
-                // --- Per-user metadata for personal exercises ---
                 if (exerciseData.userId) {
-                    const userMetadataRef = doc(db, "exercises_metadata", exerciseData.userId);
-                    const userMetadataDoc = await transaction.get(userMetadataRef);
                     let userMetadata = userMetadataDoc.exists() ? userMetadataDoc.data() : { exercises: {} };
                     if (!userMetadata.exercises) userMetadata.exercises = {};
                     userMetadata.exercises[newExerciseId] = exerciseData;
                     userMetadata.lastUpdated = new Date();
                     transaction.set(userMetadataRef, userMetadata);
                 }
-                // --- End per-user metadata ---
 
                 // Callbacks after transaction
                 if (isEditMode) {

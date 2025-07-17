@@ -460,7 +460,8 @@ const ProgressCoach = () => {
             {/* Advanced Analytics Components */}
             <div className="advanced-components">
                 {/* Enhanced AI Coach - Personalized coaching insights */}
-                <EnhancedAICoach />
+                {/* 07/17/2025 - Removed EnhancedAICoach for now, need to reduce reads on database */}
+                {/* <EnhancedAICoach /> */}
 
                 {/* Compound Lift Tracker - Big 4 lifts progression */}
                 <CompoundLiftTracker />

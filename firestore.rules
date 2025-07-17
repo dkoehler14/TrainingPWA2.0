@@ -38,7 +38,12 @@ service cloud.firestore {
     }
     match /exercises_metadata/{docId} {
       allow read: if true;
-      allow write: if false;
+      // Allow admins to write global exercises (check role from user document)
+      allow write: if request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      // Allow users to write to documents that match their userId
+      allow write: if request.auth != null && 
+        request.auth.uid == docId;
     }
   }
 }

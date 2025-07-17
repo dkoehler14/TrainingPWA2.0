@@ -1377,6 +1377,8 @@ function CreateProgram({ mode = 'create', userRole }) {
             show={showExerciseCreationModal}
             onHide={() => setShowExerciseCreationModal(false)}
             onExerciseAdded={handleNewExerciseAdded}
+            userRole={userRole}
+            user={user}
           />
         </>
       )}
