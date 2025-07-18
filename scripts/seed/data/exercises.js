@@ -7,7 +7,9 @@
  */
 
 const { getFirestore } = require('../utils/firebase-config');
-const { logProgress } = require('../utils/logger');
+const { logProgress, logError } = require('../utils/logger');
+const { ExerciseValidator, handleValidationErrors } = require('../utils/validation');
+const { SeedingError } = require('../utils/error-handling');
 
 // Muscle groups used in the application
 const MUSCLE_GROUPS = [
@@ -293,12 +295,19 @@ async function createExercisesMetadata(db, exercises) {
  */
 async function seedExercises(options = {}) {
   const { verbose = false } = options;
+  const validator = new ExerciseValidator();
   
   try {
     const db = getFirestore();
     
     if (verbose) {
       logProgress('Starting exercise database seeding...', 'info');
+    }
+
+    // Validate exercise database structure before processing
+    if (!validator.validateExerciseDatabase(EXERCISE_DATABASE)) {
+      const validationError = handleValidationErrors(validator.getErrors(), 'exercise database');
+      throw validationError;
     }
 
     // Flatten all exercise categories into a single array
@@ -309,19 +318,63 @@ async function seedExercises(options = {}) {
       ...EXERCISE_DATABASE.machine
     ];
 
-    if (verbose) {
-      logProgress(`Creating ${allExercises.length} exercise documents...`, 'info');
+    // Validate each exercise individually
+    for (let i = 0; i < allExercises.length; i++) {
+      const exercise = allExercises[i];
+      validator.clearErrors();
+      
+      if (!validator.validateExercise(exercise)) {
+        const validationError = handleValidationErrors(
+          validator.getErrors(), 
+          `exercise ${i + 1}: ${exercise.name || 'unnamed'}`
+        );
+        throw validationError;
+      }
     }
 
-    // Create individual exercise documents
-    const createdExercises = await createExerciseDocuments(db, allExercises);
+    if (verbose) {
+      logProgress(`Creating ${allExercises.length} validated exercise documents...`, 'info');
+    }
+
+    // Create individual exercise documents with error handling
+    let createdExercises;
+    try {
+      createdExercises = await createExerciseDocuments(db, allExercises);
+    } catch (error) {
+      const seedingError = new SeedingError(
+        `Failed to create exercise documents: ${error.message}`,
+        'createExerciseDocuments',
+        { exerciseCount: allExercises.length },
+        error
+      );
+      throw seedingError;
+    }
+
+    // Validate created exercises
+    if (!createdExercises || createdExercises.length !== allExercises.length) {
+      throw new SeedingError(
+        `Exercise creation mismatch: expected ${allExercises.length}, created ${createdExercises?.length || 0}`,
+        'exerciseCreationValidation',
+        { expected: allExercises.length, actual: createdExercises?.length || 0 }
+      );
+    }
 
     if (verbose) {
       logProgress('Creating exercises metadata document...', 'info');
     }
 
-    // Create exercises metadata document
-    await createExercisesMetadata(db, createdExercises);
+    // Create exercises metadata document with error handling
+    try {
+      await createExercisesMetadata(db, createdExercises);
+    } catch (error) {
+      const seedingError = new SeedingError(
+        `Failed to create exercises metadata: ${error.message}`,
+        'createExercisesMetadata',
+        { exerciseCount: createdExercises.length },
+        error
+      );
+      throw seedingError;
+    }
 
     const results = {
       totalExercises: createdExercises.length,
@@ -332,8 +385,14 @@ async function seedExercises(options = {}) {
         machine: EXERCISE_DATABASE.machine.length
       },
       muscleGroups: [...new Set(allExercises.map(ex => ex.primaryMuscleGroup))],
-      exerciseTypes: [...new Set(allExercises.map(ex => ex.exerciseType))]
+      exerciseTypes: [...new Set(allExercises.map(ex => ex.exerciseType))],
+      createdExercises: createdExercises.map(ex => ({ id: ex.id, name: ex.name }))
     };
+
+    // Validate final results
+    if (results.totalExercises === 0) {
+      throw new SeedingError('No exercises were created', 'seedExercises', results);
+    }
 
     if (verbose) {
       logProgress(`Exercise database seeded successfully:`, 'success');
@@ -343,13 +402,25 @@ async function seedExercises(options = {}) {
       logProgress(`  - Bodyweight: ${results.categories.bodyweight}`, 'info');
       logProgress(`  - Machine: ${results.categories.machine}`, 'info');
       logProgress(`  - Muscle groups: ${results.muscleGroups.join(', ')}`, 'info');
+      logProgress(`  - Exercise types: ${results.exerciseTypes.join(', ')}`, 'info');
     }
 
     return results;
 
   } catch (error) {
-    logProgress(`Exercise seeding failed: ${error.message}`, 'error');
-    throw error;
+    if (error instanceof SeedingError) {
+      throw error;
+    }
+    
+    const seedingError = new SeedingError(
+      `Exercise seeding failed: ${error.message}`,
+      'seedExercises',
+      { databaseSize: Object.keys(EXERCISE_DATABASE).length },
+      error
+    );
+    
+    logError(seedingError, 'Exercise Seeding', verbose);
+    throw seedingError;
   }
 }
 
@@ -384,10 +455,53 @@ async function clearExerciseData() {
   await batch.commit();
 }
 
+/**
+ * Reset all exercise data and return count of cleared items
+ * @param {Object} options - Reset options
+ * @returns {Promise<number>} Number of exercises cleared
+ */
+async function resetExercises(options = {}) {
+  const db = getFirestore();
+  
+  try {
+    // Get count before deletion
+    const exercisesSnapshot = await db.collection('exercises').get();
+    const exerciseCount = exercisesSnapshot.size;
+    
+    // Check if exercises_metadata exists
+    let metadataExists = false;
+    try {
+      const metadataDoc = await db.collection('exercises_metadata').doc('all_exercises').get();
+      metadataExists = metadataDoc.exists;
+    } catch (error) {
+      // Metadata collection might not exist, that's okay
+    }
+    
+    if (exerciseCount === 0 && !metadataExists) {
+      if (options.verbose) {
+        logProgress('No exercise data found to clear', 'info');
+      }
+      return 0;
+    }
+    
+    // Use existing clear function
+    await clearExerciseData();
+    
+    if (options.verbose) {
+      logProgress(`Cleared ${exerciseCount} exercises and metadata`, 'info');
+    }
+    
+    return exerciseCount;
+  } catch (error) {
+    throw new Error(`Failed to reset exercises: ${error.message}`);
+  }
+}
+
 module.exports = {
   seedExercises,
   getAllExercises,
   clearExerciseData,
+  resetExercises,
   EXERCISE_DATABASE,
   MUSCLE_GROUPS,
   EXERCISE_TYPES

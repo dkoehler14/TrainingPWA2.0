@@ -96,7 +96,11 @@ This command starts both the React development server and Firebase emulators con
    ```bash
    npm run dev
    ```
-4. **Access your local development environment:**
+4. **Seed test data for development:**
+   ```bash
+   npm run seed:dev
+   ```
+5. **Access your local development environment:**
    - React App: [http://localhost:3000](http://localhost:3000)
    - Firebase Emulator UI: [http://localhost:4000](http://localhost:4000)
    - Functions: [http://localhost:5001](http://localhost:5001)
@@ -244,6 +248,227 @@ If you encounter issues not covered here:
 - Run `npm run test:dev-env` after setup to verify everything is working
 - Keep emulators running during development for faster iteration
 - Use debug modes when troubleshooting complex issues
+- Seed test data regularly for consistent testing environments
+
+## Test Data Seeding
+
+The Exercise Tracker includes a comprehensive test data seeding system that automatically populates Firebase emulators with realistic user accounts, workout programs, exercises, and historical data. This enables thorough testing of all application features without manual data entry.
+
+### Quick Start
+
+```bash
+# Start Firebase emulators
+npm run dev:firebase
+
+# Seed basic test data (3 users with different experience levels)
+npm run seed:dev
+
+# Check what was created
+npm run seed:status
+
+# Reset all test data when needed
+npm run seed:reset
+```
+
+### Available Test Users
+
+All test users use the password: `test123`
+
+| Email | Experience Level | Characteristics | Use Case |
+|-------|------------------|-----------------|----------|
+| `beginner@test.com` | New to weightlifting | 75% completion rate, fast progression | Testing onboarding, basic features |
+| `intermediate@test.com` | 2 years experience | 85% completion rate, steady progress | Testing standard workflows |
+| `advanced@test.com` | 5+ years, competitor | 95% completion rate, uses KG units | Testing advanced features, edge cases |
+
+### Seeding Commands
+
+#### Basic Operations
+```bash
+npm run seed:dev              # Seed basic test data (3 users)
+npm run seed:dev:verbose      # Seed with detailed progress output
+npm run seed:dev:quiet        # Seed with minimal output
+npm run seed:reset            # Reset all test data (with confirmation)
+npm run seed:reset:force      # Reset without confirmation
+npm run seed:status           # Show current data status
+```
+
+#### Scenario-Based Seeding
+```bash
+npm run seed:scenarios:basic         # 3 users: beginner, intermediate, advanced
+npm run seed:scenarios:extended      # 5 users: basic + returning, injury recovery
+npm run seed:scenarios:comprehensive # 6 users: extended + busy professional
+npm run seed:scenarios:all           # All available user scenarios
+```
+
+#### Advanced Options
+```bash
+# Seed specific scenarios
+npm run seed:scenarios -- --scenarios=beginner,advanced --verbose
+
+# Preview what would be seeded (dry run)
+npm run seed:dev:dry-run
+
+# Seed without historical workout data
+npm run seed:dev -- --no-history
+```
+
+### User Scenarios
+
+The seeding system includes diverse user personas for comprehensive testing:
+
+#### Core Scenarios
+- **Complete Beginner**: New to weightlifting, learning basic movements
+- **Intermediate Lifter**: 2 years experience, working on progression  
+- **Advanced Competitor**: 5+ years, competitive powerlifter
+
+#### Extended Scenarios
+- **Returning Lifter**: Previously trained, returning after a break
+- **Injury Recovery**: Working around injury limitations
+- **Busy Professional**: Time-constrained, needs efficient workouts
+
+Each scenario includes:
+- Realistic workout completion rates (70-95%)
+- Appropriate progression patterns (1-3% per week)
+- Experience-level workout programs
+- Historical data spanning 8-24 weeks
+- Scenario-specific equipment and preferences
+
+### Generated Test Data
+
+The seeding system creates:
+
+#### Exercise Database
+- 50+ exercises with proper categorization
+- Muscle groups, equipment types, and instructions
+- Both global and user-specific exercises
+- Covers compound movements, isolation exercises, bodyweight, and machines
+
+#### Workout Programs
+- **Beginner**: Starting Strength (3x5 compound movements)
+- **Intermediate**: 5/3/1 (percentage-based progression)
+- **Advanced**: Conjugate Method (max effort/dynamic effort)
+- Programs include weekly configurations and exercise progressions
+
+#### Historical Workout Logs
+- Realistic progression patterns with weight increases
+- Missed workouts and plateau periods
+- Performance variations and deload weeks
+- Scenario-specific completion rates and consistency patterns
+
+### Common Testing Workflows
+
+#### Feature Development
+```bash
+# Start clean development environment
+npm run dev:firebase
+npm run seed:dev
+npm run dev:react
+
+# Test with specific user type
+npm run seed:scenarios -- --scenarios=beginner --verbose
+# Login as beginner@test.com / test123
+```
+
+#### Bug Testing
+```bash
+# Test edge cases with advanced user
+npm run seed:scenarios -- --scenarios=advanced
+# Advanced user has KG units, extensive history, injury considerations
+
+# Test time-constrained workflows
+npm run seed:scenarios -- --scenarios=busy_professional
+# User has 45-minute workout preferences, 70% completion rate
+```
+
+#### Integration Testing
+```bash
+# Comprehensive test environment
+npm run seed:scenarios:comprehensive
+# Creates 6 different user types with varied data patterns
+
+# Reset and test specific combinations
+npm run seed:reset:force
+npm run seed:scenarios -- --scenarios=intermediate,injury_recovery
+```
+
+#### Performance Testing
+```bash
+# Seed extensive historical data
+npm run seed:scenarios:comprehensive --verbose
+# Advanced users have 24 weeks of workout history
+
+# Test with minimal data
+npm run seed:dev -- --no-history
+# Creates users and programs without historical logs
+```
+
+### Seeding System Features
+
+#### Progress Reporting
+- Step-by-step progress with timing information
+- Summary tables showing created data counts
+- User credential display for easy login
+- Detailed error messages with recovery suggestions
+
+#### Data Validation
+- Emulator connectivity checks before seeding
+- Data structure validation during creation
+- Graceful error handling with cleanup
+- Dry-run mode to preview operations
+
+#### Realistic Data Patterns
+- Progressive overload with appropriate weight increases
+- Missed workouts based on user consistency patterns
+- Plateau periods and deload weeks
+- Seasonal training variations
+
+### Troubleshooting Test Data
+
+#### Common Issues
+
+**Emulators Not Running**
+```bash
+# Start emulators first
+npm run dev:firebase
+# Then seed data
+npm run seed:dev
+```
+
+**Seeding Fails**
+```bash
+# Check emulator status
+npm run seed:status
+# Reset and try again
+npm run seed:reset:force
+npm run seed:dev:verbose
+```
+
+**Inconsistent Data**
+```bash
+# Reset for clean state
+npm run seed:reset:force
+# Seed specific scenarios
+npm run seed:scenarios:basic
+```
+
+#### Validation Commands
+```bash
+npm run test:cli                    # Test CLI functionality
+npm run validate:reset              # Validate reset implementation
+node scripts/test-user-creation.js  # Test user creation system
+```
+
+### Integration with Development
+
+The test data seeding system integrates seamlessly with the development workflow:
+
+1. **Start emulators**: `npm run dev:firebase`
+2. **Seed test data**: `npm run seed:dev`
+3. **Start React app**: `npm run dev:react`
+4. **Login with test users**: Use credentials from seeding output
+5. **Reset when needed**: `npm run seed:reset` for clean slate
+
+The seeded data persists during development sessions and provides a consistent testing environment for all application features.
 
 ## Usage
 
