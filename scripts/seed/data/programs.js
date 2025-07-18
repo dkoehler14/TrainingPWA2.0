@@ -40,7 +40,7 @@ const PROGRAM_TEMPLATES = {
           ]
         },
         day3: {
-          name: 'Workout A',
+          name: 'Workout C',
           exercises: [
             { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
             { exerciseName: 'Barbell Bench Press', sets: 3, reps: 5, restMinutes: 3 },
@@ -60,7 +60,7 @@ const PROGRAM_TEMPLATES = {
           ]
         },
         day2: {
-          name: 'Workout B',
+          name: 'Workout C',
           exercises: [
             { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
             { exerciseName: 'Overhead Press', sets: 3, reps: 5, restMinutes: 3 },
@@ -69,7 +69,7 @@ const PROGRAM_TEMPLATES = {
           ]
         },
         day3: {
-          name: 'Workout A',
+          name: 'Workout C',
           exercises: [
             { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
             { exerciseName: 'Barbell Bench Press', sets: 3, reps: 5, restMinutes: 3 },
@@ -101,7 +101,7 @@ const PROGRAM_TEMPLATES = {
           ]
         },
         day3: {
-          name: 'Workout A',
+          name: 'Workout C',
           exercises: [
             { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
             { exerciseName: 'Barbell Bench Press', sets: 3, reps: 5, restMinutes: 3 },
@@ -117,7 +117,7 @@ const PROGRAM_TEMPLATES = {
   intermediate: {
     name: '5/3/1 for Beginners',
     description: 'A 4-day upper/lower split with percentage-based progression for intermediate lifters',
-    duration: 16, // weeks
+    duration: 12, // weeks
     daysPerWeek: 4,
     weightUnit: 'LB',
     difficulty: 'intermediate',
@@ -168,6 +168,36 @@ const PROGRAM_TEMPLATES = {
             { exerciseName: 'Leg Curls', sets: 3, reps: 15, restMinutes: 2 },
             { exerciseName: 'Hip Thrust Machine', sets: 3, reps: 12, restMinutes: 2 },
             { exerciseName: 'Mountain Climbers', sets: 3, reps: 20, restMinutes: 1 }
+          ]
+        }
+      },
+      // Week 5-8: Progression phase
+      weeks_5_8: {
+        day1: {
+          name: 'Workout A',
+          exercises: [
+            { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Barbell Bench Press', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Barbell Row', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Dumbbell Bicep Curl', sets: 2, reps: 10, restMinutes: 2 }
+          ]
+        },
+        day2: {
+          name: 'Workout C',
+          exercises: [
+            { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Overhead Press', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Conventional Deadlift', sets: 1, reps: 5, restMinutes: 5 },
+            { exerciseName: 'Tricep Dips', sets: 2, reps: 8, restMinutes: 2 }
+          ]
+        },
+        day3: {
+          name: 'Workout C',
+          exercises: [
+            { exerciseName: 'Barbell Back Squat', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Barbell Bench Press', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Barbell Row', sets: 3, reps: 5, restMinutes: 3 },
+            { exerciseName: 'Dumbbell Bicep Curl', sets: 2, reps: 10, restMinutes: 2 }
           ]
         }
       }
@@ -245,18 +275,18 @@ const PROGRAM_TEMPLATES = {
  */
 function createProgramDocument(template, userId, exerciseMap, isCurrent = false) {
   const weeklyConfigs = {};
-  
+
   // Convert template structure to weekly configs
   Object.entries(template.workoutStructure).forEach(([weekRange, days]) => {
-    const [startWeek, endWeek] = weekRange.includes('_') 
+    const [startWeek, endWeek] = weekRange.includes('_')
       ? weekRange.split('_').slice(1).map(w => parseInt(w))
       : [1, template.duration];
-    
+
     for (let week = startWeek; week <= endWeek; week++) {
       Object.entries(days).forEach(([dayKey, dayData]) => {
         const dayNumber = parseInt(dayKey.replace('day', ''));
         const configKey = `week${week}_day${dayNumber}`;
-        
+
         weeklyConfigs[configKey] = {
           name: dayData.name,
           exercises: dayData.exercises.map(exercise => ({
@@ -320,7 +350,7 @@ function getProgramTemplateForUser(experienceLevel) {
     'intermediate': PROGRAM_TEMPLATES.intermediate,
     'advanced': PROGRAM_TEMPLATES.advanced
   };
-  
+
   return templateMap[experienceLevel] || PROGRAM_TEMPLATES.beginner;
 }
 
@@ -333,10 +363,10 @@ function getProgramTemplateForUser(experienceLevel) {
  */
 async function seedPrograms(users, options = {}) {
   const { verbose = false } = options;
-  
+
   try {
     const db = getFirestore();
-    
+
     if (verbose) {
       logProgress('Starting workout program seeding...', 'info');
     }
@@ -344,7 +374,7 @@ async function seedPrograms(users, options = {}) {
     // Get all exercises to create exercise mapping
     const exercises = await getAllExercises();
     const exerciseMap = createExerciseMap(exercises);
-    
+
     if (verbose) {
       logProgress(`Found ${exercises.length} exercises for program creation`, 'info');
     }
@@ -360,7 +390,7 @@ async function seedPrograms(users, options = {}) {
 
       // Get appropriate template for user's experience level
       const template = getProgramTemplateForUser(user.profile.experienceLevel);
-      
+
       // Adjust template based on user preferences
       const adjustedTemplate = {
         ...template,
@@ -370,16 +400,16 @@ async function seedPrograms(users, options = {}) {
 
       // Create program document
       const programDoc = createProgramDocument(
-        adjustedTemplate, 
-        user.uid, 
-        exerciseMap, 
+        adjustedTemplate,
+        user.uid,
+        exerciseMap,
         true // Set as current program
       );
 
       // Add to batch
       const programRef = db.collection('programs').doc();
       batch.set(programRef, programDoc);
-      
+
       createdPrograms.push({
         id: programRef.id,
         userId: user.uid,
@@ -409,7 +439,9 @@ async function seedPrograms(users, options = {}) {
         userScenario: p.userScenario,
         name: p.programName,
         duration: p.duration,
-        daysPerWeek: p.daysPerWeek
+        daysPerWeek: p.daysPerWeek,
+        weeklyConfigs: p.weeklyConfigs,
+        weightUnit: p.weightUnit
       }))
     };
 
@@ -419,7 +451,7 @@ async function seedPrograms(users, options = {}) {
       logProgress(`  - Beginner programs: ${results.programsByLevel.beginner}`, 'info');
       logProgress(`  - Intermediate programs: ${results.programsByLevel.intermediate}`, 'info');
       logProgress(`  - Advanced programs: ${results.programsByLevel.advanced}`, 'info');
-      
+
       results.createdPrograms.forEach(program => {
         logProgress(`  - ${program.userScenario}: "${program.name}" (${program.duration} weeks, ${program.daysPerWeek} days/week)`, 'info');
       });
@@ -441,11 +473,11 @@ async function seedPrograms(users, options = {}) {
 async function getAllPrograms(userId = null) {
   const db = getFirestore();
   let query = db.collection('programs');
-  
+
   if (userId) {
     query = query.where('userId', '==', userId);
   }
-  
+
   const snapshot = await query.get();
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
@@ -456,14 +488,14 @@ async function getAllPrograms(userId = null) {
  */
 async function clearProgramData() {
   const db = getFirestore();
-  
+
   const programsSnapshot = await db.collection('programs').get();
   const batch = db.batch();
-  
+
   programsSnapshot.docs.forEach(doc => {
     batch.delete(doc.ref);
   });
-  
+
   await batch.commit();
 }
 
@@ -474,26 +506,26 @@ async function clearProgramData() {
  */
 async function resetPrograms(options = {}) {
   const db = getFirestore();
-  
+
   try {
     // Get count before deletion
     const programsSnapshot = await db.collection('programs').get();
     const programCount = programsSnapshot.size;
-    
+
     if (programCount === 0) {
       if (options.verbose) {
         logProgress('No program data found to clear', 'info');
       }
       return 0;
     }
-    
+
     // Use existing clear function
     await clearProgramData();
-    
+
     if (options.verbose) {
       logProgress(`Cleared ${programCount} workout programs`, 'info');
     }
-    
+
     return programCount;
   } catch (error) {
     throw new Error(`Failed to reset programs: ${error.message}`);

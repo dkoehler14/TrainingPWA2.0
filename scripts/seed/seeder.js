@@ -117,7 +117,7 @@ async function seedAll(options = {}) {
         'seedWorkoutLogs',
         async () => {
           const logStepStart = Date.now();
-          const result = await seedWorkoutLogs(users, { ...options, verbose });
+          const result = await seedWorkoutLogs(users, programResults.createdPrograms, exerciseResults.createdExercises, { ...options, verbose });
           logTiming('Workout log generation', logStepStart);
           return result;
         },

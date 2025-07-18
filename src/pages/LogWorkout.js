@@ -10,6 +10,7 @@ import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidatePr
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { httpsCallable } from 'firebase/functions';
 import ExerciseGrid from '../components/ExerciseGrid';
+//import { initializeDebugging } from '../utils/addExerciseDebugger';
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -134,13 +135,31 @@ function LogWorkout() {
   const [showBodyweightModal, setShowBodyweightModal] = useState(false);
   const [bodyweightInput, setBodyweightInput] = useState('');
   const [bodyweightExerciseIndex, setBodyweightExerciseIndex] = useState(null);
-  
+
   // Add Exercise functionality state
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
   const [addExerciseType, setAddExerciseType] = useState('temporary');
   const [isAddingExercise, setIsAddingExercise] = useState(false);
-  
+
+  // User message state for enhanced error handling
+  const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
+
   const user = auth.currentUser;
+
+  // Enhanced user message function
+  const showUserMessage = (text, type = 'info') => {
+    setUserMessage({ text, type, show: true });
+    // Auto-hide after 5 seconds for non-error messages
+    if (type !== 'error') {
+      setTimeout(() => {
+        setUserMessage(prev => ({ ...prev, show: false }));
+      }, 5000);
+    }
+  };
+
+  const hideUserMessage = () => {
+    setUserMessage(prev => ({ ...prev, show: false }));
+  };
 
   // Refs for number inputs
   const repsInputRef = useRef(null);
@@ -226,13 +245,18 @@ function LogWorkout() {
     [] // Empty dependency array ensures this is only created once
   );
 
+  // Initialize debugging system
+  // useEffect(() => {
+  //   initializeDebugging();
+  // }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
         try {
           // Warm user cache before fetching data
           await warmUserCache(user.uid, 'high');
-          
+
           // Fetch all user programs, ordered by createdAt (most recent first)
           const programsData = await getCollectionCached(
             'programs',
@@ -254,7 +278,7 @@ function LogWorkout() {
           try {
             // Fetch global exercises from metadata
             const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
-            
+
             // Add source metadata to global exercises
             const enhancedGlobalExercises = globalExercises.map(ex => ({
               ...ex,
@@ -262,7 +286,7 @@ function LogWorkout() {
               source: 'global',
               createdBy: null
             }));
-            
+
             // Fetch user-specific exercises if user exists
             let userExercises = [];
             if (user?.uid) {
@@ -282,7 +306,7 @@ function LogWorkout() {
                 console.log('No user-specific exercises found');
               }
             }
-            
+
             // Combine global and user exercises
             const allExercises = [...enhancedGlobalExercises, ...userExercises];
             setExercisesList(allExercises);
@@ -369,7 +393,7 @@ function LogWorkout() {
   // Fetch existing workout log when program, week, or day changes
   useEffect(() => {
     if (!user || !selectedProgram || selectedWeek === null || selectedDay === null) return;
-    
+
     // Validate that the selected week/day indices are within program bounds
     if (selectedWeek >= selectedProgram.duration || selectedDay >= selectedProgram.daysPerWeek) {
       console.error(`Invalid week/day selection: Week ${selectedWeek}, Day ${selectedDay} for program with ${selectedProgram.duration} weeks and ${selectedProgram.daysPerWeek} days per week`);
@@ -378,9 +402,9 @@ function LogWorkout() {
 
     // Validate that the program structure exists
     if (!selectedProgram.weeklyConfigs ||
-        !selectedProgram.weeklyConfigs[selectedWeek] ||
-        !selectedProgram.weeklyConfigs[selectedWeek][selectedDay] ||
-        !selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises) {
+      !selectedProgram.weeklyConfigs[selectedWeek] ||
+      !selectedProgram.weeklyConfigs[selectedWeek][selectedDay] ||
+      !selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises) {
       console.error(`Program structure missing for Week ${selectedWeek}, Day ${selectedDay}`);
       setLogData([]);
       setIsLoading(false);
@@ -389,7 +413,7 @@ function LogWorkout() {
 
     setIsLoading(true);
     const key = `${selectedWeek}_${selectedDay}`;
-    
+
     if (programLogs[key]) {
       // Load existing log data
       setLogData(programLogs[key].exercises.map(ex => {
@@ -409,11 +433,11 @@ function LogWorkout() {
         const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
           const exercise = exercisesList.find(e => e.id === ex.exerciseId);
           const isBodyweightType = ['Bodyweight', 'Bodyweight Loadable'].includes(exercise?.exerciseType);
-          
+
           // Check if reps is a range and handle accordingly
           const repValue = ex.reps;
           const isRange = isRepRange(repValue);
-          
+
           return {
             ...ex,
             reps: Array(ex.sets).fill(isRange ? '' : repValue), // Empty if range, otherwise use value
@@ -424,6 +448,7 @@ function LogWorkout() {
             bodyweight: isBodyweightType ? '' : ''
           };
         });
+        console.log(dayExercises);
         setLogData(dayExercises);
         // Pre-populate programLogs with initialized data
         setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
@@ -614,7 +639,7 @@ function LogWorkout() {
       // Try both format keys for backward compatibility
       const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
       const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
-      
+
       console.log("Trying config keys:", { newFormatKey, oldFormatKey });
 
       // First try new format, then fall back to old format
@@ -799,13 +824,13 @@ function LogWorkout() {
     const weightValue = exercise.weights[setIndex];
     const repsValue = exercise.reps[setIndex];
     const exerciseType = exercisesList.find(e => e.id === exercise.exerciseId)?.exerciseType;
-    
+
     // Check if reps value is valid (not empty, not 0, not null, not undefined)
     const hasValidReps = repsValue !== '' && repsValue !== null && repsValue !== undefined && Number(repsValue) > 0;
-    
+
     // Check weight based on exercise type
     let hasValidWeight = false;
-    
+
     if (exerciseType === 'Bodyweight') {
       // For bodyweight exercises, we need a valid bodyweight value
       hasValidWeight = exercise.bodyweight !== '' && exercise.bodyweight !== null && exercise.bodyweight !== undefined && Number(exercise.bodyweight) > 0;
@@ -818,7 +843,7 @@ function LogWorkout() {
       // For regular exercises, we need a valid weight value
       hasValidWeight = weightValue !== '' && weightValue !== null && weightValue !== undefined && Number(weightValue) > 0;
     }
-    
+
     return hasValidReps && hasValidWeight;
   };
 
@@ -978,31 +1003,191 @@ function LogWorkout() {
     }
   };
 
-  // Add Exercise functionality
+  // Add Exercise functionality with enhanced error handling
   const handleAddExercise = async (exercise, type) => {
-    if (!exercise || !selectedProgram || isAddingExercise) return;
-    
-    setIsAddingExercise(true);
-    try {
-      const newExercise = {
-        exerciseId: exercise.id,
-        sets: 3, // Default sets
-        reps: Array(3).fill(''),
-        weights: Array(3).fill(''),
-        completed: Array(3).fill(false),
-        notes: '',
-        bodyweight: ['Bodyweight', 'Bodyweight Loadable'].includes(exercise.exerciseType) ? '' : '',
-        isAdded: true,
-        addedType: type,
-        originalIndex: logData.length
-      };
+    // Import enhanced error handling utilities
+    // const {
+    //   validateAddExerciseParams,
+    //   createAddExerciseError,
+    //   handleAddExerciseError,
+    //   createUserFriendlyErrorMessage,
+    //   logAddExerciseOperation,
+    //   attemptPermanentAdditionRecovery,
+    //   RECOVERY_STRATEGIES
+    // } = await import('../utils/addExerciseErrorHandler');
 
+    const {
+      createNewExerciseObject,
+      updateProgramWithExercise
+    } = await import('../utils/addExerciseUtils');
+
+    // Import debugging utilities
+    // const {
+    //   logAddExerciseStart,
+    //   logAddExerciseSuccess,
+    //   logAddExerciseFailure,
+    //   logStateChange,
+    //   startPerformanceMonitoring,
+    //   endPerformanceMonitoring
+    // } = await import('../utils/addExerciseDebugger');
+
+    // Start performance monitoring and logging
+    // const operationId = `add_exercise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // startPerformanceMonitoring(operationId, `Add Exercise: ${exercise?.name || 'Unknown'}`, {
+    //   exerciseId: exercise?.id,
+    //   exerciseName: exercise?.name,
+    //   additionType: type,
+    //   programId: selectedProgram?.id,
+    //   weekIndex: selectedWeek,
+    //   dayIndex: selectedDay
+    // });
+
+    // Log operation start
+    // logAddExerciseStart(exercise, type, {
+    //   programId: selectedProgram?.id,
+    //   weekIndex: selectedWeek,
+    //   dayIndex: selectedDay,
+    //   currentLogDataLength: logData.length
+    // });
+
+    // Enhanced validation
+    // const validation = validateAddExerciseParams(exercise, type, selectedProgram, isAddingExercise);
+    // if (!validation.isValid) {
+    //   validation.errors.forEach(error => {
+    //     const userMessage = createUserFriendlyErrorMessage(error.type);
+    //     showUserMessage(error.userMessage || userMessage.message, 'error');
+    //   });
+
+    //   // Log validation failure and end performance monitoring
+    //   logAddExerciseFailure(exercise, type, new Error('Validation failed'), {
+    //     programId: selectedProgram?.id,
+    //     weekIndex: selectedWeek,
+    //     dayIndex: selectedDay,
+    //     validationErrors: validation.errors
+    //   });
+    //   endPerformanceMonitoring(operationId, { success: false, reason: 'validation_failed' });
+    //   return;
+    // }
+
+    setIsAddingExercise(true);
+
+    // Log state change
+    // logStateChange('isAddingExercise', false, true, {
+    //   operationId,
+    //   exerciseId: exercise?.id,
+    //   additionType: type
+    // });
+
+    let addedToWorkout = false;
+
+    try {
+      // Create new exercise object using utility
+      const newExercise = createNewExerciseObject(exercise, type, logData.length);
       const newLogData = [...logData, newExercise];
+
+      // Add to workout first (this always succeeds)
       setLogData(newLogData);
+      addedToWorkout = true;
+
+      // logAddExerciseOperation('add_exercise', {
+      //   exercise,
+      //   type,
+      //   program: selectedProgram,
+      //   weekIndex: selectedWeek,
+      //   dayIndex: selectedDay,
+      //   currentLogDataLength: logData.length,
+      //   newLogDataLength: newLogData.length
+      // }, true);
+
+      // Log state change for logData
+      // logStateChange('logData', logData, newLogData, {
+      //   operationId,
+      //   exerciseId: exercise?.id,
+      //   additionType: type
+      // });
 
       // If permanent, also update the program structure
       if (type === 'permanent') {
-        await addExerciseToProgram(exercise);
+        try {
+          await updateProgramWithExercise(
+            selectedProgram.id,
+            exercise,
+            selectedWeek,
+            selectedDay,
+            { maxRetries: 3, allowDuplicates: false }
+          );
+          showUserMessage(`${exercise.name} added permanently to your program!`, 'success');
+
+          // Log successful permanent addition
+          // logAddExerciseSuccess(exercise, type, {
+          //   programId: selectedProgram?.id,
+          //   weekIndex: selectedWeek,
+          //   dayIndex: selectedDay,
+          //   newLogDataLength: newLogData.length,
+          //   programUpdated: true
+          // });
+        } catch (programUpdateError) {
+          const tempLogData = newLogData.map(ex =>
+            ex.exerciseId === exercise.id && ex.isAdded
+              ? { ...ex, addedType: 'temporary' }
+              : ex
+          );
+          setLogData(tempLogData);
+          showUserMessage(`${exercise.name} added temporarily to this workout only.`, 'warning');
+          // Handle partial failure - exercise added to workout but not to program
+          // const errorInfo = createAddExerciseError(
+          //   programUpdateError.originalError || programUpdateError,
+          //   'update_program',
+          //   { addedToWorkout: true, exercise, type: 'permanent' }
+          // );
+
+          // const recoveryAction = handleAddExerciseError(
+          //   errorInfo,
+          //   showUserMessage,
+          //   { canFallbackToTemporary: true, canRetry: true }
+          // );
+
+          // if (recoveryAction.fallbackToTemporary) {
+          //   // Convert to temporary addition
+          //   const tempLogData = newLogData.map(ex =>
+          //     ex.exerciseId === exercise.id && ex.isAdded
+          //       ? { ...ex, addedType: 'temporary' }
+          //       : ex
+          //   );
+          //   setLogData(tempLogData);
+          //   showUserMessage(`${exercise.name} added temporarily to this workout only.`, 'warning');
+          // } else if (recoveryAction.shouldRetry) {
+          //   // Attempt recovery
+          //   const recovered = await attemptPermanentAdditionRecovery(
+          //     exercise,
+          //     { selectedWeek, selectedDay, selectedProgram },
+          //     async (ex) => {
+          //       // Already added to workout, just need to update type
+          //       const tempLogData = newLogData.map(e =>
+          //         e.exerciseId === ex.id && e.isAdded
+          //           ? { ...e, addedType: 'temporary' }
+          //           : e
+          //       );
+          //       setLogData(tempLogData);
+          //     }
+          //   );
+
+          //   if (!recovered) {
+          //     showUserMessage('Unable to add exercise permanently. Added temporarily instead.', 'warning');
+          //   }
+          // }
+        }
+      } else {
+        showUserMessage(`${exercise.name} added temporarily to this workout!`, 'success');
+
+        // Log successful temporary addition
+        // logAddExerciseSuccess(exercise, type, {
+        //   programId: selectedProgram?.id,
+        //   weekIndex: selectedWeek,
+        //   dayIndex: selectedDay,
+        //   newLogDataLength: newLogData.length,
+        //   programUpdated: false
+        // });
       }
 
       // Update programLogs
@@ -1017,165 +1202,239 @@ function LogWorkout() {
 
       // Trigger auto-save
       debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
-      
+
       setShowAddExerciseModal(false);
+
+      // End performance monitoring with success
+      // endPerformanceMonitoring(operationId, {
+      //   success: true,
+      //   addedToWorkout: true,
+      //   programUpdated: type === 'permanent',
+      //   finalLogDataLength: newLogData.length
+      // });
+
     } catch (error) {
-      console.error('Error adding exercise:', error);
-      alert('Failed to add exercise. Please try again.');
+      showUserMessage(`${exercise.name} could not be added to this workout. Please try again.`, 'error');
+
+      // Enhanced error handling with debugging
+      // logAddExerciseFailure(exercise, type, error, {
+      //   programId: selectedProgram?.id,
+      //   weekIndex: selectedWeek,
+      //   dayIndex: selectedDay,
+      //   addedToWorkout,
+      //   partialSuccess: addedToWorkout
+      // });
+
+      // const errorInfo = createAddExerciseError(
+      //   error.originalError || error,
+      //   'add_exercise',
+      //   { exercise, type, addedToWorkout }
+      // );
+
+      // logAddExerciseOperation('add_exercise', {
+      //   exercise,
+      //   type,
+      //   program: selectedProgram,
+      //   weekIndex: selectedWeek,
+      //   dayIndex: selectedDay,
+      //   currentLogDataLength: logData.length,
+      //   addedToWorkout
+      // }, false, error);
+
+      // handleAddExerciseError(errorInfo, showUserMessage, {
+      //   canRetry: true,
+      //   canFallbackToTemporary: type === 'permanent'
+      // });
+
+      // End performance monitoring with failure
+      // endPerformanceMonitoring(operationId, {
+      //   success: false,
+      //   error: error.message,
+      //   addedToWorkout,
+      //   partialSuccess: addedToWorkout
+      // });
+
     } finally {
       setIsAddingExercise(false);
+
+      // Log final state change
+      // logStateChange('isAddingExercise', true, false, {
+      //   operationId,
+      //   exerciseId: exercise?.id,
+      //   additionType: type,
+      //   completed: true
+      // });
     }
   };
 
-  const addExerciseToProgram = async (exercise) => {
-    try {
-      // Get the latest program document
-      const programDoc = await getDocCached('programs', selectedProgram.id);
-      if (!programDoc) {
-        throw new Error("Program document not found");
-      }
+  // Old addExerciseToProgram function removed - now using enhanced utilities from addExerciseUtils.js
 
-      const currentProgramData = programDoc;
+  const removeAddedExercise = async (exerciseIndex) => {
+    // Import enhanced error handling utilities
+    // const {
+    //   validateRemoveExerciseParams,
+    //   createAddExerciseError,
+    //   handleAddExerciseError,
+    //   logAddExerciseOperation
+    // } = await import('../utils/addExerciseErrorHandler');
 
-      // Try both format keys for backward compatibility
-      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
-      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
+    const {
+      removeExerciseFromProgram: removeFromProgramUtil,
+      removeExerciseFromLogData
+    } = await import('../utils/addExerciseUtils');
 
-      // First try new format, then fall back to old format
-      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
-      let configKey = newFormatKey;
-      let isOldFormat = false;
+    // Import debugging utilities
+    // const {
+    //   logExerciseRemoval,
+    //   logStateChange,
+    //   startPerformanceMonitoring,
+    //   endPerformanceMonitoring
+    // } = await import('../utils/addExerciseDebugger');
 
-      if (!currentExercises) {
-        // Try old format
-        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
-        if (oldFormatData && oldFormatData.exercises) {
-          currentExercises = oldFormatData.exercises;
-          configKey = oldFormatKey;
-          isOldFormat = true;
-        }
-      }
-
-      if (!currentExercises) {
-        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}`);
-      }
-
-      // Create new exercise entry for program
-      const newProgramExercise = {
-        exerciseId: exercise.id,
-        sets: 3,
-        reps: 8, // Default reps
-        notes: ''
-      };
-
-      // Add the exercise to the existing exercises array
-      const updatedExercises = [...currentExercises, newProgramExercise];
-
-      // Update Firestore with the correct nested path based on format
-      if (isOldFormat) {
-        // For old format, update the exercises array within the day object
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
-        });
-      } else {
-        // For new format, update the exercises array directly
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}`]: updatedExercises
-        });
-      }
-
-      invalidateProgramCache(user.uid);
-      console.log('Successfully added exercise to program structure');
-    } catch (error) {
-      console.error('Error adding exercise to program:', error);
-      throw error;
-    }
-  };
-
-  const removeAddedExercise = (exerciseIndex) => {
-    if (isWorkoutFinished) return;
-    
+    // Start performance monitoring and logging
+    // const operationId = `remove_exercise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const exerciseToRemove = logData[exerciseIndex];
-    if (!exerciseToRemove.isAdded) return;
 
-    // Remove from logData
-    const newLogData = logData.filter((_, index) => index !== exerciseIndex);
-    setLogData(newLogData);
+    // startPerformanceMonitoring(operationId, `Remove Exercise: ${exerciseToRemove?.exerciseId || 'Unknown'}`, {
+    //   exerciseId: exerciseToRemove?.exerciseId,
+    //   exerciseIndex,
+    //   addedType: exerciseToRemove?.addedType,
+    //   programId: selectedProgram?.id,
+    //   weekIndex: selectedWeek,
+    //   dayIndex: selectedDay
+    // });
 
-    // If it was a permanent addition, also remove from program
-    if (exerciseToRemove.addedType === 'permanent') {
-      removeExerciseFromProgram(exerciseToRemove.exerciseId);
+    // Log operation start
+    // logExerciseRemoval(exerciseToRemove, exerciseIndex, {
+    //   programId: selectedProgram?.id,
+    //   weekIndex: selectedWeek,
+    //   dayIndex: selectedDay,
+    //   currentLogDataLength: logData.length
+    // });
+
+    if (isWorkoutFinished) {
+      showUserMessage('Cannot remove exercises from a finished workout.', 'warning');
+      // endPerformanceMonitoring(operationId, { success: false, reason: 'workout_finished' });
+      return;
     }
 
-    // Update programLogs
-    const key = `${selectedWeek}_${selectedDay}`;
-    setProgramLogs(prev => ({
-      ...prev,
-      [key]: {
-        exercises: newLogData,
-        isWorkoutFinished: prev[key]?.isWorkoutFinished || false
-      }
-    }));
+    if (!exerciseToRemove || !exerciseToRemove.isAdded) {
+      showUserMessage('Only added exercises can be removed.', 'warning');
+      // endPerformanceMonitoring(operationId, { success: false, reason: 'invalid_exercise' });
+      return;
+    }
 
-    // Trigger auto-save
-    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
-  };
+    // Enhanced validation
+    // const validation = validateRemoveExerciseParams(exerciseToRemove, isWorkoutFinished);
+    // if (!validation.isValid) {
+    //   showUserMessage(validation.errors[0] || 'Cannot remove this exercise.', 'error');
+    //   endPerformanceMonitoring(operationId, { success: false, reason: 'validation_failed' });
+    //   return;
+    // }
 
-  const removeExerciseFromProgram = async (exerciseId) => {
     try {
-      // Get the latest program document
-      const programDoc = await getDocCached('programs', selectedProgram.id);
-      if (!programDoc) {
-        throw new Error("Program document not found");
-      }
+      // Remove from logData first
+      const newLogData = removeExerciseFromLogData(logData, exerciseIndex);
+      setLogData(newLogData);
 
-      const currentProgramData = programDoc;
+      // Log state change
+      // logStateChange('logData', logData, newLogData, {
+      //   operationId,
+      //   exerciseId: exerciseToRemove?.exerciseId,
+      //   exerciseIndex,
+      //   operation: 'remove'
+      // });
 
-      // Try both format keys for backward compatibility
-      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
-      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
+      const exerciseName = exercisesList.find(ex => ex.id === exerciseToRemove.exerciseId)?.name || 'Exercise';
 
-      // First try new format, then fall back to old format
-      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
-      let configKey = newFormatKey;
-      let isOldFormat = false;
+      // logAddExerciseOperation('remove_exercise', {
+      //   exercise: exerciseToRemove,
+      //   exerciseIndex,
+      //   program: selectedProgram,
+      //   weekIndex: selectedWeek,
+      //   dayIndex: selectedDay,
+      //   currentLogDataLength: logData.length,
+      //   newLogDataLength: newLogData.length
+      // }, true);
 
-      if (!currentExercises) {
-        // Try old format
-        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
-        if (oldFormatData && oldFormatData.exercises) {
-          currentExercises = oldFormatData.exercises;
-          configKey = oldFormatKey;
-          isOldFormat = true;
+      // If it was a permanent addition, also remove from program
+      if (exerciseToRemove.addedType === 'permanent') {
+        try {
+          await removeFromProgramUtil(
+            selectedProgram.id,
+            exerciseToRemove.exerciseId,
+            selectedWeek,
+            selectedDay,
+            { maxRetries: 3 }
+          );
+          showUserMessage(`${exerciseName} removed from your program permanently.`, 'success');
+        } catch (programRemovalError) {
+          // Handle partial failure - exercise removed from workout but not from program
+          // const errorInfo = createAddExerciseError(
+          //   programRemovalError.originalError || programRemovalError,
+          //   'remove_from_program',
+          //   { removedFromWorkout: true, exercise: exerciseToRemove }
+          // );
+
+          //handleAddExerciseError(errorInfo, showUserMessage, { canRetry: false });
+          showUserMessage(`${exerciseName} removed from current workout, but may still appear in future workouts.`, 'warning');
         }
-      }
-
-      if (!currentExercises) {
-        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}`);
-      }
-
-      // Remove the exercise from the exercises array
-      const updatedExercises = currentExercises.filter(ex => ex.exerciseId !== exerciseId);
-
-      // Update Firestore with the correct nested path based on format
-      if (isOldFormat) {
-        // For old format, update the exercises array within the day object
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
-        });
       } else {
-        // For new format, update the exercises array directly
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}`]: updatedExercises
-        });
+        showUserMessage(`${exerciseName} removed from this workout.`, 'success');
       }
 
-      invalidateProgramCache(user.uid);
-      console.log('Successfully removed exercise from program structure');
+      // Update programLogs
+      const key = `${selectedWeek}_${selectedDay}`;
+      setProgramLogs(prev => ({
+        ...prev,
+        [key]: {
+          exercises: newLogData,
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+        }
+      }));
+
+      // Trigger auto-save
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+
+      // End performance monitoring with success
+      // endPerformanceMonitoring(operationId, {
+      //   success: true,
+      //   removedFromWorkout: true,
+      //   removedFromProgram: exerciseToRemove.addedType === 'permanent',
+      //   finalLogDataLength: newLogData.length
+      // });
+
     } catch (error) {
-      console.error('Error removing exercise from program:', error);
+      const exerciseName = exercisesList.find(ex => ex.id === exerciseToRemove.exerciseId)?.name || 'Exercise';
+      showUserMessage(`${exerciseName} could not be removed from this workout. Please try again.`, 'error');
+
+      // const errorInfo = createAddExerciseError(
+      //   error.originalError || error,
+      //   'remove_exercise',
+      //   { exercise: exerciseToRemove, exerciseIndex }
+      // );
+
+      // logAddExerciseOperation('remove_exercise', {
+      //   exercise: exerciseToRemove,
+      //   exerciseIndex,
+      //   program: selectedProgram,
+      //   weekIndex: selectedWeek,
+      //   dayIndex: selectedDay,
+      //   currentLogDataLength: logData.length
+      // }, false, error);
+
+      //handleAddExerciseError(errorInfo, showUserMessage, { canRetry: false });
+
+      // End performance monitoring with failure
+      // endPerformanceMonitoring(operationId, {
+      //   success: false,
+      //   error: error.message,
+      //   exerciseId: exerciseToRemove?.exerciseId
+      // });
     }
   };
+
+  // Old removeExerciseFromProgram function removed - now using enhanced utilities from addExerciseUtils.js
 
   // Helper to get the day name from selectedProgram.weeklyConfigs
   const getDayName = (weekIdx, dayIdx) => {
@@ -1197,6 +1456,26 @@ function LogWorkout() {
         <Col md={8}>
           <div className="soft-card shadow border-0">
             <h1 className="soft-title text-center">Log Workout</h1>
+
+            {/* Enhanced User Message Display */}
+            {userMessage.show && (
+              <div className={`alert alert-${userMessage.type === 'error' ? 'danger' : userMessage.type === 'warning' ? 'warning' : userMessage.type === 'success' ? 'success' : 'info'} alert-dismissible fade show`} role="alert">
+                <strong>
+                  {userMessage.type === 'error' && '⚠️ '}
+                  {userMessage.type === 'warning' && '⚠️ '}
+                  {userMessage.type === 'success' && '✅ '}
+                  {userMessage.type === 'info' && 'ℹ️ '}
+                </strong>
+                {userMessage.text}
+                <button
+                  type="button"
+                  className="btn-close"
+                  aria-label="Close"
+                  onClick={hideUserMessage}
+                ></button>
+              </div>
+            )}
+
             {isLoading ? (
               <div className="text-center py-4">
                 <Spinner animation="border" className="spinner-blue" />
@@ -1587,7 +1866,7 @@ function LogWorkout() {
                         </div>
                       );
                     })}
-                    
+
                     {/* Add Exercise Button */}
                     {!isWorkoutFinished && (
                       <div className="text-center mt-4 mb-3">
@@ -1627,12 +1906,12 @@ function LogWorkout() {
                           //   if (!exerciseToReplace) return '';
                           //   const currentExercise = exercisesList.find(e => e.id === exerciseToReplace.exerciseId);
                           //   if (!currentExercise) return '';
-                            
+
                           //   // Check if there are other exercises with the same type (excluding current exercise)
                           //   const sameTypeExercises = exercisesList.filter(ex =>
                           //     ex.exerciseType === currentExercise.exerciseType && ex.id !== exerciseToReplace.exerciseId
                           //   );
-                            
+
                           //   // Return type filter if there are matching exercises
                           //   return sameTypeExercises.length > 0 ? currentExercise.exerciseType : '';
                           // })()}
@@ -1640,9 +1919,9 @@ function LogWorkout() {
                             if (!exerciseToReplace) return '';
                             const currentExercise = exercisesList.find(e => e.id === exerciseToReplace.exerciseId);
                             if (!currentExercise) return '';
-                            
+
                             if (currentExercise.primaryMuscleGroup) return currentExercise.primaryMuscleGroup;
-                            
+
                             return '';
 
                           })()}
@@ -1710,104 +1989,104 @@ function LogWorkout() {
                       </Modal.Footer>
                     </Modal>
 
-                      <Modal
-                        show={showHistoryModal}
-                        onHide={() => setShowHistoryModal(false)}
-                        size="lg"
-                        centered
-                      >
-                        <Modal.Header closeButton>
-                          <Modal.Title>
-                            {selectedExerciseHistory && exercisesList.find(
-                              e => e.id === selectedExerciseHistory?.exerciseId
-                            )?.name || 'Exercise'} History
-                          </Modal.Title>
-                        </Modal.Header>
-                        <Modal.Body>
-                          {isLoadingHistory ? (
-                            <div className="text-center py-3">
-                              <Spinner animation="border" className="spinner-blue" />
-                              <p className="mt-2">Loading history...</p>
-                            </div>
-                          ) : exerciseHistoryData.length > 0 ? (
-                            <>
-                              <Table responsive className="history-table">
-                                <thead>
-                                  <tr>
-                                    <th>Date</th>
-                                    <th>Week/Day</th>
-                                    <th>Set</th>
-                                    <th>
-                                      {(() => {
-                                        const exerciseType = exerciseHistoryData[0]?.exerciseType;
-                                        if (exerciseType === 'Bodyweight') return 'Bodyweight';
-                                        if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
-                                        return 'Weight';
-                                      })()}
-                                    </th>
-                                    <th>Reps</th>
+                    <Modal
+                      show={showHistoryModal}
+                      onHide={() => setShowHistoryModal(false)}
+                      size="lg"
+                      centered
+                    >
+                      <Modal.Header closeButton>
+                        <Modal.Title>
+                          {selectedExerciseHistory && exercisesList.find(
+                            e => e.id === selectedExerciseHistory?.exerciseId
+                          )?.name || 'Exercise'} History
+                        </Modal.Title>
+                      </Modal.Header>
+                      <Modal.Body>
+                        {isLoadingHistory ? (
+                          <div className="text-center py-3">
+                            <Spinner animation="border" className="spinner-blue" />
+                            <p className="mt-2">Loading history...</p>
+                          </div>
+                        ) : exerciseHistoryData.length > 0 ? (
+                          <>
+                            <Table responsive className="history-table">
+                              <thead>
+                                <tr>
+                                  <th>Date</th>
+                                  <th>Week/Day</th>
+                                  <th>Set</th>
+                                  <th>
+                                    {(() => {
+                                      const exerciseType = exerciseHistoryData[0]?.exerciseType;
+                                      if (exerciseType === 'Bodyweight') return 'Bodyweight';
+                                      if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                      return 'Weight';
+                                    })()}
+                                  </th>
+                                  <th>Reps</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {exerciseHistoryData.map((entry, index) => (
+                                  <tr key={index}>
+                                    <td>{entry.date.toLocaleDateString()}</td>
+                                    <td>W{entry.week} D{entry.day}</td>
+                                    <td>{entry.set}</td>
+                                    <td>
+                                      {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
+                                        <div>
+                                          <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
+                                          <br />
+                                          <small className="text-muted">
+                                            BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
+                                          </small>
+                                        </div>
+                                      ) : (
+                                        entry.displayWeight || entry.weight
+                                      )}
+                                    </td>
+                                    <td>{entry.reps}</td>
                                   </tr>
-                                </thead>
-                                <tbody>
-                                  {exerciseHistoryData.map((entry, index) => (
-                                    <tr key={index}>
-                                      <td>{entry.date.toLocaleDateString()}</td>
-                                      <td>W{entry.week} D{entry.day}</td>
-                                      <td>{entry.set}</td>
-                                      <td>
-                                        {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
-                                          <div>
-                                            <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
-                                            <br />
-                                            <small className="text-muted">
-                                              BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
-                                            </small>
-                                          </div>
-                                        ) : (
-                                          entry.displayWeight || entry.weight
-                                        )}
-                                      </td>
-                                      <td>{entry.reps}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </Table>
+                                ))}
+                              </tbody>
+                            </Table>
 
-                              {exerciseHistoryData.length > 0 && (
-                                <div className="mt-3">
-                                  <h6>Recent Performance Summary:</h6>
-                                  <ul>
+                            {exerciseHistoryData.length > 0 && (
+                              <div className="mt-3">
+                                <h6>Recent Performance Summary:</h6>
+                                <ul>
+                                  <li>
+                                    <strong>Highest {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...exerciseHistoryData.map(e => e.totalWeight))}
+                                  </li>
+                                  <li>
+                                    <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
+                                  </li>
+                                  <li>
+                                    <strong>Average {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.totalWeight, 0) / exerciseHistoryData.length).toFixed(1)}
+                                  </li>
+                                  <li>
+                                    <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
+                                  </li>
+                                  {exerciseHistoryData[0]?.exerciseType === 'Bodyweight Loadable' && exerciseHistoryData.some(e => e.weight > 0) && (
                                     <li>
-                                      <strong>Highest {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...exerciseHistoryData.map(e => e.totalWeight))}
+                                      <strong>Average Additional Weight:</strong> {(exerciseHistoryData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.filter(e => e.weight > 0).length).toFixed(1)}
                                     </li>
-                                    <li>
-                                      <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
-                                    </li>
-                                    <li>
-                                      <strong>Average {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.totalWeight, 0) / exerciseHistoryData.length).toFixed(1)}
-                                    </li>
-                                    <li>
-                                      <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
-                                    </li>
-                                    {exerciseHistoryData[0]?.exerciseType === 'Bodyweight Loadable' && exerciseHistoryData.some(e => e.weight > 0) && (
-                                      <li>
-                                        <strong>Average Additional Weight:</strong> {(exerciseHistoryData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.filter(e => e.weight > 0).length).toFixed(1)}
-                                      </li>
-                                    )}
-                                  </ul>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <p className="text-center">No recent completed sets found for this exercise.</p>
-                          )}
-                        </Modal.Body>
-                        <Modal.Footer>
-                          <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
-                            Close
-                          </Button>
-                        </Modal.Footer>
-                      </Modal>
+                                  )}
+                                </ul>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-center">No recent completed sets found for this exercise.</p>
+                        )}
+                      </Modal.Body>
+                      <Modal.Footer>
+                        <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
+                          Close
+                        </Button>
+                      </Modal.Footer>
+                    </Modal>
 
                   </>
                 )}
@@ -1856,7 +2135,7 @@ function LogWorkout() {
               />
             </div>
           </Form.Group>
-          
+
           {/* Exercise Selection Grid */}
           <div>
             <Form.Label className="fw-bold mb-3">Select an Exercise</Form.Label>

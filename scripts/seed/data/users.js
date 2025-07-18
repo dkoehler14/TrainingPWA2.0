@@ -8,8 +8,8 @@
 const { getAuth, getFirestore } = require('../utils/firebase-config');
 const { logProgress, logError } = require('../utils/logger');
 const { getSeedingConfig, getScenarios, USER_SCENARIOS } = require('../config/scenarios');
-const { UserValidator, handleValidationErrors } = require('../utils/validation');
-const { SeedingError } = require('../utils/error-handling');
+const { UserValidator } = require('../utils/validation');
+const { SeedingError, handleValidationErrors } = require('../utils/error-handling');
 
 /**
  * Seed test users into Firebase Auth and Firestore emulators

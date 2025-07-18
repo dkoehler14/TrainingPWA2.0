@@ -292,7 +292,8 @@ class UserValidator extends BaseValidator {
       this.validateNumber(profile.weight, 'profile.weight', { min: 50, max: 500 });
     }
     if (profile.height !== undefined) {
-      this.validateNumber(profile.height, 'profile.height', { min: 100, max: 250 });
+      // Accept both inches (48-96) and centimeters (100-250)
+      this.validateNumber(profile.height, 'profile.height', { min: 48, max: 250 });
     }
 
     // Array fields

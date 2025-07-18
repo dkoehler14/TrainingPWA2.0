@@ -19,7 +19,7 @@ function initializeFirebase() {
 
   // Initialize Firebase Admin SDK for emulator use
   admin.initializeApp({
-    projectId: 'demo-project-id', // Use demo project ID for emulators
+    projectId: 'sample-firebase-ai-app-d056c', // Use same project ID as the main app
   });
 
   // Configure to use emulators

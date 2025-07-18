@@ -20,7 +20,7 @@ const MUSCLE_GROUPS = [
 // Exercise types used in the application
 const EXERCISE_TYPES = [
   'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-  'Bodyweight Only', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
+  'Bodyweight', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
   'Machine', 'Smith Machine', 'Camber Bar', 'Bands'
 ];
 
@@ -89,7 +89,7 @@ const EXERCISE_DATABASE = {
     {
       name: 'Tricep Dips',
       primaryMuscleGroup: 'Triceps',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Support body on parallel bars or bench. Lower body by bending elbows, then push back up.'
     },
     {
@@ -131,7 +131,7 @@ const EXERCISE_DATABASE = {
     {
       name: 'Calf Raises',
       primaryMuscleGroup: 'Calves',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Stand on balls of feet. Rise up on toes as high as possible, lower with control.'
     }
   ],
@@ -141,7 +141,7 @@ const EXERCISE_DATABASE = {
     {
       name: 'Push-ups',
       primaryMuscleGroup: 'Chest',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Start in plank position. Lower chest to floor by bending elbows, push back up to start.'
     },
     {
@@ -159,25 +159,25 @@ const EXERCISE_DATABASE = {
     {
       name: 'Bodyweight Squats',
       primaryMuscleGroup: 'Quads',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Stand with feet shoulder-width apart. Squat down by pushing hips back, return to standing.'
     },
     {
       name: 'Plank',
       primaryMuscleGroup: 'Abs',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Hold body in straight line from head to heels, supported on forearms and toes.'
     },
     {
       name: 'Mountain Climbers',
       primaryMuscleGroup: 'Abs',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Start in plank position. Alternate bringing knees toward chest in running motion.'
     },
     {
       name: 'Burpees',
       primaryMuscleGroup: 'Chest',
-      exerciseType: 'Bodyweight Only',
+      exerciseType: 'Bodyweight',
       instructions: 'Squat down, jump back to plank, do push-up, jump feet forward, jump up with arms overhead.'
     }
   ],
