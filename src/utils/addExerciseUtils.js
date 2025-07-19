@@ -6,20 +6,6 @@
 import { updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getDocCached, invalidateProgramCache } from '../api/enhancedFirestoreCache';
-import {
-  validateProgramStructure,
-  logAddExerciseOperation,
-  ADD_EXERCISE_ERROR_TYPES
-} from './addExerciseErrorHandler';
-import {
-  logAddExerciseStart,
-  logAddExerciseSuccess,
-  logAddExerciseFailure,
-  logProgramStructureUpdate,
-  startPerformanceMonitoring,
-  endPerformanceMonitoring,
-  logValidation
-} from './addExerciseDebugger';
 
 /**
  * Creates a new exercise object with default values
@@ -73,16 +59,6 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     operationId
   };
 
-  // Start performance monitoring
-  startPerformanceMonitoring(operationId, 'Update Program with Exercise', operationContext);
-
-  // Log operation start
-  logProgramStructureUpdate('add', exercise, {
-    programId,
-    weekIndex: selectedWeek,
-    dayIndex: selectedDay
-  });
-
   // Enhanced validation with logging
   const validationErrors = [];
   
@@ -98,13 +74,8 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
 
   if (validationErrors.length > 0) {
     const error = new Error(validationErrors.join(', '));
-    logValidation('updateProgramWithExercise', { isValid: false, errors: validationErrors }, operationContext);
-    logAddExerciseOperation('update_program', operationContext, false, error);
-    endPerformanceMonitoring(operationId, { success: false, error: error.message });
     throw error;
   }
-
-  logValidation('updateProgramWithExercise', { isValid: true, errors: [] }, operationContext);
 
   try {
     // Get the latest program document with retry mechanism
@@ -128,19 +99,10 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
 
     if (!programDoc) {
       const error = new Error("Program document not found");
-      logAddExerciseOperation('update_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
     const currentProgramData = programDoc;
-
-    // Validate program structure
-    const structureValidation = validateProgramStructure(currentProgramData, selectedWeek, selectedDay);
-    if (!structureValidation.isValid) {
-      const error = new Error(`Invalid program structure: ${structureValidation.errors.map(e => e.message).join(', ')}`);
-      logAddExerciseOperation('update_program', operationContext, false, error);
-      throw error; // Throw simple error for compatibility
-    }
 
     // Try both format keys for backward compatibility
     const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
@@ -163,7 +125,6 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
 
     if (!currentExercises) {
       const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weeklyConfigs || {}).join(', ')}`);
-      logAddExerciseOperation('update_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -171,7 +132,6 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     const isDuplicate = currentExercises.some(ex => ex.exerciseId === exercise.id);
     if (isDuplicate && !options.allowDuplicates) {
       const error = new Error(`Exercise ${exercise.name || exercise.id} is already in this workout`);
-      logAddExerciseOperation('update_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -203,52 +163,9 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     if (userId) {
       invalidateProgramCache(userId);
     }
-
-    // Log successful operation with context
-    logAddExerciseOperation('update_program', {
-      ...operationContext,
-      duration: performance.now() - (operationContext.startTime || 0),
-      configKey,
-      isOldFormat,
-      exerciseCount: updatedExercises.length
-    }, true);
-    
-    logProgramStructureUpdate('add', exercise, {
-      programId,
-      weekIndex: selectedWeek,
-      dayIndex: selectedDay,
-      configKey,
-      isOldFormat,
-      exerciseCount: updatedExercises.length
-    });
-    
-    endPerformanceMonitoring(operationId, { 
-      success: true, 
-      configKey, 
-      isOldFormat, 
-      exerciseCount: updatedExercises.length 
-    });
     
     console.log('Successfully added exercise to program structure');
-  } catch (error) {
-    // Enhanced error logging and re-throwing
-    logAddExerciseFailure(exercise, 'permanent', error, {
-      programId,
-      weekIndex: selectedWeek,
-      dayIndex: selectedDay,
-      partialSuccess: false
-    });
-    
-    logAddExerciseOperation('update_program', {
-      ...operationContext,
-      duration: performance.now() - (operationContext.startTime || 0)
-    }, false, error);
-    
-    endPerformanceMonitoring(operationId, { 
-      success: false, 
-      error: error.message 
-    });
-    
+  } catch (error) {    
     throw error; // Throw original error for compatibility
   }
 };
@@ -273,16 +190,6 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     operationId
   };
 
-  // Start performance monitoring
-  startPerformanceMonitoring(operationId, 'Remove Exercise from Program', operationContext);
-
-  // Log operation start
-  logProgramStructureUpdate('remove', { id: exerciseId }, {
-    programId,
-    weekIndex: selectedWeek,
-    dayIndex: selectedDay
-  });
-
   // Enhanced validation with logging
   const validationErrors = [];
   
@@ -298,13 +205,9 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
 
   if (validationErrors.length > 0) {
     const error = new Error(validationErrors.join(', '));
-    logValidation('removeExerciseFromProgram', { isValid: false, errors: validationErrors }, operationContext);
-    logAddExerciseOperation('remove_from_program', operationContext, false, error);
-    endPerformanceMonitoring(operationId, { success: false, error: error.message });
     throw error;
   }
 
-  logValidation('removeExerciseFromProgram', { isValid: true, errors: [] }, operationContext);
 
   try {
     // Get the latest program document with retry mechanism
@@ -328,7 +231,6 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
 
     if (!programDoc) {
       const error = new Error("Program document not found");
-      logAddExerciseOperation('remove_from_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -355,7 +257,6 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
 
     if (!currentExercises) {
       const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weeklyConfigs || {}).join(', ')}`);
-      logAddExerciseOperation('remove_from_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -363,7 +264,6 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     const exerciseExists = currentExercises.some(ex => ex.exerciseId === exerciseId);
     if (!exerciseExists) {
       const error = new Error(`Exercise ${exerciseId} not found in program structure`);
-      logAddExerciseOperation('remove_from_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -373,7 +273,6 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     // Verify removal was successful
     if (updatedExercises.length === currentExercises.length) {
       const error = new Error(`Failed to remove exercise ${exerciseId} from program structure`);
-      logAddExerciseOperation('remove_from_program', operationContext, false, error);
       throw error; // Throw simple error for compatibility
     }
 
@@ -394,45 +293,9 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     if (userId) {
       invalidateProgramCache(userId);
     }
-
-    // Log successful operation with context
-    logAddExerciseOperation('remove_from_program', {
-      ...operationContext,
-      duration: performance.now() - (operationContext.startTime || 0),
-      configKey,
-      isOldFormat,
-      exerciseCount: updatedExercises.length
-    }, true);
-    
-    logProgramStructureUpdate('remove', { id: exerciseId }, {
-      programId,
-      weekIndex: selectedWeek,
-      dayIndex: selectedDay,
-      configKey,
-      isOldFormat,
-      exerciseCount: updatedExercises.length
-    });
-    
-    endPerformanceMonitoring(operationId, { 
-      success: true, 
-      configKey, 
-      isOldFormat, 
-      exerciseCount: updatedExercises.length 
-    });
     
     console.log('Successfully removed exercise from program structure');
   } catch (error) {
-    // Enhanced error logging and re-throwing
-    logAddExerciseOperation('remove_from_program', {
-      ...operationContext,
-      duration: performance.now() - (operationContext.startTime || 0)
-    }, false, error);
-    
-    endPerformanceMonitoring(operationId, { 
-      success: false, 
-      error: error.message 
-    });
-    
     throw error; // Throw original error for compatibility
   }
 };

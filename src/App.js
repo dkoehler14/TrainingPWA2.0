@@ -7,6 +7,8 @@ import CreateProgram from './pages/CreateProgram';
 import Programs from './pages/Programs';
 import UserProfile from './pages/UserProfile';
 import LogWorkout from './pages/LogWorkout';
+import QuickWorkout from './pages/QuickWorkout';
+import QuickWorkoutHistory from './pages/QuickWorkoutHistory';
 import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
 import ProgressTracker2 from './pages/ProgressTracker2';
@@ -21,10 +23,10 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
 import { getDocCached, getCacheStats } from './api/enhancedFirestoreCache';
 import cacheWarmingService from './services/cacheWarmingService';
-import { 
-  getDevelopmentDebuggingStatus, 
+import {
+  getDevelopmentDebuggingStatus,
   developmentLogger,
-  serviceStatusLogger 
+  serviceStatusLogger
 } from './utils/developmentDebugger';
 import DevelopmentDebugPanel from './components/DevelopmentDebugPanel';
 
@@ -51,7 +53,7 @@ function AppContent() {
         await cacheWarmingService.initializeAppCache();
         setCacheInitialized(true);
         developmentLogger.info('✅ App cache initialized successfully');
-        
+
         // Add debugging tools to window for development
         if (process.env.NODE_ENV === 'development') {
           window.getCacheStats = getCacheStats;
@@ -59,7 +61,7 @@ function AppContent() {
           window.getDevelopmentDebuggingStatus = getDevelopmentDebuggingStatus;
           window.serviceStatusLogger = serviceStatusLogger;
           window.developmentLogger = developmentLogger;
-          
+
           developmentLogger.info('🔧 Development debugging tools available', {
             tools: [
               'window.getCacheStats()',
@@ -106,7 +108,7 @@ function AppContent() {
               dayOfWeek: new Date().getDay(),
               isNewSession: true
             };
-            
+
             // Warm user cache in background
             cacheWarmingService.smartWarmCache(currentUser.uid, context)
               .catch(error => console.warn('⚠️ Cache warming failed:', error));
@@ -128,7 +130,7 @@ function AppContent() {
     if (user && cacheInitialized) {
       const currentPath = window.location.pathname;
       const pageName = currentPath.split('/')[1] || 'home';
-      
+
       // Warm cache based on page context
       const pageContext = {
         lastVisitedPage: pageName,
@@ -165,6 +167,9 @@ function AppContent() {
         <Route path="/programs" element={user ? <Programs userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
+        <Route path="/quick-workout" element={user ? <QuickWorkout /> : <Navigate to="/auth" />} />
+        <Route path="/quick-workout-history" element={user ? <QuickWorkoutHistory /> : <Navigate to="/auth" />} />
+        <Route path="/quick-workout-history/:workoutId" element={user ? <QuickWorkoutHistory /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/progress-coach" element={user ? <ProgressCoach /> : <Navigate to="/auth" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />

@@ -220,6 +220,7 @@ function Home({ user }) {
                 <Card.Body>
                   <Card.Title className="widget-title">Navigate To...</Card.Title>
                   <div className="d-grid gap-2">
+                    <Button as={Link} to="/quick-workout" className="soft-button-secondary">Quick Workout</Button>
                     <Button as={Link} to="/create-program" className="soft-button-secondary">Create Program</Button>
                     <Button as={Link} to="/exercises" className="soft-button-secondary">Exercises</Button>
                     <Button as={Link} to="/profile" className="soft-button-secondary">Profile</Button>

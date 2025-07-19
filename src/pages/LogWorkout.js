@@ -10,7 +10,6 @@ import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidatePr
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { httpsCallable } from 'firebase/functions';
 import ExerciseGrid from '../components/ExerciseGrid';
-//import { initializeDebugging } from '../utils/addExerciseDebugger';
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -1005,78 +1004,13 @@ function LogWorkout() {
 
   // Add Exercise functionality with enhanced error handling
   const handleAddExercise = async (exercise, type) => {
-    // Import enhanced error handling utilities
-    // const {
-    //   validateAddExerciseParams,
-    //   createAddExerciseError,
-    //   handleAddExerciseError,
-    //   createUserFriendlyErrorMessage,
-    //   logAddExerciseOperation,
-    //   attemptPermanentAdditionRecovery,
-    //   RECOVERY_STRATEGIES
-    // } = await import('../utils/addExerciseErrorHandler');
 
     const {
       createNewExerciseObject,
       updateProgramWithExercise
     } = await import('../utils/addExerciseUtils');
 
-    // Import debugging utilities
-    // const {
-    //   logAddExerciseStart,
-    //   logAddExerciseSuccess,
-    //   logAddExerciseFailure,
-    //   logStateChange,
-    //   startPerformanceMonitoring,
-    //   endPerformanceMonitoring
-    // } = await import('../utils/addExerciseDebugger');
-
-    // Start performance monitoring and logging
-    // const operationId = `add_exercise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    // startPerformanceMonitoring(operationId, `Add Exercise: ${exercise?.name || 'Unknown'}`, {
-    //   exerciseId: exercise?.id,
-    //   exerciseName: exercise?.name,
-    //   additionType: type,
-    //   programId: selectedProgram?.id,
-    //   weekIndex: selectedWeek,
-    //   dayIndex: selectedDay
-    // });
-
-    // Log operation start
-    // logAddExerciseStart(exercise, type, {
-    //   programId: selectedProgram?.id,
-    //   weekIndex: selectedWeek,
-    //   dayIndex: selectedDay,
-    //   currentLogDataLength: logData.length
-    // });
-
-    // Enhanced validation
-    // const validation = validateAddExerciseParams(exercise, type, selectedProgram, isAddingExercise);
-    // if (!validation.isValid) {
-    //   validation.errors.forEach(error => {
-    //     const userMessage = createUserFriendlyErrorMessage(error.type);
-    //     showUserMessage(error.userMessage || userMessage.message, 'error');
-    //   });
-
-    //   // Log validation failure and end performance monitoring
-    //   logAddExerciseFailure(exercise, type, new Error('Validation failed'), {
-    //     programId: selectedProgram?.id,
-    //     weekIndex: selectedWeek,
-    //     dayIndex: selectedDay,
-    //     validationErrors: validation.errors
-    //   });
-    //   endPerformanceMonitoring(operationId, { success: false, reason: 'validation_failed' });
-    //   return;
-    // }
-
     setIsAddingExercise(true);
-
-    // Log state change
-    // logStateChange('isAddingExercise', false, true, {
-    //   operationId,
-    //   exerciseId: exercise?.id,
-    //   additionType: type
-    // });
 
     let addedToWorkout = false;
 
@@ -1089,23 +1023,6 @@ function LogWorkout() {
       setLogData(newLogData);
       addedToWorkout = true;
 
-      // logAddExerciseOperation('add_exercise', {
-      //   exercise,
-      //   type,
-      //   program: selectedProgram,
-      //   weekIndex: selectedWeek,
-      //   dayIndex: selectedDay,
-      //   currentLogDataLength: logData.length,
-      //   newLogDataLength: newLogData.length
-      // }, true);
-
-      // Log state change for logData
-      // logStateChange('logData', logData, newLogData, {
-      //   operationId,
-      //   exerciseId: exercise?.id,
-      //   additionType: type
-      // });
-
       // If permanent, also update the program structure
       if (type === 'permanent') {
         try {
@@ -1117,15 +1034,6 @@ function LogWorkout() {
             { maxRetries: 3, allowDuplicates: false }
           );
           showUserMessage(`${exercise.name} added permanently to your program!`, 'success');
-
-          // Log successful permanent addition
-          // logAddExerciseSuccess(exercise, type, {
-          //   programId: selectedProgram?.id,
-          //   weekIndex: selectedWeek,
-          //   dayIndex: selectedDay,
-          //   newLogDataLength: newLogData.length,
-          //   programUpdated: true
-          // });
         } catch (programUpdateError) {
           const tempLogData = newLogData.map(ex =>
             ex.exerciseId === exercise.id && ex.isAdded
@@ -1134,60 +1042,9 @@ function LogWorkout() {
           );
           setLogData(tempLogData);
           showUserMessage(`${exercise.name} added temporarily to this workout only.`, 'warning');
-          // Handle partial failure - exercise added to workout but not to program
-          // const errorInfo = createAddExerciseError(
-          //   programUpdateError.originalError || programUpdateError,
-          //   'update_program',
-          //   { addedToWorkout: true, exercise, type: 'permanent' }
-          // );
-
-          // const recoveryAction = handleAddExerciseError(
-          //   errorInfo,
-          //   showUserMessage,
-          //   { canFallbackToTemporary: true, canRetry: true }
-          // );
-
-          // if (recoveryAction.fallbackToTemporary) {
-          //   // Convert to temporary addition
-          //   const tempLogData = newLogData.map(ex =>
-          //     ex.exerciseId === exercise.id && ex.isAdded
-          //       ? { ...ex, addedType: 'temporary' }
-          //       : ex
-          //   );
-          //   setLogData(tempLogData);
-          //   showUserMessage(`${exercise.name} added temporarily to this workout only.`, 'warning');
-          // } else if (recoveryAction.shouldRetry) {
-          //   // Attempt recovery
-          //   const recovered = await attemptPermanentAdditionRecovery(
-          //     exercise,
-          //     { selectedWeek, selectedDay, selectedProgram },
-          //     async (ex) => {
-          //       // Already added to workout, just need to update type
-          //       const tempLogData = newLogData.map(e =>
-          //         e.exerciseId === ex.id && e.isAdded
-          //           ? { ...e, addedType: 'temporary' }
-          //           : e
-          //       );
-          //       setLogData(tempLogData);
-          //     }
-          //   );
-
-          //   if (!recovered) {
-          //     showUserMessage('Unable to add exercise permanently. Added temporarily instead.', 'warning');
-          //   }
-          // }
         }
       } else {
         showUserMessage(`${exercise.name} added temporarily to this workout!`, 'success');
-
-        // Log successful temporary addition
-        // logAddExerciseSuccess(exercise, type, {
-        //   programId: selectedProgram?.id,
-        //   weekIndex: selectedWeek,
-        //   dayIndex: selectedDay,
-        //   newLogDataLength: newLogData.length,
-        //   programUpdated: false
-        // });
       }
 
       // Update programLogs
@@ -1204,113 +1061,24 @@ function LogWorkout() {
       debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
 
       setShowAddExerciseModal(false);
-
-      // End performance monitoring with success
-      // endPerformanceMonitoring(operationId, {
-      //   success: true,
-      //   addedToWorkout: true,
-      //   programUpdated: type === 'permanent',
-      //   finalLogDataLength: newLogData.length
-      // });
-
     } catch (error) {
       showUserMessage(`${exercise.name} could not be added to this workout. Please try again.`, 'error');
 
-      // Enhanced error handling with debugging
-      // logAddExerciseFailure(exercise, type, error, {
-      //   programId: selectedProgram?.id,
-      //   weekIndex: selectedWeek,
-      //   dayIndex: selectedDay,
-      //   addedToWorkout,
-      //   partialSuccess: addedToWorkout
-      // });
-
-      // const errorInfo = createAddExerciseError(
-      //   error.originalError || error,
-      //   'add_exercise',
-      //   { exercise, type, addedToWorkout }
-      // );
-
-      // logAddExerciseOperation('add_exercise', {
-      //   exercise,
-      //   type,
-      //   program: selectedProgram,
-      //   weekIndex: selectedWeek,
-      //   dayIndex: selectedDay,
-      //   currentLogDataLength: logData.length,
-      //   addedToWorkout
-      // }, false, error);
-
-      // handleAddExerciseError(errorInfo, showUserMessage, {
-      //   canRetry: true,
-      //   canFallbackToTemporary: type === 'permanent'
-      // });
-
-      // End performance monitoring with failure
-      // endPerformanceMonitoring(operationId, {
-      //   success: false,
-      //   error: error.message,
-      //   addedToWorkout,
-      //   partialSuccess: addedToWorkout
-      // });
-
     } finally {
       setIsAddingExercise(false);
-
-      // Log final state change
-      // logStateChange('isAddingExercise', true, false, {
-      //   operationId,
-      //   exerciseId: exercise?.id,
-      //   additionType: type,
-      //   completed: true
-      // });
     }
   };
 
   // Old addExerciseToProgram function removed - now using enhanced utilities from addExerciseUtils.js
 
   const removeAddedExercise = async (exerciseIndex) => {
-    // Import enhanced error handling utilities
-    // const {
-    //   validateRemoveExerciseParams,
-    //   createAddExerciseError,
-    //   handleAddExerciseError,
-    //   logAddExerciseOperation
-    // } = await import('../utils/addExerciseErrorHandler');
 
     const {
       removeExerciseFromProgram: removeFromProgramUtil,
       removeExerciseFromLogData
     } = await import('../utils/addExerciseUtils');
 
-    // Import debugging utilities
-    // const {
-    //   logExerciseRemoval,
-    //   logStateChange,
-    //   startPerformanceMonitoring,
-    //   endPerformanceMonitoring
-    // } = await import('../utils/addExerciseDebugger');
-
-    // Start performance monitoring and logging
-    // const operationId = `remove_exercise_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const exerciseToRemove = logData[exerciseIndex];
-
-    // startPerformanceMonitoring(operationId, `Remove Exercise: ${exerciseToRemove?.exerciseId || 'Unknown'}`, {
-    //   exerciseId: exerciseToRemove?.exerciseId,
-    //   exerciseIndex,
-    //   addedType: exerciseToRemove?.addedType,
-    //   programId: selectedProgram?.id,
-    //   weekIndex: selectedWeek,
-    //   dayIndex: selectedDay
-    // });
-
-    // Log operation start
-    // logExerciseRemoval(exerciseToRemove, exerciseIndex, {
-    //   programId: selectedProgram?.id,
-    //   weekIndex: selectedWeek,
-    //   dayIndex: selectedDay,
-    //   currentLogDataLength: logData.length
-    // });
 
     if (isWorkoutFinished) {
       showUserMessage('Cannot remove exercises from a finished workout.', 'warning');
