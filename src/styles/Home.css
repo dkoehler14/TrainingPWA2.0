@@ -1,51 +1,52 @@
 /* General Dashboard Styles */
 .home-container {
-  padding: 2rem 1.5rem;
+  padding: var(--spacing-xl) var(--spacing-lg);
 }
 
 .dashboard-greeting {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-size-3xl);
   color: var(--text-primary);
 }
 
 .cta-button {
-  font-weight: 600;
-  font-size: 1rem;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
 }
 
-/* Metric Cards */
+/* Metric Cards - Standardized */
 .metric-card {
-  border-radius: 15px;
+  border-radius: var(--card-border-radius);
   background-color: var(--card-background);
   box-shadow: var(--card-shadow);
   text-align: center;
-  padding: 1rem;
+  padding: var(--card-padding);
 }
 
 .metric-title {
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 
 .metric-value {
-  font-size: 2.25rem;
-  font-weight: 700;
+  font-size: var(--font-size-4xl);
+  font-weight: var(--font-weight-bold);
   color: var(--text-primary);
 }
 
-/* Widget Cards */
+/* Widget Cards - Standardized */
 .widget-card {
-  border-radius: 15px;
+  border-radius: var(--card-border-radius);
   background-color: var(--card-background);
   box-shadow: var(--card-shadow);
 }
 
 .widget-title {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing-md);
 }
 
 /* Specific Widgets */
@@ -55,13 +56,13 @@
   justify-content: center;
   height: 200px;
   background-color: var(--background-secondary);
-  border-radius: 10px;
+  border-radius: var(--card-border-radius-sm);
 }
 
 .recent-activity-item {
   display: flex;
   justify-content: space-between;
-  padding: 0.75rem 0;
+  padding: var(--spacing-sm) 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -70,8 +71,8 @@
 }
 
 .program-name {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
 }
 
 .soft-button-secondary {

@@ -6,7 +6,7 @@ import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
-import { getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
+import { getAllExercisesMetadata, getDocCached, getCollectionCached } from '../api/enhancedFirestoreCache';
 import ExerciseGrid from '../components/ExerciseGrid';
 
 function QuickWorkout() {
@@ -23,6 +23,12 @@ function QuickWorkout() {
     const [workoutName, setWorkoutName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
+    
+    // Exercise history state
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historyData, setHistoryData] = useState([]);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [selectedHistoryExercise, setSelectedHistoryExercise] = useState(null);
 
     const user = auth.currentUser;
 
@@ -176,6 +182,38 @@ function QuickWorkout() {
         setSelectedExercises(newExercises);
     };
 
+    // Helper function to check if a set can be marked as complete
+    const canMarkSetComplete = (exercise, setIndex) => {
+        const weightValue = exercise.weights[setIndex];
+        const repsValue = exercise.reps[setIndex];
+        const exerciseType = exercisesList.find(e => e.id === exercise.exerciseId)?.exerciseType;
+
+        // Check if reps value is valid (not empty, not 0, not null, not undefined)
+        const hasValidReps = repsValue !== '' && repsValue !== null && repsValue !== undefined && Number(repsValue) > 0;
+
+        // Check weight based on exercise type
+        let hasValidWeight = false;
+
+        if (exerciseType === 'Bodyweight') {
+            // For bodyweight exercises, we need a valid bodyweight value
+            hasValidWeight = exercise.bodyweight !== '' && exercise.bodyweight !== null && exercise.bodyweight !== undefined && Number(exercise.bodyweight) > 0;
+        } else if (exerciseType === 'Bodyweight Loadable') {
+            // For bodyweight loadable, we need either bodyweight OR additional weight
+            const hasBodyweight = exercise.bodyweight !== '' && exercise.bodyweight !== null && exercise.bodyweight !== undefined && Number(exercise.bodyweight) > 0;
+            const hasAdditionalWeight = weightValue !== '' && weightValue !== null && weightValue !== undefined && Number(weightValue) >= 0;
+            hasValidWeight = hasBodyweight || hasAdditionalWeight;
+        } else {
+            // For regular exercises, we need a valid weight value
+            hasValidWeight = weightValue !== '' && weightValue !== null && weightValue !== undefined && Number(weightValue) > 0;
+        }
+
+        return hasValidReps && hasValidWeight;
+    };
+
+    const handleFocus = (e) => {
+        e.currentTarget.select();
+    };
+
     const openNotesModal = (exerciseIndex) => {
         setCurrentExerciseIndex(exerciseIndex);
         setExerciseNotes(selectedExercises[exerciseIndex].notes || '');
@@ -207,6 +245,100 @@ function QuickWorkout() {
         }
         setSelectedExercises(newExercises);
         setShowBodyweightModal(false);
+    };
+
+    // Exercise history functionality
+    const fetchExerciseHistory = async (exerciseId) => {
+        if (!user || !user.uid || !exerciseId) return;
+        
+        setIsLoadingHistory(true);
+        try {
+            // Query for all workout logs that contain this exercise
+            const logsData = await getCollectionCached(
+                'workoutLogs',
+                {
+                    where: [
+                        ['userId', '==', user.uid],
+                        ['isWorkoutFinished', '==', true]
+                    ],
+                    orderBy: [['completedDate', 'desc']],
+                    limit: 50
+                },
+                5 * 60 * 1000 // 5 minute cache
+            );
+
+            console.log(`Found ${logsData.length} workout logs`);
+
+            const historyData = [];
+
+            // Get the current exercise to determine its type
+            const currentExercise = exercisesList.find(e => e.id === exerciseId);
+            const exerciseType = currentExercise?.exerciseType || '';
+
+            logsData.forEach(log => {
+                // Find the exercise in this log
+                const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
+
+                if (exerciseInLog) {
+                    for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
+                        if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
+                            const weight = exerciseInLog.weights[setIndex];
+                            const reps = exerciseInLog.reps[setIndex];
+                            const bodyweight = exerciseInLog.bodyweight;
+
+                            const weightValue = weight === '' || weight === null ? 0 : Number(weight);
+                            const repsValue = reps === '' || reps === null ? 0 : Number(reps);
+                            const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
+
+                            if (weightValue === 0 && repsValue === 0) continue;
+
+                            if (!isNaN(weightValue) && !isNaN(repsValue)) {
+                                // Calculate total weight based on exercise type
+                                let totalWeight = weightValue;
+                                let displayWeight = weightValue;
+
+                                if (exerciseType === 'Bodyweight') {
+                                    totalWeight = bodyweightValue;
+                                    displayWeight = bodyweightValue;
+                                } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
+                                    totalWeight = bodyweightValue + weightValue;
+                                    displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
+                                }
+
+                                historyData.push({
+                                    date: log.completedDate?.toDate ? log.completedDate.toDate() : log.completedDate || log.date?.toDate ? log.date.toDate() : log.date,
+                                    workoutName: log.name || 'Quick Workout',
+                                    set: setIndex + 1,
+                                    weight: weightValue,
+                                    totalWeight: totalWeight,
+                                    displayWeight: displayWeight,
+                                    reps: repsValue,
+                                    completed: true,
+                                    bodyweight: bodyweightValue,
+                                    exerciseType: exerciseType
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Sort by date (most recent first)
+            historyData.sort((a, b) => b.date - a.date);
+            setHistoryData(historyData);
+        } catch (error) {
+            console.error('Error fetching exercise history:', error);
+            showUserMessage('Failed to load exercise history', 'error');
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
+
+    const openHistoryModal = (exerciseId) => {
+        const exerciseInfo = exercisesList.find(e => e.id === exerciseId);
+        setSelectedHistoryExercise(exerciseInfo);
+        setShowHistoryModal(true);
+        fetchExerciseHistory(exerciseId);
     };
 
     const saveWorkout = async () => {
@@ -336,6 +468,15 @@ function QuickWorkout() {
                                                 </Button>
                                             )}
                                             <Button
+                                                variant="outline-info"
+                                                size="sm"
+                                                onClick={() => openHistoryModal(exercise.exerciseId)}
+                                                className="me-2"
+                                                title="View History"
+                                            >
+                                                <BarChart />
+                                            </Button>
+                                            <Button
                                                 variant="outline-secondary"
                                                 size="sm"
                                                 onClick={() => openNotesModal(exerciseIndex)}
@@ -363,12 +504,14 @@ function QuickWorkout() {
                                                         max="20"
                                                         value={exercise.sets}
                                                         onChange={(e) => updateExerciseData(exerciseIndex, 'sets', null, e.target.value)}
+                                                        className="soft-input"
+                                                        style={{ width: '70px' }}
                                                     />
                                                 </Form.Group>
                                             </Col>
                                         </Row>
 
-                                        <Table responsive className="workout-table">
+                                        <Table responsive className="workout-log-table">
                                             <thead>
                                                 <tr>
                                                     <th>Set</th>
@@ -380,18 +523,20 @@ function QuickWorkout() {
                                             <tbody>
                                                 {Array.from({ length: exercise.sets }, (_, setIndex) => (
                                                     <tr key={setIndex}>
-                                                        <td>{setIndex + 1}</td>
-                                                        <td>
+                                                        <td className="text-center">{setIndex + 1}</td>
+                                                        <td className="text-center">
                                                             <Form.Control
                                                                 ref={setIndex === 0 ? repsInputRef : null}
                                                                 type="number"
                                                                 min="0"
                                                                 value={exercise.reps[setIndex] || ''}
                                                                 onChange={(e) => updateExerciseData(exerciseIndex, 'reps', setIndex, e.target.value)}
-                                                                className="form-control-sm"
+                                                                onFocus={handleFocus}
+                                                                className="soft-input center-input"
+                                                                style={{ width: '50px', display: 'inline-block' }}
                                                             />
                                                         </td>
-                                                        <td>
+                                                        <td className="text-center">
                                                             <Form.Control
                                                                 ref={setIndex === 0 ? weightInputRef : null}
                                                                 type="number"
@@ -399,15 +544,20 @@ function QuickWorkout() {
                                                                 step="0.5"
                                                                 value={exercise.weights[setIndex] || ''}
                                                                 onChange={(e) => updateExerciseData(exerciseIndex, 'weights', setIndex, e.target.value)}
-                                                                className="form-control-sm"
+                                                                onFocus={handleFocus}
+                                                                className="soft-input center-input"
+                                                                style={{ width: '80px', display: 'inline-block' }}
                                                                 disabled={exerciseInfo?.exerciseType === 'Bodyweight'}
                                                             />
                                                         </td>
-                                                        <td>
+                                                        <td className="text-center">
                                                             <Form.Check
                                                                 type="checkbox"
                                                                 checked={exercise.completed[setIndex] || false}
                                                                 onChange={(e) => updateExerciseData(exerciseIndex, 'completed', setIndex, e.target.checked)}
+                                                                className={`completed-checkbox ${canMarkSetComplete(exercise, setIndex) ? 'checkbox-enabled' : ''}`}
+                                                                style={{ transform: 'scale(1.5)' }} // Larger checkbox for better touch interaction
+                                                                disabled={!canMarkSetComplete(exercise, setIndex)} // Disable if conditions not met
                                                             />
                                                         </td>
                                                     </tr>
@@ -513,6 +663,101 @@ function QuickWorkout() {
                     </Button>
                     <Button variant="primary" onClick={saveBodyweight}>
                         Save Bodyweight
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            {/* Exercise History Modal */}
+            <Modal show={showHistoryModal} onHide={() => setShowHistoryModal(false)} size="lg">
+                <Modal.Header closeButton>
+                    <Modal.Title>
+                        Exercise History - {selectedHistoryExercise?.name}
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    {isLoadingHistory ? (
+                        <div className="text-center py-4">
+                            <Spinner animation="border" className="spinner-blue" />
+                            <p className="soft-text mt-2">Loading history...</p>
+                        </div>
+                    ) : historyData.length === 0 ? (
+                        <div className="text-center py-4">
+                            <p className="soft-text">No history found for this exercise.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <Table responsive className="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Workout</th>
+                                        <th>Set</th>
+                                        <th>
+                                            {(() => {
+                                                const exerciseType = historyData[0]?.exerciseType;
+                                                if (exerciseType === 'Bodyweight') return 'Bodyweight';
+                                                if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                                return 'Weight';
+                                            })()}
+                                        </th>
+                                        <th>Reps</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {historyData.map((entry, index) => (
+                                        <tr key={index}>
+                                            <td>{entry.date.toLocaleDateString()}</td>
+                                            <td>{entry.workoutName}</td>
+                                            <td>{entry.set}</td>
+                                            <td>
+                                                {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
+                                                    <div>
+                                                        <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
+                                                        <br />
+                                                        <small className="text-muted">
+                                                            BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
+                                                        </small>
+                                                    </div>
+                                                ) : (
+                                                    entry.displayWeight || entry.weight
+                                                )}
+                                            </td>
+                                            <td>{entry.reps}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </Table>
+
+                            {historyData.length > 0 && (
+                                <div className="mt-3">
+                                    <h6>Recent Performance Summary:</h6>
+                                    <ul>
+                                        <li>
+                                            <strong>Highest {historyData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...historyData.map(e => e.totalWeight))}
+                                        </li>
+                                        <li>
+                                            <strong>Highest Reps:</strong> {Math.max(...historyData.map(e => e.reps))}
+                                        </li>
+                                        <li>
+                                            <strong>Average {historyData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(historyData.reduce((sum, e) => sum + e.totalWeight, 0) / historyData.length).toFixed(1)}
+                                        </li>
+                                        <li>
+                                            <strong>Average Reps:</strong> {(historyData.reduce((sum, e) => sum + e.reps, 0) / historyData.length).toFixed(1)}
+                                        </li>
+                                        {historyData[0]?.exerciseType === 'Bodyweight Loadable' && historyData.some(e => e.weight > 0) && (
+                                            <li>
+                                                <strong>Average Additional Weight:</strong> {(historyData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / historyData.filter(e => e.weight > 0).length).toFixed(1)}
+                                            </li>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
+                        Close
                     </Button>
                 </Modal.Footer>
             </Modal>

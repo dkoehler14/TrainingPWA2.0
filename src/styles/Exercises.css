@@ -1,22 +1,22 @@
 .exercises-container {
-  padding: 0 1.5rem;
+  padding: 0 var(--spacing-lg);
 }
 
 .exercises-card {
-  border-radius: 20px;
-  padding: 2rem;
+  border-radius: var(--card-border-radius);
+  padding: var(--card-padding);
   background-color: var(--card-background);
   box-shadow: var(--card-shadow);
 }
 
 .exercises-title {
   color: var(--text-primary);
-  font-weight: 600;
-  margin-bottom: 2rem;
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xl);
 }
 
 .exercises-form-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: var(--spacing-lg);
 }
 
 .exercises-label {
@@ -24,14 +24,14 @@
 }
 
 .exercises-input {
-  border-radius: 10px;
+  border-radius: var(--input-border-radius);
   border: 1px solid var(--border-color);
   background-color: var(--input-background);
   color: var(--text-primary);
   height: 38px;
-  padding: 6px 12px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   line-height: 1.5;
-  font-size: 1rem;
+  font-size: var(--font-size-base);
 }
 
 .exercises-input:focus {
@@ -41,21 +41,21 @@
 }
 
 .exercises-button {
-  border-radius: 10px;
-  padding: 10px 20px;
-  font-weight: 500;
+  border-radius: var(--button-border-radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: var(--font-weight-medium);
 }
 
 .exercises-accordion-item {
-  border-radius: 15px;
-  margin-bottom: 10px;
+  border-radius: var(--card-border-radius);
+  margin-bottom: var(--spacing-sm);
   background-color: var(--card-background);
   border-color: var(--border-color);
 }
 
 .exercises-list-group-item {
-  border-radius: 10px;
-  margin-bottom: 0.5rem;
+  border-radius: var(--card-border-radius-sm);
+  margin-bottom: var(--spacing-xs);
   background-color: var(--card-background);
   border-color: var(--border-color);
   color: var(--text-primary);
@@ -63,6 +63,6 @@
 
 .exercises-edit-button {
   margin-bottom: 0px !important;
-  padding: 0 .25rem !important;
+  padding: 0 var(--spacing-xs) !important;
   border: 0 !important;
 }

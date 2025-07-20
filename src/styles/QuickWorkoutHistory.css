@@ -12,18 +12,18 @@
 }
 
 .workout-completion-badge {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-xs);
 }
 
 .workout-action-buttons {
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .workout-action-buttons .btn {
   transition: all 0.2s ease;
-  font-size: 0.875rem;
-  padding: 0.375rem 0.75rem;
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 .workout-action-buttons .btn:hover {
@@ -33,53 +33,53 @@
 /* ===== WORKOUT DETAIL VIEW STYLES ===== */
 .workout-detail-header {
   border-bottom: 1px solid var(--border-color);
-  padding-bottom: 1rem;
-  margin-bottom: 1.5rem;
+  padding-bottom: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
 }
 
 .workout-stats-overview {
   background: linear-gradient(135deg, var(--card-background) 0%, var(--input-background) 100%);
-  border-radius: 15px;
-  padding: 1.5rem;
+  border-radius: var(--card-border-radius);
+  padding: var(--card-padding);
 }
 
 .workout-stats-item {
   text-align: center;
-  padding: 0.5rem;
+  padding: var(--spacing-xs);
 }
 
 .workout-stats-value {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
 }
 
 .workout-stats-label {
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .exercise-detail-card {
-  margin-bottom: 1.5rem;
-  border-radius: 15px;
+  margin-bottom: var(--spacing-lg);
+  border-radius: var(--card-border-radius);
   overflow: hidden;
 }
 
 .exercise-detail-header {
   background: var(--input-background);
-  padding: 1rem 1.5rem;
+  padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
 }
 
 .exercise-metadata-badges {
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .exercise-metadata-badges .badge {
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-xs);
 }
 
 .workout-table {
@@ -89,15 +89,15 @@
 .workout-table th {
   background-color: var(--input-background);
   border-bottom: 2px solid var(--border-color);
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   letter-spacing: 0.5px;
-  padding: 0.75rem;
+  padding: var(--spacing-sm);
 }
 
 .workout-table td {
-  padding: 0.75rem;
+  padding: var(--spacing-sm);
   vertical-align: middle;
 }
 
@@ -116,29 +116,29 @@
 
 .exercise-notes-section {
   background-color: var(--input-background);
-  border-radius: 10px;
-  padding: 1rem;
-  margin-top: 1rem;
+  border-radius: var(--card-border-radius-sm);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-md);
 }
 
 /* ===== WORKOUT FILTERS STYLES ===== */
 .filters-card {
-  border-radius: 15px;
+  border-radius: var(--card-border-radius);
   overflow: hidden;
 }
 
 .filters-header {
   background: var(--input-background);
-  padding: 1rem 1.5rem;
+  padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
 }
 
 .filters-body {
-  padding: 1.5rem;
+  padding: var(--card-padding);
 }
 
 .filter-input-group {
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing-md);
 }
 
 .filter-input-group .input-group-text {
@@ -153,131 +153,131 @@
 
 .date-filter-section {
   background-color: var(--input-background);
-  border-radius: 10px;
-  padding: 1rem;
-  margin-top: 1rem;
+  border-radius: var(--card-border-radius-sm);
+  padding: var(--spacing-md);
+  margin-top: var(--spacing-md);
 }
 
 .active-filters-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
 
 .filter-badge {
-  font-size: 0.75rem;
-  padding: 0.375rem 0.75rem;
-  margin-right: 0.5rem;
-  margin-bottom: 0.5rem;
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  margin-right: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
 }
 
 .filter-badge .btn-link {
   color: inherit;
   text-decoration: none;
   padding: 0;
-  margin-left: 0.25rem;
+  margin-left: var(--spacing-xs);
 }
 
 /* ===== WORKOUT STATS CARD STYLES ===== */
 .stats-card {
-  border-radius: 15px;
+  border-radius: var(--card-border-radius);
   overflow: hidden;
 }
 
 .stats-header {
   background: linear-gradient(135deg, var(--gradient-primary));
   color: white;
-  padding: 1rem 1.5rem;
+  padding: var(--spacing-md) var(--spacing-lg);
 }
 
 .stats-body {
-  padding: 1.5rem;
+  padding: var(--card-padding);
 }
 
 .stats-overview-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
 }
 
 .stats-overview-item {
   text-align: center;
-  padding: 1rem;
+  padding: var(--spacing-md);
   background-color: var(--input-background);
-  border-radius: 10px;
+  border-radius: var(--card-border-radius-sm);
 }
 
 .stats-overview-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-xs);
 }
 
 .stats-overview-label {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .stats-section {
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-xl);
 }
 
 .stats-section-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-md);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .frequent-exercises-table {
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
 }
 
 .frequent-exercises-table .badge {
-  font-size: 0.75rem;
+  font-size: var(--font-size-xs);
 }
 
 /* ===== EMPTY STATES ===== */
 .empty-state {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: var(--spacing-3xl) var(--spacing-xl);
 }
 
 .empty-state-icon {
-  font-size: 3rem;
+  font-size: var(--font-size-4xl);
   color: var(--text-secondary);
-  margin-bottom: 1rem;
+  margin-bottom: var(--spacing-md);
 }
 
 .empty-state-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin-bottom: 1rem;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-md);
   color: var(--text-primary);
 }
 
 .empty-state-description {
   color: var(--text-secondary);
-  margin-bottom: 2rem;
+  margin-bottom: var(--spacing-xl);
   max-width: 400px;
   margin-left: auto;
   margin-right: auto;
 }
 
 .empty-state-action {
-  padding: 0.75rem 2rem;
-  font-weight: 600;
+  padding: var(--spacing-sm) var(--spacing-xl);
+  font-weight: var(--font-weight-semibold);
 }
 
 /* ===== LOADING STATES ===== */
 .loading-container {
   text-align: center;
-  padding: 3rem 2rem;
+  padding: var(--spacing-3xl) var(--spacing-xl);
 }
 
 .spinner-blue {
@@ -297,11 +297,11 @@
 
 /* Enhanced skeleton styles */
 .workout-history-skeleton .placeholder {
-  border-radius: 4px;
+  border-radius: var(--card-border-radius-sm);
 }
 
 .workout-history-skeleton .placeholder-btn {
-  border-radius: 6px;
+  border-radius: var(--button-border-radius);
   height: 38px;
 }
 
@@ -346,31 +346,31 @@
 @media (max-width: 767px) {
   /* Container adjustments */
   .soft-container {
-    padding: 0.5rem !important;
+    padding: var(--spacing-xs) !important;
   }
 
   /* Card adjustments */
   .soft-card {
-    padding: 1rem !important;
-    border-radius: 10px;
-    margin-bottom: 1rem;
+    padding: var(--spacing-md) !important;
+    border-radius: var(--card-border-radius-sm);
+    margin-bottom: var(--spacing-md);
   }
 
   /* Header adjustments */
   .soft-title {
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+    font-size: var(--font-size-2xl);
+    margin-bottom: var(--spacing-md);
   }
 
   /* Workout History List */
   .workout-history-card {
-    margin-bottom: 1rem;
+    margin-bottom: var(--spacing-md);
   }
 
   .workout-action-buttons {
     flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 1rem;
+    gap: var(--spacing-xs);
+    margin-top: var(--spacing-md);
   }
 
   .workout-action-buttons .btn {
@@ -381,7 +381,7 @@
   /* Workout Detail View */
   .workout-detail-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: var(--spacing-md);
   }
 
   .workout-detail-header .d-flex {
@@ -391,99 +391,99 @@
 
   .workout-detail-header .btn {
     width: 100%;
-    margin-bottom: 0.5rem;
+    margin-bottom: var(--spacing-xs);
   }
 
   .workout-stats-overview {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   .workout-stats-item {
-    margin-bottom: 1rem;
+    margin-bottom: var(--spacing-md);
   }
 
   .exercise-detail-header {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   .exercise-metadata-badges {
     flex-wrap: wrap;
-    margin-top: 0.5rem;
+    margin-top: var(--spacing-xs);
   }
 
   /* Table responsiveness */
   .workout-table {
-    font-size: 0.875rem;
+    font-size: var(--font-size-sm);
   }
 
   .workout-table th,
   .workout-table td {
-    padding: 0.5rem 0.25rem;
+    padding: var(--spacing-xs) var(--spacing-xs);
   }
 
   /* Filters */
   .filters-body {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   .filter-input-group {
-    margin-bottom: 1rem;
+    margin-bottom: var(--spacing-md);
   }
 
   .date-filter-section {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   /* Stats Card */
   .stats-body {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   .stats-overview-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
   }
 
   .stats-overview-item {
-    padding: 0.75rem;
+    padding: var(--spacing-sm);
   }
 
   .stats-overview-value {
-    font-size: 1.5rem;
+    font-size: var(--font-size-2xl);
   }
 
   .frequent-exercises-table {
-    font-size: 0.75rem;
+    font-size: var(--font-size-xs);
   }
 
   /* Empty states */
   .empty-state {
-    padding: 2rem 1rem;
+    padding: var(--spacing-xl) var(--spacing-md);
   }
 
   .empty-state-icon {
-    font-size: 2.5rem;
+    font-size: var(--font-size-3xl);
   }
 
   .empty-state-title {
-    font-size: 1.125rem;
+    font-size: var(--font-size-lg);
   }
 
   /* Modal adjustments */
   .modal-dialog {
-    margin: 1rem;
+    margin: var(--spacing-md);
   }
 
   .modal-body {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 }
 
 /* Tablet devices (768px to 991px) */
 @media (min-width: 768px) and (max-width: 991px) {
   .soft-container {
-    padding: 1rem;
+    padding: var(--spacing-md);
   }
 
   .workout-action-buttons {
@@ -495,14 +495,14 @@
   }
 
   .workout-stats-item {
-    padding: 0.75rem;
+    padding: var(--spacing-sm);
   }
 }
 
 /* Large tablets and small desktops (992px to 1199px) */
 @media (min-width: 992px) and (max-width: 1199px) {
   .soft-container {
-    padding: 1.5rem;
+    padding: var(--spacing-lg);
   }
 
   .stats-overview-grid {
@@ -524,7 +524,7 @@
 
   .stats-overview-grid {
     grid-template-columns: repeat(4, 1fr);
-    gap: 1.5rem;
+    gap: var(--spacing-lg);
   }
 }
 

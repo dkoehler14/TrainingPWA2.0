@@ -1356,7 +1356,7 @@ function LogWorkout() {
                       const isAddedExercise = ex.isAdded || false;
                       return (
                         <div key={exIndex} className="mb-4">
-                          <div className="d-flex justify-content-between align-items-center">
+                          <div className={`d-flex align-items-center ${isMobile ? 'justify-content-start' : 'justify-content-between'}`}>
                             {/* Replace buttons with a dropdown in mobile view */}
                             {isMobile ? (
                               <div className="d-flex align-items-center">
