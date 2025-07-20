@@ -8,6 +8,7 @@ import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 import { getAllExercisesMetadata, getDocCached, getCollectionCached } from '../api/enhancedFirestoreCache';
 import ExerciseGrid from '../components/ExerciseGrid';
+import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 
 function QuickWorkout() {
     const [exercisesList, setExercisesList] = useState([]);
@@ -26,8 +27,6 @@ function QuickWorkout() {
     
     // Exercise history state
     const [showHistoryModal, setShowHistoryModal] = useState(false);
-    const [historyData, setHistoryData] = useState([]);
-    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [selectedHistoryExercise, setSelectedHistoryExercise] = useState(null);
 
     const user = auth.currentUser;
@@ -247,98 +246,10 @@ function QuickWorkout() {
         setShowBodyweightModal(false);
     };
 
-    // Exercise history functionality
-    const fetchExerciseHistory = async (exerciseId) => {
-        if (!user || !user.uid || !exerciseId) return;
-        
-        setIsLoadingHistory(true);
-        try {
-            // Query for all workout logs that contain this exercise
-            const logsData = await getCollectionCached(
-                'workoutLogs',
-                {
-                    where: [
-                        ['userId', '==', user.uid],
-                        ['isWorkoutFinished', '==', true]
-                    ],
-                    orderBy: [['completedDate', 'desc']],
-                    limit: 50
-                },
-                5 * 60 * 1000 // 5 minute cache
-            );
-
-            console.log(`Found ${logsData.length} workout logs`);
-
-            const historyData = [];
-
-            // Get the current exercise to determine its type
-            const currentExercise = exercisesList.find(e => e.id === exerciseId);
-            const exerciseType = currentExercise?.exerciseType || '';
-
-            logsData.forEach(log => {
-                // Find the exercise in this log
-                const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
-
-                if (exerciseInLog) {
-                    for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
-                        if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
-                            const weight = exerciseInLog.weights[setIndex];
-                            const reps = exerciseInLog.reps[setIndex];
-                            const bodyweight = exerciseInLog.bodyweight;
-
-                            const weightValue = weight === '' || weight === null ? 0 : Number(weight);
-                            const repsValue = reps === '' || reps === null ? 0 : Number(reps);
-                            const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
-
-                            if (weightValue === 0 && repsValue === 0) continue;
-
-                            if (!isNaN(weightValue) && !isNaN(repsValue)) {
-                                // Calculate total weight based on exercise type
-                                let totalWeight = weightValue;
-                                let displayWeight = weightValue;
-
-                                if (exerciseType === 'Bodyweight') {
-                                    totalWeight = bodyweightValue;
-                                    displayWeight = bodyweightValue;
-                                } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
-                                    totalWeight = bodyweightValue + weightValue;
-                                    displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
-                                }
-
-                                historyData.push({
-                                    date: log.completedDate?.toDate ? log.completedDate.toDate() : log.completedDate || log.date?.toDate ? log.date.toDate() : log.date,
-                                    workoutName: log.name || 'Quick Workout',
-                                    set: setIndex + 1,
-                                    weight: weightValue,
-                                    totalWeight: totalWeight,
-                                    displayWeight: displayWeight,
-                                    reps: repsValue,
-                                    completed: true,
-                                    bodyweight: bodyweightValue,
-                                    exerciseType: exerciseType
-                                });
-                            }
-                        }
-                    }
-                }
-            });
-
-            // Sort by date (most recent first)
-            historyData.sort((a, b) => b.date - a.date);
-            setHistoryData(historyData);
-        } catch (error) {
-            console.error('Error fetching exercise history:', error);
-            showUserMessage('Failed to load exercise history', 'error');
-        } finally {
-            setIsLoadingHistory(false);
-        }
-    };
-
     const openHistoryModal = (exerciseId) => {
         const exerciseInfo = exercisesList.find(e => e.id === exerciseId);
-        setSelectedHistoryExercise(exerciseInfo);
+        setSelectedHistoryExercise({ exerciseId });
         setShowHistoryModal(true);
-        fetchExerciseHistory(exerciseId);
     };
 
     const saveWorkout = async () => {
@@ -668,99 +579,13 @@ function QuickWorkout() {
             </Modal>
 
             {/* Exercise History Modal */}
-            <Modal show={showHistoryModal} onHide={() => setShowHistoryModal(false)} size="lg">
-                <Modal.Header closeButton>
-                    <Modal.Title>
-                        Exercise History - {selectedHistoryExercise?.name}
-                    </Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    {isLoadingHistory ? (
-                        <div className="text-center py-4">
-                            <Spinner animation="border" className="spinner-blue" />
-                            <p className="soft-text mt-2">Loading history...</p>
-                        </div>
-                    ) : historyData.length === 0 ? (
-                        <div className="text-center py-4">
-                            <p className="soft-text">No history found for this exercise.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <Table responsive className="history-table">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Workout</th>
-                                        <th>Set</th>
-                                        <th>
-                                            {(() => {
-                                                const exerciseType = historyData[0]?.exerciseType;
-                                                if (exerciseType === 'Bodyweight') return 'Bodyweight';
-                                                if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
-                                                return 'Weight';
-                                            })()}
-                                        </th>
-                                        <th>Reps</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {historyData.map((entry, index) => (
-                                        <tr key={index}>
-                                            <td>{entry.date.toLocaleDateString()}</td>
-                                            <td>{entry.workoutName}</td>
-                                            <td>{entry.set}</td>
-                                            <td>
-                                                {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
-                                                    <div>
-                                                        <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
-                                                        <br />
-                                                        <small className="text-muted">
-                                                            BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
-                                                        </small>
-                                                    </div>
-                                                ) : (
-                                                    entry.displayWeight || entry.weight
-                                                )}
-                                            </td>
-                                            <td>{entry.reps}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </Table>
-
-                            {historyData.length > 0 && (
-                                <div className="mt-3">
-                                    <h6>Recent Performance Summary:</h6>
-                                    <ul>
-                                        <li>
-                                            <strong>Highest {historyData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...historyData.map(e => e.totalWeight))}
-                                        </li>
-                                        <li>
-                                            <strong>Highest Reps:</strong> {Math.max(...historyData.map(e => e.reps))}
-                                        </li>
-                                        <li>
-                                            <strong>Average {historyData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(historyData.reduce((sum, e) => sum + e.totalWeight, 0) / historyData.length).toFixed(1)}
-                                        </li>
-                                        <li>
-                                            <strong>Average Reps:</strong> {(historyData.reduce((sum, e) => sum + e.reps, 0) / historyData.length).toFixed(1)}
-                                        </li>
-                                        {historyData[0]?.exerciseType === 'Bodyweight Loadable' && historyData.some(e => e.weight > 0) && (
-                                            <li>
-                                                <strong>Average Additional Weight:</strong> {(historyData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / historyData.filter(e => e.weight > 0).length).toFixed(1)}
-                                            </li>
-                                        )}
-                                    </ul>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
-                        Close
-                    </Button>
-                </Modal.Footer>
-            </Modal>
+            <ExerciseHistoryModal
+                show={showHistoryModal}
+                onHide={() => setShowHistoryModal(false)}
+                exercise={selectedHistoryExercise}
+                exercisesList={exercisesList}
+                weightUnit="LB"
+            />
         </Container>
     );
 }

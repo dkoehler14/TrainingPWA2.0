@@ -10,6 +10,7 @@ import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidatePr
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { httpsCallable } from 'firebase/functions';
 import ExerciseGrid from '../components/ExerciseGrid';
+import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -126,8 +127,6 @@ function LogWorkout() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
-  const [exerciseHistoryData, setExerciseHistoryData] = useState([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
   const [showGridModal, setShowGridModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
@@ -461,95 +460,98 @@ function LogWorkout() {
   }, [user, selectedProgram, selectedWeek, selectedDay, programLogs, exercisesList]);
 
   // Updated fetchExerciseHistory function to handle bodyweight data
-  const fetchExerciseHistory = async (exerciseId) => {
-    if (!user || !exerciseId) return;
+  // const fetchExerciseHistory = async (exerciseId) => {
+  //   if (!user || !exerciseId) return;
 
-    setIsLoadingHistory(true);
-    try {
-      // Query for all workout logs that contain this exercise
-      const logsData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.uid],
-            ['isWorkoutFinished', '==', true]
-          ],
-          orderBy: [['date', 'desc']],
-          limit: 20
-        },
-        15 * 60 * 1000
-      );
-      console.log(`Found ${logsData.length} workout logs`);
+  //   setIsLoadingHistory(true);
+  //   try {
+  //     // Query for all workout logs that contain this exercise
+  //     const logsData = await getCollectionCached(
+  //       'workoutLogs',
+  //       {
+  //         where: [
+  //           ['userId', '==', user.uid],
+  //           ['isWorkoutFinished', '==', true]
+  //         ],
+  //         orderBy: [['date', 'desc']],
+  //         limit: 20
+  //       },
+  //       15 * 60 * 1000
+  //     );
+  //     console.log(`Found ${logsData.length} workout logs`);
 
-      const historyData = [];
+  //     const historyData = [];
 
-      // Get the current exercise to determine its type
-      const currentExercise = exercisesList.find(e => e.id === exerciseId);
-      const exerciseType = currentExercise?.exerciseType || '';
+  //     // Get the current exercise to determine its type
+  //     const currentExercise = exercisesList.find(e => e.id === exerciseId);
+  //     const exerciseType = currentExercise?.exerciseType || '';
 
-      logsData.forEach(log => {
-        // Find the exercise in this log
-        const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
+  //     logsData.forEach(log => {
+  //       // Find the exercise in this log
+  //       const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
 
-        if (exerciseInLog) {
-          for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
-            if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
-              const weight = exerciseInLog.weights[setIndex];
-              const reps = exerciseInLog.reps[setIndex];
-              const bodyweight = exerciseInLog.bodyweight;
+  //       if (exerciseInLog) {
+  //         for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
+  //           if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
+  //             const weight = exerciseInLog.weights[setIndex];
+  //             const reps = exerciseInLog.reps[setIndex];
+  //             const bodyweight = exerciseInLog.bodyweight;
 
-              const weightValue = weight === '' || weight === null ? 0 : Number(weight);
-              const repsValue = reps === '' || reps === null ? 0 : Number(reps);
-              const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
+  //             const weightValue = weight === '' || weight === null ? 0 : Number(weight);
+  //             const repsValue = reps === '' || reps === null ? 0 : Number(reps);
+  //             const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
 
-              if (weightValue === 0 && repsValue === 0) continue;
+  //             if (weightValue === 0 && repsValue === 0) continue;
 
-              if (!isNaN(weightValue) && !isNaN(repsValue)) {
-                // Calculate total weight based on exercise type
-                let totalWeight = weightValue;
-                let displayWeight = weightValue;
+  //             if (!isNaN(weightValue) && !isNaN(repsValue)) {
+  //               // Calculate total weight based on exercise type
+  //               let totalWeight = weightValue;
+  //               let displayWeight = weightValue;
 
-                if (exerciseType === 'Bodyweight') {
-                  totalWeight = bodyweightValue;
-                  displayWeight = bodyweightValue;
-                } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
-                  totalWeight = bodyweightValue + weightValue;
-                  displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
-                }
+  //               if (exerciseType === 'Bodyweight') {
+  //                 totalWeight = bodyweightValue;
+  //                 displayWeight = bodyweightValue;
+  //               } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
+  //                 totalWeight = bodyweightValue + weightValue;
+  //                 displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
+  //               }
 
-                historyData.push({
-                  date: log.date.toDate ? log.date.toDate() : log.date,
-                  week: log.weekIndex + 1,
-                  day: log.dayIndex + 1,
-                  set: setIndex + 1,
-                  weight: weightValue,
-                  totalWeight: totalWeight,
-                  displayWeight: displayWeight,
-                  reps: repsValue,
-                  completed: true,
-                  bodyweight: bodyweightValue,
-                  exerciseType: exerciseType
-                });
-              }
-            }
-          }
-        }
-      });
+  //               historyData.push({
+  //                 date: log.completedDate.toDate ? log.date.toDate() : log.completedDate,
+  //                 week: log.weekIndex + 1,
+  //                 day: log.dayIndex + 1,
+  //                 set: setIndex + 1,
+  //                 weight: weightValue,
+  //                 totalWeight: totalWeight,
+  //                 displayWeight: displayWeight,
+  //                 reps: repsValue,
+  //                 completed: true,
+  //                 bodyweight: bodyweightValue,
+  //                 exerciseType: exerciseType
+  //               });
+  //             }
+  //           }
+  //         }
+  //       }
+  //     });
 
-      // Sort by date (most recent first)
-      historyData.sort((a, b) => b.date - a.date);
-      setExerciseHistoryData(historyData);
-    } catch (error) {
-      console.error("Error fetching exercise history: ", error);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
+  //     // Sort by date (most recent first)
+  //     historyData.sort((a, b) => b.date - a.date);
+      
+  //     // Group the data into workout sessions
+  //     const groupedSessions = groupExerciseHistoryBySessions(historyData);
+  //     setExerciseHistoryData(groupedSessions);
+  //   } catch (error) {
+  //     console.error("Error fetching exercise history: ", error);
+  //   } finally {
+  //     setIsLoadingHistory(false);
+  //   }
+  // };
 
   const openHistoryModal = (exercise) => {
     setSelectedExerciseHistory(exercise);
     setShowHistoryModal(true);
-    fetchExerciseHistory(exercise.exerciseId);
+    //fetchExerciseHistory(exercise.exerciseId);
   };
 
   const openNotesModal = (exerciseIndex) => {
@@ -1757,104 +1759,14 @@ function LogWorkout() {
                       </Modal.Footer>
                     </Modal>
 
-                    <Modal
+                    {/* Exercise History Modal */}
+                    <ExerciseHistoryModal
                       show={showHistoryModal}
                       onHide={() => setShowHistoryModal(false)}
-                      size="lg"
-                      centered
-                    >
-                      <Modal.Header closeButton>
-                        <Modal.Title>
-                          {selectedExerciseHistory && exercisesList.find(
-                            e => e.id === selectedExerciseHistory?.exerciseId
-                          )?.name || 'Exercise'} History
-                        </Modal.Title>
-                      </Modal.Header>
-                      <Modal.Body>
-                        {isLoadingHistory ? (
-                          <div className="text-center py-3">
-                            <Spinner animation="border" className="spinner-blue" />
-                            <p className="mt-2">Loading history...</p>
-                          </div>
-                        ) : exerciseHistoryData.length > 0 ? (
-                          <>
-                            <Table responsive className="history-table">
-                              <thead>
-                                <tr>
-                                  <th>Date</th>
-                                  <th>Week/Day</th>
-                                  <th>Set</th>
-                                  <th>
-                                    {(() => {
-                                      const exerciseType = exerciseHistoryData[0]?.exerciseType;
-                                      if (exerciseType === 'Bodyweight') return 'Bodyweight';
-                                      if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
-                                      return 'Weight';
-                                    })()}
-                                  </th>
-                                  <th>Reps</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {exerciseHistoryData.map((entry, index) => (
-                                  <tr key={index}>
-                                    <td>{entry.date.toLocaleDateString()}</td>
-                                    <td>W{entry.week} D{entry.day}</td>
-                                    <td>{entry.set}</td>
-                                    <td>
-                                      {entry.exerciseType === 'Bodyweight Loadable' && entry.bodyweight > 0 && entry.weight >= 0 ? (
-                                        <div>
-                                          <span style={{ fontWeight: 'bold' }}>{entry.totalWeight}</span>
-                                          <br />
-                                          <small className="text-muted">
-                                            BW: {entry.bodyweight}{entry.weight > 0 ? `, +${entry.weight}` : ''}
-                                          </small>
-                                        </div>
-                                      ) : (
-                                        entry.displayWeight || entry.weight
-                                      )}
-                                    </td>
-                                    <td>{entry.reps}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </Table>
-
-                            {exerciseHistoryData.length > 0 && (
-                              <div className="mt-3">
-                                <h6>Recent Performance Summary:</h6>
-                                <ul>
-                                  <li>
-                                    <strong>Highest {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {Math.max(...exerciseHistoryData.map(e => e.totalWeight))}
-                                  </li>
-                                  <li>
-                                    <strong>Highest Reps:</strong> {Math.max(...exerciseHistoryData.map(e => e.reps))}
-                                  </li>
-                                  <li>
-                                    <strong>Average {exerciseHistoryData[0]?.exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Total Weight'}:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.totalWeight, 0) / exerciseHistoryData.length).toFixed(1)}
-                                  </li>
-                                  <li>
-                                    <strong>Average Reps:</strong> {(exerciseHistoryData.reduce((sum, e) => sum + e.reps, 0) / exerciseHistoryData.length).toFixed(1)}
-                                  </li>
-                                  {exerciseHistoryData[0]?.exerciseType === 'Bodyweight Loadable' && exerciseHistoryData.some(e => e.weight > 0) && (
-                                    <li>
-                                      <strong>Average Additional Weight:</strong> {(exerciseHistoryData.filter(e => e.weight > 0).reduce((sum, e) => sum + e.weight, 0) / exerciseHistoryData.filter(e => e.weight > 0).length).toFixed(1)}
-                                    </li>
-                                  )}
-                                </ul>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <p className="text-center">No recent completed sets found for this exercise.</p>
-                        )}
-                      </Modal.Body>
-                      <Modal.Footer>
-                        <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
-                          Close
-                        </Button>
-                      </Modal.Footer>
-                    </Modal>
+                      exercise={selectedExerciseHistory}
+                      exercisesList={exercisesList}
+                      weightUnit={selectedProgram?.weightUnit || 'LB'}
+                    />
 
                   </>
                 )}
