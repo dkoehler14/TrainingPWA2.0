@@ -181,6 +181,18 @@ function QuickWorkout() {
         setSelectedExercises(newExercises);
     };
 
+    const removeSet = (exerciseIndex, setIndex) => {
+        const newExercises = [...selectedExercises];
+        if (newExercises[exerciseIndex].sets > 1) {
+            // Remove the specific set data
+            newExercises[exerciseIndex].reps.splice(setIndex, 1);
+            newExercises[exerciseIndex].weights.splice(setIndex, 1);
+            newExercises[exerciseIndex].completed.splice(setIndex, 1);
+            newExercises[exerciseIndex].sets -= 1;
+            setSelectedExercises(newExercises);
+        }
+    };
+
     // Helper function to check if a set can be marked as complete
     const canMarkSetComplete = (exercise, setIndex) => {
         const weightValue = exercise.weights[setIndex];
@@ -405,26 +417,10 @@ function QuickWorkout() {
                                         </div>
                                     </Card.Header>
                                     <Card.Body>
-                                        <Row className="mb-3">
-                                            <Col xs={4} md={2}>
-                                                <Form.Group>
-                                                    <Form.Label>Sets</Form.Label>
-                                                    <Form.Control
-                                                        type="number"
-                                                        min="1"
-                                                        max="20"
-                                                        value={exercise.sets}
-                                                        onChange={(e) => updateExerciseData(exerciseIndex, 'sets', null, e.target.value)}
-                                                        className="soft-input"
-                                                        style={{ width: '70px' }}
-                                                    />
-                                                </Form.Group>
-                                            </Col>
-                                        </Row>
-
                                         <Table responsive className="workout-log-table">
                                             <thead>
                                                 <tr>
+                                                    <th></th>
                                                     <th>Set</th>
                                                     <th>Reps</th>
                                                     <th>Weight</th>
@@ -434,6 +430,22 @@ function QuickWorkout() {
                                             <tbody>
                                                 {Array.from({ length: exercise.sets }, (_, setIndex) => (
                                                     <tr key={setIndex}>
+                                                        <td className="text-center" style={{ width: '20px', paddingRight: '5px' }}>
+                                                            {exercise.sets > 1 && (
+                                                                <X
+                                                                    size={24}
+                                                                    onClick={() => removeSet(exerciseIndex, setIndex)}
+                                                                    style={{
+                                                                        cursor: 'pointer',
+                                                                        color: '#495057',
+                                                                        opacity: 0.6
+                                                                    }}
+                                                                    onMouseEnter={(e) => e.target.style.opacity = '1'}
+                                                                    onMouseLeave={(e) => e.target.style.opacity = '0.6'}
+                                                                    title="Remove this set"
+                                                                />
+                                                            )}
+                                                        </td>
                                                         <td className="text-center">{setIndex + 1}</td>
                                                         <td className="text-center">
                                                             <Form.Control
@@ -475,6 +487,20 @@ function QuickWorkout() {
                                                 ))}
                                             </tbody>
                                         </Table>
+                                        
+                                        <div className="d-flex justify-content-center mt-3 mb-2">
+                                            <Button
+                                                variant="outline-secondary"
+                                                size="sm"
+                                                onClick={() => updateExerciseData(exerciseIndex, 'sets', null, Math.min(20, exercise.sets + 1))}
+                                                disabled={exercise.sets >= 20}
+                                                className="px-3"
+                                                title="Add Set"
+                                            >
+                                                <Plus size={16} className="me-1" />
+                                                Add Set
+                                            </Button>
+                                        </div>
                                     </Card.Body>
                                 </Card>
                             );
