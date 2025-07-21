@@ -4,6 +4,7 @@
 }
 
 .dashboard-greeting {
+  font-family: 'Roboto', sans-serif !important;
   font-weight: var(--font-weight-bold);
   font-size: var(--font-size-3xl);
   color: var(--text-primary);
@@ -24,12 +25,14 @@
 }
 
 .metric-title {
+  font-family: 'Roboto', sans-serif !important;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
 }
 
 .metric-value {
+  font-family: 'Roboto', sans-serif !important;
   font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
   color: var(--text-primary);
@@ -43,6 +46,7 @@
 }
 
 .widget-title {
+  font-family: 'Roboto', sans-serif !important;
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
@@ -71,6 +75,7 @@
 }
 
 .program-name {
+  font-family: 'Roboto', sans-serif !important;
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
 }

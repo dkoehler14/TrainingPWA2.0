@@ -2,9 +2,11 @@
 :root {
   /* Light theme variables */
   --background-color: #f8f9fa;
+  --background-secondary: #e9ecef;
   --card-background: #ffffff;
   --text-primary: #344767;
   --text-secondary: #67748e;
+  --text-secondary-light: #8392ab;
   --border-color: #e9ecef;
   --input-background: #ffffff;
   --input-border: #e9ecef;
@@ -12,6 +14,8 @@
   --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.1), 0 6px 20px rgba(0, 0, 0, 0.05);
   --gradient-primary: linear-gradient(90deg, #0056D2 0%, #0096D6 100%);
   --button-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+  --button-secondary-background: #f8f9fa;
+  --button-secondary-text: #344767;
 
   /* Typography System - Standardized */
   --font-family-primary: 'Roboto', sans-serif;
@@ -41,6 +45,7 @@
 
   /* Component Standards */
   --card-border-radius: 15px;
+  --card-border-radius-sm: 10px;
   --card-padding: 1rem;
   --button-border-radius: 10px;
   --button-padding: 10px 20px;
@@ -51,9 +56,11 @@
 [data-theme='dark'] {
   /* Dark theme variables */
   --background-color: #1a1f2c;
+  --background-secondary: #344767;
   --card-background: #252f40;
   --text-primary: #ffffff;
   --text-secondary: #b2b9c5;
+  --text-secondary-light: #8392ab;
   --border-color: #344767;
   --input-background: #313d4f;
   --input-border: #344767;
@@ -61,15 +68,30 @@
   --card-shadow: 0 4px 18px rgba(0, 0, 0, 0.2), 0 6px 20px rgba(0, 0, 0, 0.1);
   --gradient-primary: linear-gradient(90deg, #3a7bd5 0%, #00d2ff 100%);
   --button-shadow: 0 4px 15px rgba(58, 123, 213, 0.3);
+  --button-secondary-background: #344767;
+  --button-secondary-text: #ffffff;
 }
 
 body {
-  font-family: 'Roboto', sans-serif !important;
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--background-color);
   color: var(--text-primary);
   transition: all 0.3s ease;
+}
+
+/* Ensure all elements inherit the font family */
+* {
+  font-family: inherit;
+}
+
+/* Specific overrides for common elements */
+h1, h2, h3, h4, h5, h6,
+.card-title, .card-text,
+.btn, button,
+p, span, div {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
 }
 
 /* Container */
@@ -158,6 +180,23 @@ body {
   color: #fff !important;
 }
 
+/* Secondary Button */
+.soft-button-secondary {
+  background-color: var(--button-secondary-background) !important;
+  color: var(--button-secondary-text) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-weight: 500;
+  min-height: 38px;
+}
+
+.soft-button-secondary:hover {
+  background-color: var(--input-background) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--text-secondary) !important;
+}
+
 /* Alert */
 .soft-alert {
   border-radius: 10px;
@@ -186,6 +225,10 @@ body {
 /* Text */
 .soft-text {
   color: var(--text-secondary);
+}
+
+.soft-text-secondary {
+  color: var(--text-secondary-light);
 }
 
 .spinner-blue {
@@ -359,4 +402,30 @@ body {
 
 [data-theme='dark'] {
   --chart-invert: invert(1) hue-rotate(180deg);
+}
+
+/* Font overrides to ensure Roboto is used everywhere */
+.container, .container-fluid,
+.row, .col,
+.card, .card-body, .card-title, .card-text,
+.btn, .button,
+.navbar, .nav-link,
+.form-control, .form-label,
+.alert, .badge,
+.list-group-item,
+.modal-content, .modal-header, .modal-body, .modal-footer,
+.dropdown-menu, .dropdown-item,
+.table, .table th, .table td {
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* Ensure all soft-ui classes use Roboto */
+[class*="soft-"] {
+  font-family: 'Roboto', sans-serif !important;
+}
+
+/* Override any remaining font declarations */
+.home-container,
+.home-container * {
+  font-family: 'Roboto', sans-serif !important;
 }

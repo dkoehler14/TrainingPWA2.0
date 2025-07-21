@@ -5,13 +5,14 @@ const React = require('react');
 
 const mockNavigate = jest.fn();
 const mockUseParams = jest.fn(() => ({}));
-const mockUseLocation = jest.fn(() => ({ pathname: '/' }));
+const mockUseLocation = jest.fn(() => ({ pathname: '/', search: '' }));
 
 module.exports = {
   useNavigate: () => mockNavigate,
   useParams: mockUseParams,
   useLocation: mockUseLocation,
   BrowserRouter: ({ children }) => children,
+  MemoryRouter: ({ children }) => children,
   Routes: ({ children }) => children,
   Route: ({ children }) => children,
   Navigate: () => null,

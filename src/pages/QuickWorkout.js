@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Card } from 'react-bootstrap';
-import { Plus, X, BarChart, Pencil } from 'react-bootstrap-icons';
+import { Plus, X, BarChart, Pencil, Clock, Save, Trash } from 'react-bootstrap-icons';
 import { db, auth } from '../firebase';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
+import '../styles/QuickWorkoutDraft.css';
 import { debounce } from 'lodash';
-import { getAllExercisesMetadata, getDocCached, getCollectionCached } from '../api/enhancedFirestoreCache';
+import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
+import quickWorkoutDraftService from '../services/quickWorkoutDraftService';
 
 function QuickWorkout() {
     const [exercisesList, setExercisesList] = useState([]);
@@ -28,6 +30,14 @@ function QuickWorkout() {
     // Exercise history state
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [selectedHistoryExercise, setSelectedHistoryExercise] = useState(null);
+
+    // Draft system state
+    const [currentDraft, setCurrentDraft] = useState(null);
+    const [showResumeModal, setShowResumeModal] = useState(false);
+    const [availableDrafts, setAvailableDrafts] = useState([]);
+    const [isDraftSaving, setIsDraftSaving] = useState(false);
+    const [lastSaved, setLastSaved] = useState(null);
+    const [autoSaveStatus, setAutoSaveStatus] = useState('');
 
     const user = auth.currentUser;
 
@@ -53,8 +63,113 @@ function QuickWorkout() {
         setUserMessage(prev => ({ ...prev, show: false }));
     };
 
+    // Draft management functions using the service
+    const saveDraft = async (exercises, name, isAutoSave = false) => {
+        if (!user || exercises.length === 0) return;
+
+        if (!isAutoSave) setIsDraftSaving(true);
+        try {
+            const result = await quickWorkoutDraftService.saveDraft(
+                user.uid, 
+                exercises, 
+                name, 
+                currentDraft?.id
+            );
+            
+            setCurrentDraft(result);
+            setLastSaved(new Date());
+            
+            if (isAutoSave) {
+                setAutoSaveStatus('Draft saved');
+                setTimeout(() => setAutoSaveStatus(''), 2000);
+            } else {
+                showUserMessage('Draft saved successfully!', 'success');
+            }
+        } catch (error) {
+            console.error("Error saving draft:", error);
+            if (!isAutoSave) {
+                showUserMessage('Failed to save draft. Please try again.', 'error');
+            }
+        } finally {
+            if (!isAutoSave) setIsDraftSaving(false);
+        }
+    };
+
+    const loadDraft = (draft) => {
+        setCurrentDraft(draft);
+        setWorkoutName(draft.name || '');
+        setSelectedExercises(draft.exercises.map(ex => ({
+            ...ex,
+            reps: ex.reps || Array(ex.sets).fill(''),
+            weights: ex.weights || Array(ex.sets).fill(''),
+            completed: ex.completed || Array(ex.sets).fill(false),
+            notes: ex.notes || '',
+            bodyweight: ex.bodyweight || ''
+        })));
+        setShowResumeModal(false);
+        showUserMessage('Draft loaded successfully!', 'success');
+    };
+
+    const deleteDraft = async (draftId) => {
+        if (!user || !draftId) return;
+
+        try {
+            await quickWorkoutDraftService.deleteDraft(user.uid, draftId);
+            
+            if (currentDraft && currentDraft.id === draftId) {
+                setCurrentDraft(null);
+                setSelectedExercises([]);
+                setWorkoutName('');
+            }
+            
+            // Refresh available drafts
+            await fetchDrafts();
+            showUserMessage('Draft deleted successfully!', 'success');
+        } catch (error) {
+            console.error("Error deleting draft:", error);
+            showUserMessage('Failed to delete draft. Please try again.', 'error');
+        }
+    };
+
+    const fetchDrafts = async () => {
+        if (!user) return [];
+
+        try {
+            const draftsData = await quickWorkoutDraftService.loadDrafts(user.uid);
+            setAvailableDrafts(draftsData);
+            return draftsData;
+        } catch (error) {
+            console.error("Error fetching drafts:", error);
+            return [];
+        }
+    };
+
+    // Auto-save function with debouncing
+    const debouncedSaveDraft = useCallback(
+        debounce(async (exercises, name) => {
+            if (exercises.length > 0) {
+                await saveDraft(exercises, name, true);
+            }
+        }, 2000), // 2 second debounce
+        [user, currentDraft]
+    );
+
+    // Cleanup old drafts using the service
+    const cleanupOldDrafts = async () => {
+        if (!user) return;
+
+        try {
+            const cleanedCount = await quickWorkoutDraftService.cleanupOldDrafts(user.uid);
+            if (cleanedCount > 0) {
+                console.log(`Cleaned up ${cleanedCount} old drafts`);
+            }
+        } catch (error) {
+            console.error("Error cleaning up old drafts:", error);
+        }
+    };
+
     useEffect(() => {
-        const fetchExercises = async () => {
+        const initializeComponent = async () => {
             if (user) {
                 try {
                     // Fetch exercises using metadata approach
@@ -87,15 +202,26 @@ function QuickWorkout() {
 
                     const allExercises = [...enhancedGlobalExercises, ...userExercises];
                     setExercisesList(allExercises);
+
+                    // Fetch available drafts and check for resume
+                    const drafts = await fetchDrafts();
+                    
+                    // Clean up old drafts
+                    await cleanupOldDrafts();
+
+                    // Check if we should show resume modal
+                    if (drafts.length > 0 && !sessionStorage.getItem('quickWorkoutTemplate')) {
+                        setShowResumeModal(true);
+                    }
                 } catch (error) {
-                    console.error('Error fetching exercises:', error);
+                    console.error('Error initializing component:', error);
                     showUserMessage('Failed to load exercises', 'error');
                 } finally {
                     setIsLoading(false);
                 }
             }
         };
-        fetchExercises();
+        initializeComponent();
     }, [user]);
 
     // Load template data from sessionStorage if available
@@ -134,6 +260,13 @@ function QuickWorkout() {
             loadTemplateData();
         }
     }, [isLoading, exercisesList]);
+
+    // Auto-save when exercises or workout name changes
+    useEffect(() => {
+        if (!isLoading && selectedExercises.length > 0 && user) {
+            debouncedSaveDraft(selectedExercises, workoutName);
+        }
+    }, [selectedExercises, workoutName, isLoading, user, debouncedSaveDraft]);
 
     const addExerciseToWorkout = (exercise) => {
         const newExercise = {
@@ -272,30 +405,48 @@ function QuickWorkout() {
 
         setIsSaving(true);
         try {
-            const workoutData = {
-                userId: user.uid,
-                name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
-                type: 'quick_workout',
-                exercises: selectedExercises.map(ex => ({
-                    exerciseId: ex.exerciseId,
-                    sets: Number(ex.sets),
-                    reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-                    weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-                    completed: ex.completed,
-                    notes: ex.notes || '',
-                    bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
-                })),
-                completedDate: Timestamp.fromDate(new Date()),
-                date: Timestamp.fromDate(new Date()),
-                isWorkoutFinished: true
-            };
+            if (currentDraft) {
+                // Complete existing draft
+                await quickWorkoutDraftService.completeDraft(
+                    user.uid,
+                    currentDraft.id,
+                    selectedExercises,
+                    workoutName
+                );
+            } else {
+                // Create new completed workout directly
+                const workoutData = {
+                    userId: user.uid,
+                    name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
+                    type: 'quick_workout',
+                    exercises: selectedExercises.map(ex => ({
+                        exerciseId: ex.exerciseId,
+                        sets: Number(ex.sets),
+                        reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
+                        weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+                        completed: ex.completed,
+                        notes: ex.notes || '',
+                        bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
+                    })),
+                    completedDate: Timestamp.fromDate(new Date()),
+                    date: Timestamp.fromDate(new Date()),
+                    isDraft: false,
+                    isWorkoutFinished: true,
+                    lastModified: Timestamp.fromDate(new Date())
+                };
 
-            await addDoc(collection(db, "workoutLogs"), workoutData);
+                await addDoc(collection(db, "workoutLogs"), workoutData);
+                invalidateWorkoutCache(user.uid);
+            }
+
             showUserMessage('Quick workout saved successfully!', 'success');
 
             // Reset form
             setSelectedExercises([]);
             setWorkoutName('');
+            setCurrentDraft(null);
+            setLastSaved(null);
+            setAutoSaveStatus('');
         } catch (error) {
             console.error("Error saving quick workout:", error);
             showUserMessage('Failed to save workout. Please try again.', 'error');
@@ -327,15 +478,40 @@ function QuickWorkout() {
                 </Row>
             )}
 
-            {/* Header */}
+            {/* Header with Draft Status */}
             <Row className="mb-4">
                 <Col>
-                    <h1 className="soft-title">Quick Workout</h1>
-                    <p className="soft-text">Create a one-off workout without needing a program</p>
+                    <div className="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h1 className="soft-title">Quick Workout</h1>
+                            <p className="soft-text">Create a one-off workout without needing a program</p>
+                        </div>
+                        <div className="text-end">
+                            {currentDraft && (
+                                <div className="d-flex flex-column align-items-end">
+                                    <span className="draft-status-badge">
+                                        <Clock size={12} />
+                                        Draft Mode
+                                    </span>
+                                    {lastSaved && (
+                                        <div className="draft-last-saved">
+                                            Last saved: {lastSaved.toLocaleTimeString()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            {autoSaveStatus && (
+                                <div className={`auto-save-indicator ${autoSaveStatus ? 'visible' : ''}`}>
+                                    <Save size={12} />
+                                    <small>{autoSaveStatus}</small>
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </Col>
             </Row>
 
-            {/* Workout Name */}
+            {/* Workout Name and Draft Controls */}
             <Row className="mb-4">
                 <Col md={6}>
                     <Form.Group>
@@ -347,6 +523,50 @@ function QuickWorkout() {
                             onChange={(e) => setWorkoutName(e.target.value)}
                         />
                     </Form.Group>
+                </Col>
+                <Col md={6} className="d-flex align-items-end">
+                    <div className="draft-controls">
+                        {availableDrafts.length > 0 && (
+                            <Button
+                                variant="outline-info"
+                                onClick={() => setShowResumeModal(true)}
+                                className="soft-button"
+                            >
+                                <Clock className="me-2" />
+                                Resume Draft
+                            </Button>
+                        )}
+                        {currentDraft && (
+                            <>
+                                <Button
+                                    variant="outline-secondary"
+                                    onClick={() => saveDraft(selectedExercises, workoutName, false)}
+                                    disabled={isDraftSaving}
+                                    className="soft-button"
+                                >
+                                    {isDraftSaving ? (
+                                        <>
+                                            <Spinner animation="border" size="sm" className="me-2" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="me-2" />
+                                            Save Draft
+                                        </>
+                                    )}
+                                </Button>
+                                <Button
+                                    variant="outline-danger"
+                                    onClick={() => deleteDraft(currentDraft.id)}
+                                    className="soft-button"
+                                >
+                                    <Trash className="me-2" />
+                                    Discard
+                                </Button>
+                            </>
+                        )}
+                    </div>
                 </Col>
             </Row>
 
@@ -390,8 +610,10 @@ function QuickWorkout() {
                                                 size="sm"
                                                 onClick={() => openNotesModal(exerciseIndex)}
                                                 className="me-2"
+                                                title={exercise.notes ? 'View/Edit Notes' : 'Add Notes'}
                                             >
                                                 <Pencil />
+                                                {exercise.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
                                             </Button>
                                             <Button
                                                 variant="outline-danger"
@@ -402,6 +624,16 @@ function QuickWorkout() {
                                             </Button>
                                         </div>
                                     </Card.Header>
+                                    
+                                    {/* Display notes preview if there is a note */}
+                                    {exercise.notes && (
+                                        <div className="note-preview mb-2 p-2 bg-light border-top">
+                                            <small className="text-muted">
+                                                <strong>Note:</strong> {exercise.notes.length > 50 ? `${exercise.notes.substring(0, 50)}...` : exercise.notes}
+                                            </small>
+                                        </div>
+                                    )}
+                                    
                                     <Card.Body>
                                         <Table responsive className="workout-log-table">
                                             <thead>
@@ -552,7 +784,11 @@ function QuickWorkout() {
             {/* Notes Modal */}
             <Modal show={showNotesModal} onHide={() => setShowNotesModal(false)}>
                 <Modal.Header closeButton>
-                    <Modal.Title>Exercise Notes</Modal.Title>
+                    <Modal.Title>
+                        {currentExerciseIndex !== null && exercisesList.find(
+                            e => e.id === selectedExercises[currentExerciseIndex]?.exerciseId
+                        )?.name || 'Exercise'} Notes
+                    </Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
                     <Form.Group>
@@ -612,6 +848,72 @@ function QuickWorkout() {
                 exercisesList={exercisesList}
                 weightUnit="LB"
             />
+
+            {/* Resume Draft Modal */}
+            <Modal show={showResumeModal} onHide={() => setShowResumeModal(false)} centered>
+                <Modal.Header closeButton>
+                    <Modal.Title>Resume Previous Workout</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p>You have {availableDrafts.length} unfinished workout{availableDrafts.length > 1 ? 's' : ''}. Would you like to resume one?</p>
+                    
+                    {availableDrafts.map((draft, index) => (
+                        <Card key={draft.id} className="mb-3 resume-draft-card">
+                            <Card.Body>
+                                <div className="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 className="mb-1">{draft.name}</h6>
+                                        <small className="text-muted">
+                                            {draft.exercises?.length || 0} exercises • 
+                                            Last modified: {draft.lastModified?.toDate ? 
+                                                draft.lastModified.toDate().toLocaleDateString() : 
+                                                new Date(draft.lastModified).toLocaleDateString()}
+                                        </small>
+                                        <div className="draft-exercise-badges">
+                                            {draft.exercises?.slice(0, 3).map((ex, idx) => {
+                                                const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+                                                return (
+                                                    <span key={idx} className="draft-exercise-badge">
+                                                        {exercise?.name || 'Unknown'}
+                                                    </span>
+                                                );
+                                            })}
+                                            {draft.exercises?.length > 3 && (
+                                                <span className="draft-exercise-badge">
+                                                    +{draft.exercises.length - 3} more
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="d-flex flex-column gap-2">
+                                        <Button
+                                            variant="primary"
+                                            size="sm"
+                                            onClick={() => loadDraft(draft)}
+                                            className="soft-button"
+                                        >
+                                            Resume
+                                        </Button>
+                                        <Button
+                                            variant="outline-danger"
+                                            size="sm"
+                                            onClick={() => deleteDraft(draft.id)}
+                                            className="soft-button"
+                                        >
+                                            <Trash size={12} />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card.Body>
+                        </Card>
+                    ))}
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowResumeModal(false)}>
+                        Start Fresh
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </Container>
     );
 }
