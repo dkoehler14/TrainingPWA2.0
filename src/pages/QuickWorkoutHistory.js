@@ -8,7 +8,6 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Spinner, Alert, Modal, Button } from 'react-bootstrap';
-import { useNavigate, useParams } from 'react-router-dom';
 import { auth } from '../firebase';
 import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
 import { deleteDoc, doc } from 'firebase/firestore';
@@ -18,7 +17,7 @@ import { db } from '../firebase';
 import WorkoutStatsCard from '../components/WorkoutStatsCard';
 import WorkoutFilters from '../components/WorkoutFilters';
 import WorkoutHistoryList from '../components/WorkoutHistoryList';
-import WorkoutDetailView from '../components/WorkoutDetailView';
+import WorkoutDetailModal from '../components/WorkoutDetailModal';
 import WorkoutHistoryErrorBoundary from '../components/WorkoutHistoryErrorBoundary';
 import WorkoutHistorySkeleton from '../components/WorkoutHistorySkeleton';
 import useQuickWorkoutHistory from '../hooks/useQuickWorkoutHistory';
@@ -30,10 +29,6 @@ import '../styles/QuickWorkoutHistory.css';
 function QuickWorkoutHistoryContent() {
   // Authentication
   const user = auth.currentUser;
-
-  // React Router hooks
-  const navigate = useNavigate();
-  const { workoutId } = useParams();
 
   // Data fetching hook
   const { workouts, isLoading: isLoadingWorkouts, error: workoutsError, refetch } = useQuickWorkoutHistory();
@@ -234,36 +229,17 @@ function QuickWorkoutHistoryContent() {
     }
   }, [workouts, applyFiltersAndSort]);
 
-  // Handle URL-based navigation for workout detail view
-  useEffect(() => {
-    if (workoutId && workouts && workouts.length > 0) {
-      // Find the workout by ID from URL parameter
-      const workout = workouts.find(w => w.id === workoutId);
-      if (workout) {
-        setSelectedWorkout(workout);
-        setShowDetailView(true);
-      } else {
-        // Workout not found, redirect to list view
-        navigate('/quick-workout-history', { replace: true });
-        showUserMessage('Workout not found', 'error');
-      }
-    } else if (!workoutId) {
-      // No workout ID in URL, show list view
-      setSelectedWorkout(null);
-      setShowDetailView(false);
-    }
-  }, [workoutId, workouts, navigate]);
 
   // Handle workout selection for detail view
   const handleWorkoutSelect = (workout) => {
-    // Navigate to detail view using URL parameter
-    navigate(`/quick-workout-history/${workout.id}`);
+    setSelectedWorkout(workout);
+    setShowDetailView(true);
   };
 
-  // Handle back to list view
+  // Handle back to list view (close modal)
   const handleBackToList = () => {
-    // Navigate back to list view
-    navigate('/quick-workout-history');
+    setShowDetailView(false);
+    setSelectedWorkout(null);
   };
 
   // Handle workout deletion - show confirmation modal
@@ -293,7 +269,7 @@ function QuickWorkoutHistoryContent() {
       // Show success message
       showUserMessage('Workout deleted successfully', 'success');
       
-      // If we're viewing the deleted workout, go back to list
+      // If we're viewing the deleted workout, close modal
       if (selectedWorkout && selectedWorkout.id === workoutToDelete.id) {
         handleBackToList();
       }
@@ -341,7 +317,7 @@ function QuickWorkoutHistoryContent() {
     sessionStorage.setItem('quickWorkoutTemplate', JSON.stringify(templateData));
     
     // Navigate to QuickWorkout page using React Router
-    navigate('/quick-workout');
+    window.location.href = '/quick-workout';
   };
 
   // Handle filter changes
@@ -398,18 +374,6 @@ function QuickWorkoutHistoryContent() {
     );
   }
 
-  // Show detail view
-  if (showDetailView && selectedWorkout) {
-    return (
-      <WorkoutDetailView
-        workout={selectedWorkout}
-        exercises={exercises}
-        onBack={handleBackToList}
-        onDelete={handleDeleteWorkout}
-        onUseAsTemplate={handleUseAsTemplate}
-      />
-    );
-  }
 
   // Main list view
   return (
@@ -514,6 +478,16 @@ function QuickWorkoutHistoryContent() {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {/* Workout Detail Modal */}
+      <WorkoutDetailModal
+        show={showDetailView}
+        onClose={handleBackToList}
+        workout={selectedWorkout}
+        exercises={exercises}
+        onDelete={handleDeleteWorkout}
+        onUseAsTemplate={handleUseAsTemplate}
+      />
     </Container>
   );
 }

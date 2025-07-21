@@ -41,7 +41,15 @@ const USER_SCENARIOS = {
       formIssues: 0.3, // 30% chance of form-related missed reps
       motivationDips: 0.2, // 20% chance of motivation-related missed workouts
       programAdherence: 0.9, // 90% adherence to prescribed program
-      historyWeeks: 8 // 8 weeks of workout history
+      historyWeeks: 8, // 8 weeks of workout history
+      quickWorkouts: {
+        frequency: 2, // 2 quick workouts per week
+        consistency: 0.6, // 60% completion rate (lower than structured workouts)
+        averageDuration: 15, // 15 minutes average
+        preferredTypes: ['upper_body', 'core'], // beginner-friendly focus areas
+        progressionRate: 0.02, // 2% weight increase (conservative for quick sessions)
+        restBetweenSets: 60 // 60 seconds rest (learning proper recovery)
+      }
     }
   },
 
@@ -77,7 +85,15 @@ const USER_SCENARIOS = {
       formIssues: 0.1, // 10% chance of form-related issues
       motivationDips: 0.1, // 10% chance of motivation issues
       programAdherence: 0.95, // 95% adherence to prescribed program
-      historyWeeks: 16 // 16 weeks of workout history
+      historyWeeks: 16, // 16 weeks of workout history
+      quickWorkouts: {
+        frequency: 3, // 3 quick workouts per week
+        consistency: 0.8, // 80% completion rate (good consistency)
+        averageDuration: 20, // 20 minutes average
+        preferredTypes: ['full_body', 'upper_body', 'lower_body'], // varied focus
+        progressionRate: 0.025, // 2.5% weight increase (confident progression)
+        restBetweenSets: 45 // 45 seconds rest (efficient recovery)
+      }
     }
   },
 
@@ -113,7 +129,15 @@ const USER_SCENARIOS = {
       formIssues: 0.05, // 5% chance of form issues
       motivationDips: 0.05, // 5% chance of motivation issues
       programAdherence: 0.98, // 98% adherence to prescribed program
-      historyWeeks: 24 // 24 weeks of workout history
+      historyWeeks: 24, // 24 weeks of workout history
+      quickWorkouts: {
+        frequency: 4, // 4 quick workouts per week (high volume)
+        consistency: 0.9, // 90% completion rate (very consistent)
+        averageDuration: 25, // 25 minutes average (longer, more complex)
+        preferredTypes: ['accessory', 'weak_points', 'mobility'], // targeted work
+        progressionRate: 0.015, // 1.5% weight increase (conservative, focused)
+        restBetweenSets: 30 // 30 seconds rest (efficient, conditioned)
+      }
     }
   },
 
@@ -149,7 +173,15 @@ const USER_SCENARIOS = {
       formIssues: 0.15, // 15% chance of form issues (relearning)
       motivationDips: 0.15, // 15% chance of motivation issues
       programAdherence: 0.85, // 85% adherence (still building routine)
-      historyWeeks: 12 // 12 weeks of comeback history
+      historyWeeks: 12, // 12 weeks of comeback history
+      quickWorkouts: {
+        frequency: 2, // 2 quick workouts per week (rebuilding gradually)
+        consistency: 0.7, // 70% completion rate (rebuilding habit)
+        averageDuration: 18, // 18 minutes average (moderate sessions)
+        preferredTypes: ['full_body', 'core'], // rebuilding foundation
+        progressionRate: 0.02, // 2% weight increase (cautious comeback)
+        restBetweenSets: 75 // 75 seconds rest (allowing more recovery)
+      }
     }
   },
 
@@ -185,7 +217,15 @@ const USER_SCENARIOS = {
       formIssues: 0.05, // 5% chance of form issues (very careful)
       motivationDips: 0.1, // 10% chance of motivation issues
       programAdherence: 0.95, // 95% adherence (following rehab protocol)
-      historyWeeks: 20 // 20 weeks of recovery-focused training
+      historyWeeks: 20, // 20 weeks of recovery-focused training
+      quickWorkouts: {
+        frequency: 3, // 3 quick workouts per week (consistent rehab)
+        consistency: 0.85, // 85% completion rate (disciplined recovery)
+        averageDuration: 22, // 22 minutes average (includes mobility work)
+        preferredTypes: ['mobility', 'core', 'rehab'], // injury-focused work
+        progressionRate: 0.01, // 1% weight increase (very conservative)
+        restBetweenSets: 90 // 90 seconds rest (prioritizing recovery)
+      }
     }
   },
 
@@ -221,7 +261,15 @@ const USER_SCENARIOS = {
       formIssues: 0.12, // 12% chance of form issues (rushing)
       motivationDips: 0.25, // 25% chance of motivation issues (stress/time)
       programAdherence: 0.8, // 80% adherence (modifications for time)
-      historyWeeks: 14 // 14 weeks of on-and-off training
+      historyWeeks: 14, // 14 weeks of on-and-off training
+      quickWorkouts: {
+        frequency: 4, // 4 quick workouts per week (fits busy schedule)
+        consistency: 0.75, // 75% completion rate (better than full workouts)
+        averageDuration: 12, // 12 minutes average (very time-efficient)
+        preferredTypes: ['hiit', 'core', 'upper_body'], // efficient, targeted work
+        progressionRate: 0.015, // 1.5% weight increase (limited by time)
+        restBetweenSets: 30 // 30 seconds rest (time-efficient)
+      }
     }
   }
 };

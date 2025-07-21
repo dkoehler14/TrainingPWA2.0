@@ -350,20 +350,6 @@ function QuickWorkout() {
                 </Col>
             </Row>
 
-            {/* Add Exercise Button */}
-            <Row className="mb-4">
-                <Col>
-                    <Button
-                        variant="primary"
-                        onClick={() => setShowExerciseGrid(true)}
-                        className="soft-button"
-                    >
-                        <Plus className="me-2" />
-                        Add Exercise
-                    </Button>
-                </Col>
-            </Row>
-
             {/* Selected Exercises */}
             {selectedExercises.length > 0 && (
                 <Row>
@@ -509,10 +495,24 @@ function QuickWorkout() {
                 </Row>
             )}
 
+            {/* Add Exercise Button */}
+            <Row className="mb-4">
+                <Col>
+                    <Button
+                        variant="primary"
+                        onClick={() => setShowExerciseGrid(true)}
+                        className="soft-button"
+                    >
+                        <Plus className="me-2" />
+                        Add Exercise
+                    </Button>
+                </Col>
+            </Row>
+
             {/* Save Workout Button */}
             {selectedExercises.length > 0 && (
                 <Row className="mb-4">
-                    <Col>
+                    <Col className="d-flex justify-content-center">
                         <Button
                             variant="success"
                             size="lg"

@@ -36,21 +36,26 @@ const WorkoutDetailView = ({
   exercises = [],
   onBack,
   onDelete,
-  onUseAsTemplate
+  onUseAsTemplate,
+  isModal = false
 }) => {
 
   // Handle missing workout data
   if (!workout) {
-    return (
+    const content = (
+      <Alert variant="danger">
+        <h5>Workout Not Found</h5>
+        <p>The requested workout could not be loaded. It may have been deleted or there was an error loading the data.</p>
+        <Button variant="outline-primary" onClick={onBack}>
+          <ArrowLeft className="me-2" />
+          {isModal ? 'Close' : 'Back to History'}
+        </Button>
+      </Alert>
+    );
+    
+    return isModal ? content : (
       <Container className="py-4">
-        <Alert variant="danger">
-          <h5>Workout Not Found</h5>
-          <p>The requested workout could not be loaded. It may have been deleted or there was an error loading the data.</p>
-          <Button variant="outline-primary" onClick={onBack}>
-            <ArrowLeft className="me-2" />
-            Back to History
-          </Button>
-        </Alert>
+        {content}
       </Container>
     );
   }
@@ -58,21 +63,25 @@ const WorkoutDetailView = ({
   // Validate workout data structure
   const hasValidData = workout && typeof workout === 'object' && workout.id;
   if (!hasValidData) {
-    return (
+    const content = (
+      <Alert variant="warning">
+        <h5>Invalid Workout Data</h5>
+        <p>This workout contains corrupted or invalid data and cannot be displayed properly.</p>
+        <div className="d-flex gap-2">
+          <Button variant="outline-primary" onClick={onBack}>
+            <ArrowLeft className="me-2" />
+            {isModal ? 'Close' : 'Back to History'}
+          </Button>
+          <Button variant="outline-danger" onClick={() => onDelete(workout?.id)}>
+            Delete Corrupted Workout
+          </Button>
+        </div>
+      </Alert>
+    );
+    
+    return isModal ? content : (
       <Container className="py-4">
-        <Alert variant="warning">
-          <h5>Invalid Workout Data</h5>
-          <p>This workout contains corrupted or invalid data and cannot be displayed properly.</p>
-          <div className="d-flex gap-2">
-            <Button variant="outline-primary" onClick={onBack}>
-              <ArrowLeft className="me-2" />
-              Back to History
-            </Button>
-            <Button variant="outline-danger" onClick={() => onDelete(workout?.id)}>
-              Delete Corrupted Workout
-            </Button>
-          </div>
-        </Alert>
+        {content}
       </Container>
     );
   }
@@ -157,63 +166,118 @@ const WorkoutDetailView = ({
 
   const stats = getWorkoutStats();
 
+  // Main content wrapper - conditional based on modal usage
+  const ContentWrapper = ({ children }) => {
+    return isModal ? (
+      <div className="p-3">
+        {children}
+      </div>
+    ) : (
+      <Container fluid className="soft-container py-4">
+        {children}
+      </Container>
+    );
+  };
+
   return (
-    <Container fluid className="soft-container py-4">
-      {/* Header with Navigation */}
-      <div className="workout-detail-header">
-        <div className="d-flex align-items-center justify-content-between flex-wrap">
-          <div className="d-flex align-items-center flex-wrap">
-            <Button
-              variant="outline-secondary"
-              onClick={onBack}
-              className="me-3 mb-2 mb-md-0"
-            >
-              <ArrowLeft className="me-2" />
-              <span className="d-none d-sm-inline">Back to History</span>
-              <span className="d-sm-none">Back</span>
-            </Button>
-            <div>
-              <h1 className="soft-title mb-1">
-                {workout.name || `Quick Workout - ${formatWorkoutDate(workout.date)}`}
-              </h1>
-              <div className="d-flex align-items-center gap-3 text-muted flex-wrap">
-                <div className="d-flex align-items-center">
-                  <Calendar className="me-1" size={14} />
-                  <small>{formatWorkoutDate(workout.date)}</small>
-                </div>
-                {workout.date && (
+    <ContentWrapper>
+      {/* Header with Navigation - conditional rendering for modal */}
+      {!isModal && (
+        <div className="workout-detail-header">
+          <div className="d-flex align-items-center justify-content-between flex-wrap">
+            <div className="d-flex align-items-center flex-wrap">
+              <Button
+                variant="outline-secondary"
+                onClick={onBack}
+                className="me-3 mb-2 mb-md-0"
+              >
+                <ArrowLeft className="me-2" />
+                <span className="d-none d-sm-inline">Back to History</span>
+                <span className="d-sm-none">Back</span>
+              </Button>
+              <div>
+                <h1 className="soft-title mb-1">
+                  {workout.name || `Quick Workout - ${formatWorkoutDate(workout.date)}`}
+                </h1>
+                <div className="d-flex align-items-center gap-3 text-muted flex-wrap">
                   <div className="d-flex align-items-center">
-                    <Clock className="me-1" size={14} />
-                    <small>{formatWorkoutTime(workout.date)}</small>
+                    <Calendar className="me-1" size={14} />
+                    <small>{formatWorkoutDate(workout.date)}</small>
                   </div>
-                )}
+                  {workout.date && (
+                    <div className="d-flex align-items-center">
+                      <Clock className="me-1" size={14} />
+                      <small>{formatWorkoutTime(workout.date)}</small>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            
+            {/* Action Buttons */}
+            <div className="workout-action-buttons d-flex">
+              <Button
+                variant="outline-success"
+                onClick={() => onUseAsTemplate(workout)}
+                className="d-flex align-items-center"
+              >
+                <Copy className="me-2" />
+                <span className="d-none d-sm-inline">Use as Template</span>
+                <span className="d-sm-none">Template</span>
+              </Button>
+              <Button
+                variant="outline-danger"
+                onClick={() => onDelete(workout.id)}
+                className="d-flex align-items-center"
+              >
+                <Trash className="me-2" />
+                <span className="d-none d-sm-inline">Delete Workout</span>
+                <span className="d-sm-none">Delete</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal-specific header with workout info and action buttons */}
+      {isModal && (
+        <div className="workout-detail-modal-header mb-3">
+          <div className="d-flex align-items-center gap-3 text-muted flex-wrap mb-2">
+            <div className="d-flex align-items-center">
+              <Calendar className="me-1" size={14} />
+              <small>{formatWorkoutDate(workout.date)}</small>
+            </div>
+            {workout.date && (
+              <div className="d-flex align-items-center">
+                <Clock className="me-1" size={14} />
+                <small>{formatWorkoutTime(workout.date)}</small>
+              </div>
+            )}
           </div>
           
-          {/* Action Buttons */}
-          <div className="workout-action-buttons d-flex">
+          {/* Action Buttons for Modal */}
+          <div className="d-flex gap-2 flex-wrap">
             <Button
               variant="outline-success"
+              size="sm"
               onClick={() => onUseAsTemplate(workout)}
               className="d-flex align-items-center"
             >
-              <Copy className="me-2" />
-              <span className="d-none d-sm-inline">Use as Template</span>
-              <span className="d-sm-none">Template</span>
+              <Copy className="me-1" size={14} />
+              Use as Template
             </Button>
             <Button
               variant="outline-danger"
+              size="sm"
               onClick={() => onDelete(workout.id)}
               className="d-flex align-items-center"
             >
-              <Trash className="me-2" />
-              <span className="d-none d-sm-inline">Delete Workout</span>
-              <span className="d-sm-none">Delete</span>
+              <Trash className="me-1" size={14} />
+              Delete Workout
             </Button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Workout Summary Stats */}
       <Row className="mb-4">
@@ -408,7 +472,7 @@ const WorkoutDetailView = ({
           )}
         </Col>
       </Row>
-    </Container>
+    </ContentWrapper>
   );
 };
 

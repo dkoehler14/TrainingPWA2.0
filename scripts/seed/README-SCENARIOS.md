@@ -168,6 +168,41 @@ Each scenario generates realistic data patterns:
 - **Injury Recovery**: 20 weeks (recovery focus)
 - **Busy Professional**: 14 weeks (inconsistent)
 
+### Quick Workout Patterns
+Each scenario also generates quick workout data with specific patterns:
+
+#### Frequency (workouts per week)
+- **Beginner**: 2 quick workouts (learning basics)
+- **Intermediate**: 3 quick workouts (balanced approach)
+- **Advanced**: 4 quick workouts (high volume)
+- **Injury Recovery**: 3 quick workouts (consistent rehab)
+- **Busy Professional**: 4 quick workouts (time-efficient)
+- **Returning**: 2 quick workouts (rebuilding gradually)
+
+#### Consistency Rates
+- **Beginner**: 60% (lower than structured workouts)
+- **Intermediate**: 80% (good consistency)
+- **Advanced**: 90% (very consistent)
+- **Injury Recovery**: 85% (disciplined recovery)
+- **Busy Professional**: 75% (better than full workouts)
+- **Returning**: 70% (rebuilding habit)
+
+#### Average Duration
+- **Beginner**: 15 minutes (beginner-friendly)
+- **Intermediate**: 20 minutes (moderate sessions)
+- **Advanced**: 25 minutes (longer, complex)
+- **Injury Recovery**: 22 minutes (includes mobility)
+- **Busy Professional**: 12 minutes (very time-efficient)
+- **Returning**: 18 minutes (moderate comeback)
+
+#### Preferred Types
+- **Beginner**: Upper body, core (beginner-friendly focus)
+- **Intermediate**: Full body, upper/lower split (varied focus)
+- **Advanced**: Accessory, weak points, mobility (targeted work)
+- **Injury Recovery**: Mobility, core, rehab (injury-focused)
+- **Busy Professional**: HIIT, core, upper body (efficient, targeted)
+- **Returning**: Full body, core (rebuilding foundation)
+
 ## Generated Test Data
 
 ### User Accounts
@@ -192,6 +227,14 @@ Each scenario creates:
 - Missed workouts and plateaus
 - Performance variations
 - Scenario-specific completion rates
+
+### Quick Workout Logs
+- Scenario-specific quick workout patterns
+- Varied exercise combinations and workout types
+- Realistic duration and intensity patterns
+- Progressive overload with conservative increments
+- Experience-level appropriate exercise selection
+- Time-efficient workout templates (Upper Body, Full Body, HIIT, etc.)
 
 ## Testing Workflows
 

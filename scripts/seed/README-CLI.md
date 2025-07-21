@@ -197,12 +197,12 @@ The CLI provides detailed progress reporting with:
   Scenarios: beginner,intermediate
   Include Historical Data: true
   Verbose Logging: true
-  Total Steps: 4
+  Total Steps: 5
 
-🔄 [2:30:15 PM] [1/4] Seeding exercise database
+🔄 [2:30:15 PM] [1/5] Seeding exercise database
 ✅ [2:30:16 PM] Exercise database seeding completed in 0.85s
 
-🔄 [2:30:16 PM] [2/4] Creating scenario-based test users
+🔄 [2:30:16 PM] [2/5] Creating scenario-based test users
 ✅ [2:30:17 PM] User creation completed in 1.23s
 
 📧 Test User Credentials:
@@ -213,21 +213,26 @@ The CLI provides detailed progress reporting with:
   intermediate@test.com    | Intermediate  | test123
 ──────────────────────────────────────────────────────────────────────
 
-🔄 [2:30:17 PM] [3/4] Creating scenario-specific workout programs
+🔄 [2:30:17 PM] [3/5] Creating scenario-specific workout programs
 ✅ [2:30:18 PM] Program creation completed in 0.67s
 
-🔄 [2:30:18 PM] [4/4] Generating scenario-based workout logs
-✅ [2:30:20 PM] Workout log generation completed in 1.45s
+🔄 [2:30:18 PM] [4/5] Generating scenario-based workout logs
+✅ [2:30:19 PM] Workout log generation completed in 1.45s
 
-✅ [2:30:20 PM] Complete seeding process completed in 4.20s
+🔄 [2:30:19 PM] [5/5] Generating scenario-based quick workouts
+✅ [2:30:20 PM] Quick workout generation completed in 0.61s
+
+✅ [2:30:20 PM] Complete seeding process completed in 5.81s
 
 📊 Seeding Results
 ──────────────────────────────────────────────────
   Exercise Database: 45 exercises
   Test Users: 2 users
   Workout Programs: 4 programs
+  Workout Logs: 89 workout logs
+  Quick Workouts: 56 quick workouts
   Historical Data: Generated
-  Total Duration: 4.20s
+  Total Duration: 5.81s
 
 🎉 [2:30:20 PM] Seeding completed successfully!
 ```

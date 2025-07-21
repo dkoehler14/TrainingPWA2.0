@@ -9,6 +9,7 @@ const { seedExercises } = require('./data/exercises');
 const { seedUsers } = require('./data/users');
 const { seedPrograms } = require('./data/programs');
 const { seedWorkoutLogs } = require('./data/workout-logs');
+const { seedQuickWorkouts } = require('./data/quick-workouts');
 const { 
   logProgress, 
   logStep, 
@@ -35,7 +36,7 @@ const { validateSeedingConfig } = require('./utils/validation');
 async function seedAll(options = {}) {
   const startTime = Date.now();
   const { scenarios = 'basic', verbose = false, includeHistoricalData = true } = options;
-  const totalSteps = includeHistoricalData ? 4 : 3;
+  const totalSteps = includeHistoricalData ? 5 : 3;
   
   // Validate seeding configuration
   const configValidation = validateSeedingConfig({ scenarios, ...options });
@@ -127,6 +128,24 @@ async function seedAll(options = {}) {
       logProgress('Skipping historical workout log generation', 'warning');
     }
     
+    // Step 5: Seed quick workouts with scenario-based patterns (optional)
+    let quickWorkoutResults = null;
+    if (includeHistoricalData) {
+      logStep(5, totalSteps, 'Generating scenario-based quick workouts');
+      quickWorkoutResults = await errorHandler.executeWithRetry(
+        'seedQuickWorkouts',
+        async () => {
+          const quickWorkoutStepStart = Date.now();
+          const result = await seedQuickWorkouts(users, exerciseResults.createdExercises, { ...options, verbose });
+          logTiming('Quick workout generation', quickWorkoutStepStart);
+          return result;
+        },
+        { step: 5, totalSteps, userCount: users.length }
+      );
+    } else {
+      logProgress('Skipping historical quick workout generation', 'warning');
+    }
+    
     // Final summary
     logTiming('Complete seeding process', startTime);
     
@@ -134,6 +153,8 @@ async function seedAll(options = {}) {
       exercises: exerciseResults.totalExercises,
       users: users.length,
       programs: programResults?.totalPrograms || users.length,
+      workoutLogs: logResults?.totalWorkoutLogs || 0,
+      quickWorkouts: quickWorkoutResults?.totalQuickWorkouts || 0,
       historicalData: includeHistoricalData,
       duration: parseFloat(((Date.now() - startTime) / 1000).toFixed(2)),
       operationsSummary: errorHandler.getTracker().getSummary()
@@ -144,6 +165,8 @@ async function seedAll(options = {}) {
         exerciseDatabase: `${summary.exercises} exercises`,
         testUsers: `${summary.users} users`,
         workoutPrograms: `${summary.programs} programs`,
+        workoutLogs: includeHistoricalData ? `${summary.workoutLogs} workout logs` : 'Skipped',
+        quickWorkouts: includeHistoricalData ? `${summary.quickWorkouts} quick workouts` : 'Skipped',
         historicalData: summary.historicalData ? 'Generated' : 'Skipped',
         totalDuration: `${summary.duration}s`,
         completedOperations: summary.operationsSummary.completedOperations,
@@ -199,7 +222,7 @@ async function seedAll(options = {}) {
 async function resetAll(options = {}) {
   const startTime = Date.now();
   const { verbose = false } = options;
-  const totalSteps = 4;
+  const totalSteps = 5;
   
   logProgress('Starting test data reset process', 'start');
   
@@ -209,6 +232,7 @@ async function resetAll(options = {}) {
     const { resetUsers } = require('./data/users');
     const { resetPrograms } = require('./data/programs');
     const { resetWorkoutLogs } = require('./data/workout-logs');
+    const { resetQuickWorkouts } = require('./data/quick-workouts');
     const { confirmReset, getResetStatistics, reportResetCompletion } = require('./utils/reset-helpers');
     const { getFirestore } = require('./utils/firebase-config');
     
@@ -219,6 +243,7 @@ async function resetAll(options = {}) {
     if (verbose) {
       logSummary('Current Data Before Reset', {
         workoutLogs: beforeStats.workoutLogs,
+        quickWorkouts: beforeStats.quickWorkouts || 0,
         programs: beforeStats.programs,
         users: beforeStats.users,
         exercises: beforeStats.exercises
@@ -232,8 +257,18 @@ async function resetAll(options = {}) {
       return { success: false, cancelled: true };
     }
     
-    // Step 1: Reset workout logs (dependent on users and programs)
-    logStep(1, totalSteps, 'Clearing workout logs');
+    // Step 1: Reset quick workouts (dependent on users)
+    logStep(1, totalSteps, 'Clearing quick workouts');
+    const quickWorkoutStepStart = Date.now();
+    const quickWorkoutCount = await resetQuickWorkouts(options);
+    if (quickWorkoutCount > 0) {
+      logTiming(`Cleared ${quickWorkoutCount} quick workouts`, quickWorkoutStepStart);
+    } else {
+      logProgress('No quick workouts to clear', 'info');
+    }
+    
+    // Step 2: Reset workout logs (dependent on users and programs)
+    logStep(2, totalSteps, 'Clearing workout logs');
     const logStepStart = Date.now();
     const workoutLogCount = await resetWorkoutLogs(options);
     if (workoutLogCount > 0) {
@@ -242,8 +277,8 @@ async function resetAll(options = {}) {
       logProgress('No workout logs to clear', 'info');
     }
     
-    // Step 2: Reset programs (dependent on users and exercises)
-    logStep(2, totalSteps, 'Clearing workout programs');
+    // Step 3: Reset programs (dependent on users and exercises)
+    logStep(3, totalSteps, 'Clearing workout programs');
     const programStepStart = Date.now();
     const programCount = await resetPrograms(options);
     if (programCount > 0) {
@@ -252,8 +287,8 @@ async function resetAll(options = {}) {
       logProgress('No workout programs to clear', 'info');
     }
     
-    // Step 3: Reset users (Auth and Firestore)
-    logStep(3, totalSteps, 'Clearing test users');
+    // Step 4: Reset users (Auth and Firestore)
+    logStep(4, totalSteps, 'Clearing test users');
     const userStepStart = Date.now();
     const userCount = await resetUsers(options);
     if (userCount > 0) {
@@ -262,8 +297,8 @@ async function resetAll(options = {}) {
       logProgress('No test users to clear', 'info');
     }
     
-    // Step 4: Reset exercises (independent)
-    logStep(4, totalSteps, 'Clearing exercise database');
+    // Step 5: Reset exercises (independent)
+    logStep(5, totalSteps, 'Clearing exercise database');
     const exerciseStepStart = Date.now();
     const exerciseCount = await resetExercises(options);
     if (exerciseCount > 0) {
@@ -279,6 +314,7 @@ async function resetAll(options = {}) {
     logTiming('Complete reset process', startTime);
     
     const statistics = {
+      quickWorkouts: quickWorkoutCount,
       workoutLogs: workoutLogCount,
       programs: programCount,
       users: userCount,
@@ -288,6 +324,7 @@ async function resetAll(options = {}) {
     
     if (verbose) {
       logSummary('Reset Results', {
+        quickWorkoutsCleared: statistics.quickWorkouts,
         workoutLogsCleared: statistics.workoutLogs,
         programsCleared: statistics.programs,
         usersCleared: statistics.users,

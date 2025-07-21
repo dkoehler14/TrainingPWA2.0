@@ -169,7 +169,6 @@ function AppContent() {
         <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
         <Route path="/quick-workout" element={user ? <QuickWorkout /> : <Navigate to="/auth" />} />
         <Route path="/quick-workout-history" element={user ? <QuickWorkoutHistory /> : <Navigate to="/auth" />} />
-        <Route path="/quick-workout-history/:workoutId" element={user ? <QuickWorkoutHistory /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/progress-coach" element={user ? <ProgressCoach /> : <Navigate to="/auth" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />

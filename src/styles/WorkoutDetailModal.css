@@ -1,0 +1,66 @@
+/**
+ * WorkoutDetailModal Styles
+ * 
+ * Styles specific to the workout detail modal component
+ * to ensure proper display and scrolling behavior.
+ */
+
+/* Modal-specific header styling */
+.workout-detail-modal-header {
+  border-bottom: 1px solid var(--bs-border-color);
+  padding-bottom: 1rem;
+}
+
+/* Ensure proper spacing in modal context */
+.modal-body .workout-stats-overview {
+  margin-bottom: 1.5rem;
+}
+
+/* Exercise detail cards in modal */
+.modal-body .exercise-detail-card {
+  margin-bottom: 1rem;
+}
+
+.modal-body .exercise-detail-card:last-child {
+  margin-bottom: 0;
+}
+
+/* Responsive adjustments for modal */
+@media (max-width: 768px) {
+  .workout-detail-modal-header .d-flex {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  
+  .workout-detail-modal-header .d-flex > div:first-child {
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Ensure proper table responsiveness in modal */
+.modal-body .workout-table {
+  font-size: 0.9rem;
+}
+
+/* Action button spacing in modal header */
+.workout-detail-modal-header .d-flex.gap-2 {
+  gap: 0.5rem !important;
+}
+
+/* Modal body padding override for workout content */
+.modal-body.p-0 {
+  padding: 0 !important;
+}
+
+/* Workout stats in modal context */
+.modal-body .workout-stats-item {
+  padding: 0.5rem;
+}
+
+.modal-body .workout-stats-value {
+  font-size: 1.25rem;
+}
+
+.modal-body .workout-stats-label {
+  font-size: 0.8rem;
+}
