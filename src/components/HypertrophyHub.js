@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import '../styles/HypertrophyHub.css';
 
 const HypertrophyHub = () => {
@@ -218,12 +218,6 @@ const HypertrophyHub = () => {
         return 'Fresh';
     };
 
-    const getQualityColor = (quality) => {
-        if (quality >= 80) return '#27ae60'; // Excellent
-        if (quality >= 60) return '#f39c12'; // Good
-        if (quality >= 40) return '#e67e22'; // Fair
-        return '#e74c3c'; // Poor
-    };
 
     if (loading) {
         return (

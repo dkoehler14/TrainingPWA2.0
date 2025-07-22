@@ -5,7 +5,7 @@ import { db, auth } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
-import { getCollectionCached, invalidateProgramCache, invalidateExerciseCache, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getDocCached, invalidateProgramCache, invalidateExerciseCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
@@ -81,9 +81,48 @@ function Programs({ userRole }) {
             weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
           })));
 
-          // Fetch exercises
-          const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-          setExercises(exercisesData);
+          // Fetch exercises using metadata approach (same as LogWorkout.js)
+          try {
+            // Fetch global exercises from metadata
+            const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+
+            // Add source metadata to global exercises
+            const enhancedGlobalExercises = globalExercises.map(ex => ({
+              ...ex,
+              isGlobal: true,
+              source: 'global',
+              createdBy: null
+            }));
+
+            // Fetch user-specific exercises if user exists
+            let userExercises = [];
+            if (user?.uid) {
+              try {
+                const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                if (userMetadata && userMetadata.exercises) {
+                  userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
+                    id,
+                    ...ex,
+                    isGlobal: false,
+                    source: 'custom',
+                    createdBy: user.uid
+                  }));
+                }
+              } catch (userError) {
+                // User metadata document doesn't exist yet - this is normal for new users
+                console.log('No user-specific exercises found');
+              }
+            }
+
+            // Combine global and user exercises
+            const allExercises = [...enhancedGlobalExercises, ...userExercises];
+            setExercises(allExercises);
+          } catch (error) {
+            console.error('Error fetching exercises metadata, falling back to original method:', error);
+            // Fallback to original method if metadata approach fails
+            const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
+            setExercises(exercisesData);
+          }
         } catch (error) {
           console.error("Error fetching data: ", error);
         } finally {

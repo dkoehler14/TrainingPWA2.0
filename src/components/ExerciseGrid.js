@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Row, Col, Form, Button, ButtonGroup, Badge } from 'react-bootstrap';
-import { PencilSquare, Globe, Person, FunnelFill, SortDown } from 'react-bootstrap-icons';
+import { PencilSquare, Globe, Person } from 'react-bootstrap-icons';
 import ExerciseSourceBadge from './ExerciseSourceBadge';
 import '../styles/ExerciseGrid.css';
 
@@ -40,7 +40,7 @@ const ExerciseGrid = ({
     const [muscleFilter, setMuscleFilter] = useState(initialMuscleFilter);
     const [sourceFilter, setSourceFilter] = useState(initialSourceFilter);
     const [sortOption, setSortOption] = useState('name-asc');
-    const [showAdvancedFilters, setShowAdvancedFilters] = useState(true);
+    const [showAdvancedFilters] = useState(true);
 
     // Enhanced filtering and sorting logic
     const filteredExercises = exercises

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Card, Row, Col, Button, ButtonGroup, Badge, Collapse } from 'react-bootstrap';
-import { ChevronDown, ChevronUp, Grid3x3Gap, List, BarChart } from 'react-bootstrap-icons';
+import { Card, Row, Col, Button, Badge, Collapse } from 'react-bootstrap';
+import { ChevronDown, ChevronUp, BarChart } from 'react-bootstrap-icons';
 import ExerciseGrid from './ExerciseGrid';
 import '../styles/ExerciseOrganizer.css';
 
@@ -12,9 +12,9 @@ const ExerciseOrganizer = ({
     className = "",
     userRole = "user"
 }) => {
-    const [viewMode, setViewMode] = useState('grid'); // 'grid', 'list', 'grouped'
+    const [viewMode] = useState('grid'); // 'grid', 'list', 'grouped'
     const [showStats, setShowStats] = useState(false);
-    const [groupBy, setGroupBy] = useState('source'); // 'source', 'muscle', 'type'
+    const [groupBy] = useState('source'); // 'source', 'muscle', 'type'
 
     // Calculate statistics
     const stats = {

@@ -21,6 +21,8 @@ const useQuickWorkoutHistory = () => {
     setError(null);
 
     try {
+      // Phase 1 Optimization: Longer TTL for historical data (30 minutes)
+      // Historical workout data changes less frequently than active workouts
       const workoutData = await getCollectionCached(
         'workoutLogs',
         {
@@ -31,7 +33,7 @@ const useQuickWorkoutHistory = () => {
           ],
           orderBy: [['completedDate', 'desc']]
         },
-        15 * 60 * 1000 // 15 minutes TTL
+        30 * 60 * 1000 // 30 minutes TTL - optimized for historical data
       );
 
       // Validate workout data structure

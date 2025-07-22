@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
-import { collection, addDoc, doc, updateDoc, runTransaction } from 'firebase/firestore';
+import { collection, doc, runTransaction } from 'firebase/firestore';
 import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
 
 const MUSCLE_GROUPS = [

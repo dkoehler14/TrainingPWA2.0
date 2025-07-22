@@ -11,7 +11,6 @@ import {
   invalidateProgramCache,
   invalidateExerciseCache,
   warmUserCache,
-  warmAppCache
 } from '../api/enhancedFirestoreCache';
 import cacheWarmingService from '../services/cacheWarmingService';
 

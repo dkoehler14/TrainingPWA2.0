@@ -42,7 +42,8 @@ function AppContent() {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cacheInitialized, setCacheInitialized] = useState(false);
-  const { darkMode, toggleDarkMode } = useTheme();
+  // eslint-disable-next-line no-unused-vars
+  const {} = useTheme();
 
   // Initialize app cache and development debugging on startup
   useEffect(() => {
@@ -131,11 +132,7 @@ function AppContent() {
       const pageName = currentPath.split('/')[1] || 'home';
 
       // Warm cache based on page context
-      const pageContext = {
-        lastVisitedPage: pageName,
-        timeOfDay: new Date().getHours(),
-        dayOfWeek: new Date().getDay()
-      };
+      // Progressive warming for heavy pages
 
       // Progressive warming for heavy pages
       if (['progress-tracker', 'log-workout', 'programs'].includes(pageName)) {
@@ -143,7 +140,7 @@ function AppContent() {
           .catch(error => console.warn('⚠️ Progressive cache warming failed:', error));
       }
     }
-  }, [user, cacheInitialized, window.location.pathname]);
+  }, [user, cacheInitialized]);
 
   if (loading) {
     return (

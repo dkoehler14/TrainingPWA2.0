@@ -9,7 +9,6 @@ import React from 'react';
 import { Card, Row, Col, Badge, Table, Alert } from 'react-bootstrap';
 import { BarChart, Calendar, Clock, CheckCircleFill, ExclamationTriangle } from 'react-bootstrap-icons';
 import { getWorkoutStatistics } from '../utils/workoutStatsUtils';
-import { WorkoutStatsCardSkeleton } from './WorkoutHistorySkeleton';
 import '../styles/QuickWorkoutHistory.css';
 
 const WorkoutStatsCard = ({ workouts = [], exercises = [] }) => {

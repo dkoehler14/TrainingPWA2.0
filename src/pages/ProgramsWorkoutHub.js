@@ -16,7 +16,7 @@ import { Container, Row, Col, Spinner } from 'react-bootstrap';
 import ViewSelector from '../components/ViewSelector';
 import ProgramsWorkoutHubErrorBoundary from '../components/ProgramsWorkoutHubErrorBoundary';
 import '../styles/ProgramsWorkoutHub.css';
-import { usePerformanceMonitor } from '../utils/performanceMonitor';
+import performanceMonitor from '../utils/performanceMonitor';
 import { useViewStateCache } from '../utils/viewStateCache';
 
 // Lazy load view wrapper components for better performance
@@ -49,7 +49,8 @@ function ProgramsWorkoutHub({ userRole }) {
   const navigate = useNavigate();
 
   // Performance monitoring and state caching hooks
-  const performanceMonitor = usePerformanceMonitor();
+  // Performance monitoring is available as a singleton
+  // const performanceMonitor is already imported above
   const stateCache = useViewStateCache();
 
   // State for active view and loading
@@ -267,35 +268,11 @@ function ProgramsWorkoutHub({ userRole }) {
 
   return (
     <Container fluid className="soft-container py-4">
-      {/* Header with View Selector */}
+      {/* Prominent View Selector Header */}
       <Row className="mb-4">
         <Col>
           <div className="programs-workout-hub-header">
-            <div className="header-content">
-              {/* Breadcrumb-style navigation */}
-              <nav aria-label="Page navigation" className="breadcrumb-nav mb-2">
-                <span className="breadcrumb-item">Workout Hub</span>
-                <span className="breadcrumb-separator" aria-hidden="true">›</span>
-                <span className="breadcrumb-item active" aria-current="page">
-                  {currentViewConfig.label}
-                </span>
-              </nav>
-
-              <div className="title-section">
-                <h1 className="soft-title mb-1 view-title" data-view={activeView}>
-                  {currentViewConfig.label}
-                </h1>
-                <p className="soft-text mb-0 view-description">
-                  {activeView === 'programs'
-                    ? 'Manage your workout programs and templates'
-                    : 'View and manage your quick workout history'
-                  }
-                </p>
-              </div>
-            </div>
-
-            {/* View Selector Dropdown */}
-            <div className="view-selector-container">
+            <div className="prominent-view-selector-container">
               <label htmlFor="view-selector" className="visually-hidden">
                 Switch between Programs and Quick Workouts view
               </label>
@@ -304,9 +281,15 @@ function ProgramsWorkoutHub({ userRole }) {
                 activeView={activeView}
                 onViewChange={handleViewChange}
                 options={VIEW_OPTIONS}
-                className="programs-workout-hub-selector"
+                className="programs-workout-hub-selector prominent-selector"
                 disabled={isViewSwitching}
               />
+              <p className="view-description">
+                {activeView === 'programs'
+                  ? 'Manage your workout programs and templates'
+                  : 'View and manage your quick workout history'
+                }
+              </p>
             </div>
           </div>
         </Col>
@@ -316,9 +299,6 @@ function ProgramsWorkoutHub({ userRole }) {
       <Row>
         <Col>
           <div className={`view-content view-content--${activeView}`} data-view={activeView}>
-            <div className="view-indicator" aria-hidden="true">
-              <span className="view-indicator-label">{currentViewConfig.label}</span>
-            </div>
             {renderCurrentView()}
           </div>
         </Col>

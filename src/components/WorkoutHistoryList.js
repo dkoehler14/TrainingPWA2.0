@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Card, Row, Col, Button, Badge, Spinner, Alert } from 'react-bootstrap';
+import { Card, Row, Col, Button, Badge, Alert } from 'react-bootstrap';
 import { 
   Calendar, 
   Eye, 

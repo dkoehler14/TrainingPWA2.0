@@ -60,8 +60,8 @@ try {
   
   // Initialize Firebase services with enhanced debugging and error handling
   try {
-    const firestoreInit = serviceStatusLogger.logServiceInitialization('firestore', { 
-      emulatorMode: shouldUseEmulators() 
+    serviceStatusLogger.logServiceInitialization('firestore', {
+      emulatorMode: shouldUseEmulators()
     });
     db = getFirestore(app);
     serviceStatusLogger.logServiceSuccess('firestore', { initialized: true });
@@ -77,8 +77,8 @@ try {
   }
 
   try {
-    const authInit = serviceStatusLogger.logServiceInitialization('auth', { 
-      emulatorMode: shouldUseEmulators() 
+    serviceStatusLogger.logServiceInitialization('auth', {
+      emulatorMode: shouldUseEmulators()
     });
     auth = getAuth(app);
     serviceStatusLogger.logServiceSuccess('auth', { initialized: true });
@@ -94,8 +94,8 @@ try {
   }
 
   try {
-    const functionsInit = serviceStatusLogger.logServiceInitialization('functions', { 
-      emulatorMode: shouldUseEmulators() 
+    serviceStatusLogger.logServiceInitialization('functions', {
+      emulatorMode: shouldUseEmulators()
     });
     functions = getFunctions(app);
     serviceStatusLogger.logServiceSuccess('functions', { initialized: true });

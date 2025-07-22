@@ -1,6 +1,9 @@
 # Implementation Plan
 
 - [ ] 1. Create useAutoSave custom hook
+
+
+
   - Create new hook file with debounced save functionality
   - Implement state management for draft ID, save status, and error handling
   - Add cleanup logic for component unmount

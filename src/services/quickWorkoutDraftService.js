@@ -14,19 +14,21 @@ import {
     collection, 
     Timestamp 
 } from 'firebase/firestore';
-import { 
-    getCollectionCached, 
-    invalidateWorkoutCache 
+import {
+    getCollectionCached,
+    invalidateWorkoutCache,
+    invalidateUserCache
 } from '../api/enhancedFirestoreCache';
 
 class QuickWorkoutDraftService {
     constructor() {
-        this.DRAFT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+        // Phase 1 Optimization: Increase draft cache TTL since drafts don't change frequently
+        this.DRAFT_CACHE_TTL = 15 * 60 * 1000; // 15 minutes (was 5 minutes)
         this.OLD_DRAFT_THRESHOLD_DAYS = 7;
     }
 
     /**
-     * Save a workout as a draft
+     * Save a workout as a draft (single-draft mode - replaces any existing draft)
      */
     async saveDraft(userId, exercises, workoutName, existingDraftId = null) {
         if (!userId || !exercises || exercises.length === 0) {
@@ -35,7 +37,7 @@ class QuickWorkoutDraftService {
 
         const draftData = {
             userId,
-            name: workoutName || `Quick Workout Draft - ${new Date().toLocaleDateString()}`,
+            name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
             type: 'quick_workout',
             exercises: exercises.map(ex => ({
                 exerciseId: ex.exerciseId,
@@ -53,20 +55,108 @@ class QuickWorkoutDraftService {
         };
 
         let result;
+        
+        // For single-draft mode: if no existingDraftId provided, check for existing draft
+        if (!existingDraftId) {
+            const existingDraft = await this.getSingleDraft(userId);
+            if (existingDraft) {
+                existingDraftId = existingDraft.id;
+            }
+        }
+
         if (existingDraftId) {
             // Update existing draft
             await updateDoc(doc(db, "workoutLogs", existingDraftId), draftData);
             result = { id: existingDraftId, ...draftData };
         } else {
-            // Create new draft
+            // Create new draft (and clean up any orphaned drafts)
+            await this.cleanupAllDrafts(userId);
             const docRef = await addDoc(collection(db, "workoutLogs"), draftData);
             result = { id: docRef.id, ...draftData };
         }
 
-        // Invalidate cache to ensure fresh data
-        invalidateWorkoutCache(userId);
+        // Phase 1 Optimization: Granular cache invalidation
+        // Only invalidate workout cache if this is a significant change
+        if (exercises && exercises.length > 0) {
+            invalidateWorkoutCache(userId);
+        } else {
+            // For minor draft updates, only invalidate specific draft cache
+            const cacheKey = `workoutLogs_drafts_${userId}`;
+            invalidateUserCache(userId, [cacheKey]);
+        }
         
         return result;
+    }
+
+    /**
+     * Get the single draft for a user (single-draft mode)
+     */
+    async getSingleDraft(userId) {
+        if (!userId) {
+            throw new Error('User ID is required to load draft');
+        }
+
+        try {
+            const draftsData = await getCollectionCached(
+                'workoutLogs',
+                {
+                    where: [
+                        ['userId', '==', userId],
+                        ['isDraft', '==', true],
+                        ['type', '==', 'quick_workout']
+                    ],
+                    orderBy: [['lastModified', 'desc']],
+                    limit: 1
+                },
+                this.DRAFT_CACHE_TTL
+            );
+
+            return draftsData.length > 0 ? draftsData[0] : null;
+        } catch (error) {
+            console.error('Error loading single draft:', error);
+            throw new Error('Failed to load workout draft');
+        }
+    }
+
+    /**
+     * Clean up all drafts for a user (used in single-draft mode)
+     */
+    async cleanupAllDrafts(userId) {
+        if (!userId) {
+            return;
+        }
+
+        try {
+            const allDrafts = await getCollectionCached(
+                'workoutLogs',
+                {
+                    where: [
+                        ['userId', '==', userId],
+                        ['isDraft', '==', true],
+                        ['type', '==', 'quick_workout']
+                    ]
+                },
+                60 * 60 * 1000 // 1 hour cache for cleanup operations
+            );
+
+            // Delete all existing drafts
+            const deletePromises = allDrafts.map(draft =>
+                deleteDoc(doc(db, "workoutLogs", draft.id))
+            );
+
+            if (deletePromises.length > 0) {
+                await Promise.all(deletePromises);
+                // Phase 1 Optimization: Targeted cache invalidation for cleanup
+                invalidateWorkoutCache(userId);
+                console.log(`Phase 1: Cleaned up ${deletePromises.length} existing workout drafts with optimized cache invalidation`);
+            }
+
+            return deletePromises.length;
+        } catch (error) {
+            console.error('Error cleaning up all drafts:', error);
+            // Don't throw error for cleanup operations
+            return 0;
+        }
     }
 
     /**
@@ -109,7 +199,10 @@ class QuickWorkoutDraftService {
 
         try {
             await deleteDoc(doc(db, "workoutLogs", draftId));
-            invalidateWorkoutCache(userId);
+            // Phase 1 Optimization: Minimal cache invalidation for single draft deletion
+            // Only invalidate draft-specific cache, not all workout data
+            const cacheKey = `workoutLogs_drafts_${userId}`;
+            invalidateUserCache(userId, [cacheKey]);
         } catch (error) {
             console.error('Error deleting draft:', error);
             throw new Error('Failed to delete workout draft');
@@ -117,7 +210,7 @@ class QuickWorkoutDraftService {
     }
 
     /**
-     * Convert a draft to a completed workout
+     * Convert a draft to a completed workout (single-draft mode)
      */
     async completeDraft(userId, draftId, exercises, workoutName) {
         if (!userId || !draftId || !exercises) {
@@ -145,8 +238,13 @@ class QuickWorkoutDraftService {
         };
 
         try {
+            // Convert the draft to a completed workout
             await updateDoc(doc(db, "workoutLogs", draftId), completedWorkoutData);
+            // Phase 1 Optimization: Full cache invalidation needed when completing draft
+            // This affects both draft and workout history caches
             invalidateWorkoutCache(userId);
+            
+            console.log('Phase 1: Quick workout draft completed with optimized cache invalidation');
             return { id: draftId, ...completedWorkoutData };
         } catch (error) {
             console.error('Error completing draft:', error);
@@ -185,8 +283,10 @@ class QuickWorkoutDraftService {
 
             if (deletePromises.length > 0) {
                 await Promise.all(deletePromises);
-                invalidateWorkoutCache(userId);
-                console.log(`Cleaned up ${deletePromises.length} old workout drafts`);
+                // Phase 1 Optimization: Targeted invalidation for old draft cleanup
+                const cacheKey = `workoutLogs_drafts_${userId}`;
+                invalidateUserCache(userId, [cacheKey]);
+                console.log(`Phase 1: Cleaned up ${deletePromises.length} old workout drafts with minimal cache invalidation`);
             }
 
             return deletePromises.length;

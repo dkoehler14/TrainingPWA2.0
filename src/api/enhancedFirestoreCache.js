@@ -4,7 +4,6 @@ import { collection, getDocs, doc, getDoc, query as fsQuery, where, orderBy as f
 
 // Enhanced cache with metadata
 const cache = new Map();
-const cacheMetadata = new Map(); // Track cache statistics
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Enhanced cache statistics with database read tracking
@@ -48,7 +47,6 @@ const queryPerformance = new Map();
 
 // Firestore pricing constants (as of 2024)
 const FIRESTORE_READ_COST_PER_100K = 0.06; // $0.06 per 100,000 reads
-const FIRESTORE_WRITE_COST_PER_100K = 0.18; // $0.18 per 100,000 writes
 
 // Database read tracking functions
 function trackFirestoreRead(collection, queryType, documentCount, dataSize, queryTime, userId = null) {
@@ -549,7 +547,7 @@ export function invalidateCache(patterns, options = {}) {
   // Convert single pattern to array
   const patternArray = Array.isArray(patterns) ? patterns : [patterns];
   
-  for (const [key, entry] of cache) {
+  for (const [key] of cache) {
     let shouldInvalidate = false;
     
     // Check pattern matching

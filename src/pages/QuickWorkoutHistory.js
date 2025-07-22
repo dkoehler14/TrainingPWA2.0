@@ -76,21 +76,38 @@ function QuickWorkoutHistoryContent() {
       }
 
       try {
-        // Fetch global exercises with error handling
-        let globalExercises = [];
-        try {
-          globalExercises = await getAllExercisesMetadata(60 * 60 * 1000);
-          if (!Array.isArray(globalExercises)) {
-            console.warn('Global exercises data is not an array:', globalExercises);
-            globalExercises = [];
-          }
-        } catch (globalError) {
-          console.error('Error fetching global exercises:', globalError);
-          showUserMessage('Some exercise data may be unavailable', 'warning');
-          globalExercises = [];
+        // Phase 1 Optimization: Start cache warming for history page
+        const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
+        const warmingPromise = cacheWarmingService.smartWarmCache(user.uid, {
+          lastVisitedPage: 'QuickWorkoutHistory',
+          timeOfDay: new Date().getHours(),
+          priority: 'normal'
+        }).catch(error => {
+          console.warn('Cache warming failed:', error);
+          return null;
+        });
+
+        // Phase 1 Optimization: Parallel loading with optimized TTL
+        const [globalExercises, userMetadata] = await Promise.all([
+          // Global exercises - 2 hours TTL (very stable data)
+          getAllExercisesMetadata(2 * 60 * 60 * 1000).catch(globalError => {
+            console.error('Error fetching global exercises:', globalError);
+            showUserMessage('Some exercise data may be unavailable', 'warning');
+            return [];
+          }),
+          // User exercises - 1 hour TTL (occasional changes)
+          getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000).catch(() => null),
+          // Ensure cache warming completes
+          warmingPromise
+        ]);
+
+        // Validate and process global exercises
+        const validGlobalExercises = Array.isArray(globalExercises) ? globalExercises : [];
+        if (!Array.isArray(globalExercises)) {
+          console.warn('Global exercises data is not an array:', globalExercises);
         }
 
-        const enhancedGlobalExercises = globalExercises.map(ex => {
+        const enhancedGlobalExercises = validGlobalExercises.map(ex => {
           // Validate exercise structure
           if (!ex || typeof ex !== 'object' || !ex.id) {
             console.warn('Invalid global exercise data:', ex);
@@ -104,29 +121,23 @@ function QuickWorkoutHistoryContent() {
           };
         }).filter(Boolean); // Remove null entries
 
-        // Fetch user-specific exercises with error handling
+        // Process user-specific exercises
         let userExercises = [];
-        try {
-          const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
-          if (userMetadata && userMetadata.exercises && typeof userMetadata.exercises === 'object') {
-            userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => {
-              // Validate user exercise structure
-              if (!ex || typeof ex !== 'object') {
-                console.warn('Invalid user exercise data:', id, ex);
-                return null;
-              }
-              return {
-                id,
-                ...ex,
-                isGlobal: false,
-                source: 'custom',
-                createdBy: user.uid
-              };
-            }).filter(Boolean); // Remove null entries
-          }
-        } catch (userError) {
-          console.log('No user-specific exercises found or error fetching:', userError.message);
-          // Don't show error message for user exercises as they might not exist
+        if (userMetadata && userMetadata.exercises && typeof userMetadata.exercises === 'object') {
+          userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => {
+            // Validate user exercise structure
+            if (!ex || typeof ex !== 'object') {
+              console.warn('Invalid user exercise data:', id, ex);
+              return null;
+            }
+            return {
+              id,
+              ...ex,
+              isGlobal: false,
+              source: 'custom',
+              createdBy: user.uid
+            };
+          }).filter(Boolean); // Remove null entries
         }
 
         const allExercises = [...enhancedGlobalExercises, ...userExercises];

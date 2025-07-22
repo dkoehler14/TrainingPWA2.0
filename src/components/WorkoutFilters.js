@@ -45,7 +45,6 @@ const WorkoutFilters = ({
     debounce((searchValue) => {
       onSearchChange(searchValue);
     }, 300), // 300ms debounce
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [onSearchChange]
   );
 

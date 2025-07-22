@@ -238,7 +238,8 @@ export const useViewStateCache = () => {
     clearState: viewStateCache.clearState.bind(viewStateCache),
     mergeState: viewStateCache.mergeState.bind(viewStateCache),
     getStateWithFallback: viewStateCache.getStateWithFallback.bind(viewStateCache),
-    getStats: viewStateCache.getStats.bind(viewStateCache)
+    getStats: viewStateCache.getStats.bind(viewStateCache),
+    cleanup: viewStateCache.cleanup.bind(viewStateCache)
   };
 };
 

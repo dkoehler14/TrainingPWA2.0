@@ -9,7 +9,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Badge, Collapse, Table, Alert } from 'react-bootstrap';
 import { 
   getDevelopmentDebuggingStatus,
-  serviceStatusLogger,
   developmentLogger
 } from '../utils/developmentDebugger';
 import { getStoredErrors, clearStoredErrors } from '../utils/developmentErrorHandler';
