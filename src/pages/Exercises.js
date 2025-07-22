@@ -7,6 +7,7 @@ import '../styles/Exercises.css';
 import '../styles/ExerciseGrid.css';
 import '../styles/ExerciseOrganizer.css';
 import { getCollectionCached, warmUserCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
+import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 
 function Exercises({ user, userRole }) {
   const [exercises, setExercises] = useState([]);

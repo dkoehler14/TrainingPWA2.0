@@ -3,18 +3,7 @@ import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { db } from '../firebase';
 import { collection, doc, runTransaction } from 'firebase/firestore';
 import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
-
-const MUSCLE_GROUPS = [
-    'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
-    'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
-    'Traps', 'Forearms'
-];
-
-const EXERCISE_TYPES = [
-    'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-    'Bodyweight', 'Bodyweight Loadable', 'Swiss Bar', 'Kettlebell',
-    'Machine', 'Smith Machine', 'Camber Bar', 'Bands'
-];
+import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 
 function ExerciseCreationModal({
     show,

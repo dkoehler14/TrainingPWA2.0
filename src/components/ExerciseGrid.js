@@ -3,19 +3,7 @@ import { Row, Col, Form, Button, ButtonGroup, Badge } from 'react-bootstrap';
 import { PencilSquare, Globe, Person } from 'react-bootstrap-icons';
 import ExerciseSourceBadge from './ExerciseSourceBadge';
 import '../styles/ExerciseGrid.css';
-
-// Constants for filtering
-const MUSCLE_GROUPS = [
-    'Back', 'Biceps', 'Triceps', 'Chest', 'Shoulders',
-    'Abs', 'Quads', 'Hamstrings', 'Glutes', 'Calves',
-    'Traps', 'Forearms'
-];
-
-const EXERCISE_TYPES = [
-    'Dumbbell', 'Barbell', 'Cable', 'Trap Bar', 'Safety Squat Bar',
-    'Bodyweight', 'Bodyweight Loadable', 'Kettlebell', 'Swiss Bar',
-    'Machine', 'Smith Machine', 'Camber Bar', 'Bands'
-];
+import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 
 const SOURCE_FILTERS = [
     { value: 'all', label: 'All Sources', icon: null },
