@@ -1561,7 +1561,17 @@ function Programs({ userRole }) {
       <Row className="justify-content-center">
         <Col md={10}>
           <div className="soft-card programs-card shadow border-0">
-            <h1 className="soft-title programs-title text-center mb-4">My Programs</h1>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h1 className="soft-title programs-title mb-0">My Programs</h1>
+              <Button
+                variant="primary"
+                onClick={() => navigate('/create-program')}
+                className="d-flex align-items-center"
+              >
+                <PlusCircle className="me-2" />
+                {isMobile ? 'New' : 'Create New Program'}
+              </Button>
+            </div>
 
             {isLoading ? (
               <div className="text-center py-4">

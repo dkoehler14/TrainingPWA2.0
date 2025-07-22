@@ -37,6 +37,7 @@ function QuickWorkout() {
     const [showResumeModal, setShowResumeModal] = useState(false);
     const [availableDrafts, setAvailableDrafts] = useState([]);
     const [lastSaved, setLastSaved] = useState(null);
+    const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
 
     const user = auth.currentUser;
 
@@ -471,9 +472,38 @@ function QuickWorkout() {
         setShowHistoryModal(true);
     };
 
-    const saveWorkout = async () => {
+    // Helper function to check if all sets are completed
+    const checkAllSetsCompleted = () => {
+        for (let exerciseIndex = 0; exerciseIndex < selectedExercises.length; exerciseIndex++) {
+            const exercise = selectedExercises[exerciseIndex];
+            for (let setIndex = 0; setIndex < exercise.sets; setIndex++) {
+                if (!exercise.completed[setIndex]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    const handleFinishWorkout = () => {
         if (!user || selectedExercises.length === 0) {
-            showUserMessage('Please add at least one exercise to save the workout', 'error');
+            showUserMessage('Please add at least one exercise to finish the workout', 'error');
+            return;
+        }
+
+        // Check if all sets are completed
+        if (!checkAllSetsCompleted()) {
+            setShowIncompleteWarningModal(true);
+            return;
+        }
+
+        // If all sets are completed, proceed directly
+        finishWorkout();
+    };
+
+    const finishWorkout = async () => {
+        if (!user || selectedExercises.length === 0) {
+            showUserMessage('Please add at least one exercise to finish the workout', 'error');
             return;
         }
 
@@ -513,7 +543,7 @@ function QuickWorkout() {
                 invalidateWorkoutCache(user.uid);
             }
 
-            showUserMessage('Quick workout saved successfully!', 'success');
+            showUserMessage('Quick workout finished successfully!', 'success');
 
             // Reset form
             setSelectedExercises([]);
@@ -522,7 +552,7 @@ function QuickWorkout() {
             setLastSaved(null);
         } catch (error) {
             console.error("Error saving quick workout:", error);
-            showUserMessage('Failed to save workout. Please try again.', 'error');
+            showUserMessage('Failed to finish workout. Please try again.', 'error');
         } finally {
             setIsSaving(false);
         }
@@ -765,7 +795,7 @@ function QuickWorkout() {
                         <Button
                             variant="success"
                             size="lg"
-                            onClick={saveWorkout}
+                            onClick={handleFinishWorkout}
                             disabled={isSaving}
                             className="soft-button"
                         >
@@ -777,7 +807,7 @@ function QuickWorkout() {
                             ) : (
                                 <>
                                     <BarChart className="me-2" />
-                                    Save Workout
+                                    Finish Workout
                                 </>
                             )}
                         </Button>
@@ -921,6 +951,48 @@ function QuickWorkout() {
                             Resume Workout
                         </Button>
                     )}
+                </Modal.Footer>
+            </Modal>
+
+            {/* Incomplete Sets Warning Modal */}
+            <Modal show={showIncompleteWarningModal} onHide={() => setShowIncompleteWarningModal(false)} centered>
+                <Modal.Header closeButton>
+                    <Modal.Title>⚠️ Incomplete Sets Detected</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p>
+                        Some sets in your workout are not marked as complete. Are you sure you want to finish the workout?
+                    </p>
+                    <div className="bg-light p-3 rounded">
+                        <small className="text-muted">
+                            <strong>Note:</strong> Incomplete sets will be finished as skipped and won't count toward your progress tracking.
+                        </small>
+                    </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button
+                        variant="secondary"
+                        onClick={() => setShowIncompleteWarningModal(false)}
+                    >
+                        Continue Workout
+                    </Button>
+                    <Button
+                        variant="warning"
+                        onClick={() => {
+                            setShowIncompleteWarningModal(false);
+                            finishWorkout();
+                        }}
+                        disabled={isSaving}
+                    >
+                        {isSaving ? (
+                            <>
+                                <Spinner animation="border" size="sm" className="me-2" />
+                                Saving...
+                            </>
+                        ) : (
+                            'Finish Anyway'
+                        )}
+                    </Button>
                 </Modal.Footer>
             </Modal>
         </Container>

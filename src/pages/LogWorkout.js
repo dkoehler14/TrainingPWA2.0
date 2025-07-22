@@ -133,6 +133,7 @@ function LogWorkout() {
   const [showBodyweightModal, setShowBodyweightModal] = useState(false);
   const [bodyweightInput, setBodyweightInput] = useState('');
   const [bodyweightExerciseIndex, setBodyweightExerciseIndex] = useState(null);
+  const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
 
   // Add Exercise functionality state
   const [showAddExerciseModal, setShowAddExerciseModal] = useState(false);
@@ -932,6 +933,32 @@ function LogWorkout() {
     }
   };
 
+  // Helper function to check if all sets are completed
+  const checkAllSetsCompleted = () => {
+    for (let exerciseIndex = 0; exerciseIndex < logData.length; exerciseIndex++) {
+      const exercise = logData[exerciseIndex];
+      for (let setIndex = 0; setIndex < exercise.sets; setIndex++) {
+        if (!exercise.completed[setIndex]) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const handleFinishWorkout = () => {
+    if (isWorkoutFinished || !user || !selectedProgram) return;
+    
+    // Check if all sets are completed
+    if (!checkAllSetsCompleted()) {
+      setShowIncompleteWarningModal(true);
+      return;
+    }
+    
+    // If all sets are completed, proceed directly
+    finishWorkout();
+  };
+
   const finishWorkout = async () => {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
@@ -1653,7 +1680,7 @@ function LogWorkout() {
 
                     <div className="text-center mt-3">
                       {!isWorkoutFinished ? (
-                        <Button onClick={finishWorkout} className="soft-button gradient">Finish Workout</Button>
+                        <Button onClick={handleFinishWorkout} className="soft-button gradient">Finish Workout</Button>
                       ) : (
                         <Button variant="secondary" disabled>Workout Completed</Button>
                       )}
@@ -1829,6 +1856,40 @@ function LogWorkout() {
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowAddExerciseModal(false)}>
             Cancel
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Incomplete Sets Warning Modal */}
+      <Modal show={showIncompleteWarningModal} onHide={() => setShowIncompleteWarningModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>⚠️ Incomplete Sets Detected</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Some sets in your workout are not marked as complete. Are you sure you want to finish the workout?
+          </p>
+          <div className="bg-light p-3 rounded">
+            <small className="text-muted">
+              <strong>Note:</strong> Incomplete sets will be saved as skipped and won't count toward your progress tracking.
+            </small>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowIncompleteWarningModal(false)}
+          >
+            Continue Workout
+          </Button>
+          <Button
+            variant="warning"
+            onClick={() => {
+              setShowIncompleteWarningModal(false);
+              finishWorkout();
+            }}
+          >
+            Finish Anyway
           </Button>
         </Modal.Footer>
       </Modal>
