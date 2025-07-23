@@ -1,7 +1,6 @@
 import React from 'react';
 import { Nav, Navbar, Button, Container } from 'react-bootstrap';
-import { auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../context/ThemeContext';
 import '../styles/NavBar.css';
 

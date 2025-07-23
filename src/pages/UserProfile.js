@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Form, Button, Alert, Spinner } from 'react-bootstrap';
-import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider, GoogleAuthProvider, linkWithPopup } from 'firebase/auth';
+import { useAuth } from '../hooks/useAuth';
+import { useProtectedRoute } from '../hooks/useProtectedRoute';
 import '../styles/UserProfile.css'
 
 function UserProfile() {
@@ -10,120 +9,131 @@ function UserProfile() {
     email: '',
     name: '',
     age: '',
-    heightFeet: '',
-    heightInches: '',
-    weightLbs: ''
+    experience_level: 'beginner',
+    preferred_units: 'LB',
+    height: '',
+    weight: '',
+    goals: [],
+    available_equipment: [],
+    injuries: []
   });
   const [newPassword, setNewPassword] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [heightErrors, setHeightErrors] = useState({ feet: '', inches: '' });
-  const user = auth.currentUser;
-  const [isLoading, setIsLoading] = useState(true);
-  const [googleLinked, setGoogleLinked] = useState(false);
-  const [linking, setLinking] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [passwordUpdating, setPasswordUpdating] = useState(false);
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      if (user) {
-        setIsLoading(true);
-        const userDocRef = doc(db, "users", user.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserData({
-            email: user.email,
-            name: data.name || '',
-            age: data.age || '',
-            heightFeet: data.heightFeet || '',
-            heightInches: data.heightInches || '',
-            weightLbs: data.weightLbs || ''
-          });
-        } else {
-          setUserData({ email: user.email });
-        }
-      }
-      setIsLoading(false);
-    };
-    fetchUserData();
-  }, [user]);
+  // Use protected route hook
+  const { isAuthorized, isChecking } = useProtectedRoute();
+  
+  // Use auth hook
+  const {
+    user,
+    userProfile,
+    loading,
+    updateProfile,
+    updatePassword,
+    updateEmail,
+    error: authError,
+    clearError
+  } = useAuth();
 
+  // Load user profile data
   useEffect(() => {
-    const checkGoogleLinked = () => {
-      if (user) {
-        setGoogleLinked(user.providerData.some((provider) => provider.providerId === 'google.com'));
-      }
-    };
-    checkGoogleLinked();
-  }, [user]);
+    if (userProfile) {
+      setUserData({
+        email: user?.email || '',
+        name: userProfile.name || '',
+        age: userProfile.age || '',
+        experience_level: userProfile.experience_level || 'beginner',
+        preferred_units: userProfile.preferred_units || 'LB',
+        height: userProfile.height || '',
+        weight: userProfile.weight || '',
+        goals: userProfile.goals || [],
+        available_equipment: userProfile.available_equipment || [],
+        injuries: userProfile.injuries || []
+      });
+    } else if (user) {
+      setUserData(prev => ({
+        ...prev,
+        email: user.email || ''
+      }));
+    }
+  }, [user, userProfile]);
+
+  // Clear errors when component mounts
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setUserData(prev => ({ ...prev, [name]: value }));
-    validateHeight(name, value);
+    const { name, value, type, checked } = e.target;
+    
+    if (type === 'checkbox') {
+      // Handle array fields (goals, equipment, injuries)
+      setUserData(prev => {
+        const currentArray = prev[name] || [];
+        if (checked) {
+          return { ...prev, [name]: [...currentArray, value] };
+        } else {
+          return { ...prev, [name]: currentArray.filter(item => item !== value) };
+        }
+      });
+    } else {
+      setUserData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
-  const validateHeight = (field, value) => {
-    const numValue = Number(value);
-    let errors = { ...heightErrors };
-
-    if (field === 'heightFeet') {
-      if (numValue < 0) {
-        errors.feet = 'Feet must be 0 or greater';
-      } else if (numValue > 8) {
-        errors.feet = 'Feet must be 8 or less';
-      } else {
-        errors.feet = '';
-      }
+  const handleArrayInput = (name, value) => {
+    if (value.trim()) {
+      setUserData(prev => ({
+        ...prev,
+        [name]: [...(prev[name] || []), value.trim()]
+      }));
     }
-
-    if (field === 'heightInches') {
-      if (numValue < 0) {
-        errors.inches = 'Inches must be 0 or greater';
-      } else if (numValue > 11) {
-        errors.inches = 'Inches must be 11 or less';
-      } else {
-        errors.inches = '';
-      }
-    }
-
-    setHeightErrors(errors);
   };
 
-  const isHeightValid = () => {
-    return !heightErrors.feet && !heightErrors.inches && userData.heightFeet !== '' && userData.heightInches !== '';
+  const removeArrayItem = (name, index) => {
+    setUserData(prev => ({
+      ...prev,
+      [name]: prev[name].filter((_, i) => i !== index)
+    }));
   };
 
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-
-    if (!isHeightValid()) {
-      setError('Please fix height errors before updating.');
-      return;
-    }
+    setIsUpdating(true);
+    clearError();
 
     try {
-      const userDocRef = doc(db, "users", user.uid);
-      await setDoc(userDocRef, {
-        email: userData.email,
+      // Prepare profile data
+      const profileData = {
         name: userData.name,
-        age: Number(userData.age) || null,
-        heightFeet: Number(userData.heightFeet),
-        heightInches: Number(userData.heightInches),
-        weightLbs: Number(userData.weightLbs) || null,
-        createdAt: userData.createdAt || new Date()
-      }, { merge: true });
+        age: userData.age ? Number(userData.age) : null,
+        experience_level: userData.experience_level,
+        preferred_units: userData.preferred_units,
+        height: userData.height ? Number(userData.height) : null,
+        weight: userData.weight ? Number(userData.weight) : null,
+        goals: userData.goals,
+        available_equipment: userData.available_equipment,
+        injuries: userData.injuries
+      };
 
-      if (userData.email !== user.email) {
-        await updateEmail(user, userData.email);
+      // Update profile
+      await updateProfile(profileData);
+
+      // Update email if changed
+      if (userData.email !== user?.email) {
+        await updateEmail(userData.email);
       }
 
       setSuccess('Profile updated successfully!');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -131,34 +141,43 @@ function UserProfile() {
     e.preventDefault();
     setError('');
     setSuccess('');
-    try {
-      const credential = EmailAuthProvider.credential(user.email, currentPassword);
-      await reauthenticateWithCredential(user, credential);
+    setPasswordUpdating(true);
+    clearError();
 
-      await updatePassword(user, newPassword);
+    try {
+      await updatePassword(newPassword);
       setSuccess('Password updated successfully!');
       setNewPassword('');
-      setCurrentPassword('');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to update password');
+    } finally {
+      setPasswordUpdating(false);
     }
   };
 
-  const handleLinkGoogle = async () => {
-    setError('');
-    setSuccess('');
-    setLinking(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await linkWithPopup(user, provider);
-      setGoogleLinked(true);
-      setSuccess('Google account linked successfully!');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLinking(false);
-    }
-  };
+  // Show loading while checking authorization
+  if (isChecking) {
+    return (
+      <Container fluid className="soft-container profile-container">
+        <Row className="justify-content-center">
+          <Col md={8}>
+            <div className="text-center py-4">
+              <Spinner animation="border" className="spinner-blue" />
+              <p className="soft-text mt-2">Loading...</p>
+            </div>
+          </Col>
+        </Row>
+      </Container>
+    );
+  }
+
+  // Don't render if not authorized (will be redirected)
+  if (!isAuthorized) {
+    return null;
+  }
+
+  const displayError = error || authError?.message;
+  const isLoading = loading || isUpdating || passwordUpdating;
 
   return (
     <Container fluid className="soft-container profile-container">
@@ -166,138 +185,149 @@ function UserProfile() {
         <Col md={8}>
           <div className="soft-card profile-card shadow border-0">
             <h1 className="soft-title profile-title text-center">User Profile</h1>
-            {isLoading ? (
+            {loading ? (
               <div className="text-center py-4">
                 <Spinner animation="border" className="spinner-blue" />
-                <p className="soft-text mt-2">Loading...</p>
+                <p className="soft-text mt-2">Loading profile...</p>
               </div>
             ) : (
               <>
-                {error && <Alert variant="danger" className="soft-alert profile-alert">{error}</Alert>}
+                {displayError && <Alert variant="danger" className="soft-alert profile-alert">{displayError}</Alert>}
                 {success && <Alert variant="success" className="soft-alert profile-alert">{success}</Alert>}
 
-                <div className="mb-4">
-                  {googleLinked ? (
-                    <Alert variant="info" className="soft-alert profile-alert mb-0">
-                      Google account is already linked to your profile.
-                    </Alert>
-                  ) : (
-                    <Button
-                      variant="outline-primary"
-                      onClick={handleLinkGoogle}
-                      disabled={linking}
-                      className="mb-2"
-                    >
-                      {linking ? 'Linking...' : 'Link Google Account'}
-                    </Button>
-                  )}
-                </div>
-
                 <Form onSubmit={handleProfileUpdate}>
-                  <Form.Group controlId="formEmail" className="profile-form-group">
-                    <Form.Label className="soft-label profile-label">Email</Form.Label>
-                    <Form.Control
-                      type="email"
-                      name="email"
-                      value={userData.email}
-                      onChange={handleChange}
-                      placeholder="Enter email"
-                      className="soft-input profile-input"
-                    />
-                  </Form.Group>
-
-                  <Form.Group controlId="formName" className="profile-form-group">
-                    <Form.Label className="soft-label profile-label">Name</Form.Label>
-                    <Form.Control
-                      type="text"
-                      name="name"
-                      value={userData.name}
-                      onChange={handleChange}
-                      placeholder="Enter your name"
-                      className="soft-input profile-input"
-                    />
-                  </Form.Group>
-
-                  <Form.Group controlId="formAge" className="profile-form-group">
-                    <Form.Label className="soft-label profile-label">Age</Form.Label>
-                    <Form.Control
-                      type="number"
-                      name="age"
-                      value={userData.age}
-                      onChange={handleChange}
-                      placeholder="Enter your age"
-                      className="soft-input profile-input"
-                    />
-                  </Form.Group>
-
                   <Row>
                     <Col md={6}>
-                      <Form.Group controlId="formHeightFeet" className="profile-form-group">
-                        <Form.Label className="soft-label profile-label">Height (feet)</Form.Label>
+                      <Form.Group controlId="formEmail" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Email</Form.Label>
                         <Form.Control
-                          type="number"
-                          name="heightFeet"
-                          value={userData.heightFeet}
+                          type="email"
+                          name="email"
+                          value={userData.email}
                           onChange={handleChange}
-                          placeholder="Feet"
-                          min="0"
-                          max="8"
-                          isInvalid={!!heightErrors.feet}
-                          required
+                          placeholder="Enter email"
                           className="soft-input profile-input"
+                          disabled={isUpdating}
                         />
-                        <Form.Control.Feedback type="invalid">{heightErrors.feet}</Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                     <Col md={6}>
-                      <Form.Group controlId="formHeightInches" className="profile-form-group">
-                        <Form.Label className="soft-label profile-label">Height (inches)</Form.Label>
+                      <Form.Group controlId="formName" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Name *</Form.Label>
                         <Form.Control
-                          type="number"
-                          name="heightInches"
-                          value={userData.heightInches}
+                          type="text"
+                          name="name"
+                          value={userData.name}
                           onChange={handleChange}
-                          placeholder="Inches"
-                          min="0"
-                          max="11"
-                          isInvalid={!!heightErrors.inches}
-                          required
+                          placeholder="Enter your full name"
                           className="soft-input profile-input"
+                          required
+                          disabled={isUpdating}
                         />
-                        <Form.Control.Feedback type="invalid">{heightErrors.inches}</Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                   </Row>
 
-                  <Form.Group controlId="formWeightLbs" className="profile-form-group">
-                    <Form.Label className="soft-label profile-label">Weight (lbs)</Form.Label>
-                    <Form.Control
-                      type="number"
-                      name="weightLbs"
-                      value={userData.weightLbs}
-                      onChange={handleChange}
-                      placeholder="Enter your weight in lbs"
-                      className="soft-input profile-input"
-                    />
-                  </Form.Group>
+                  <Row>
+                    <Col md={4}>
+                      <Form.Group controlId="formAge" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Age</Form.Label>
+                        <Form.Control
+                          type="number"
+                          name="age"
+                          value={userData.age}
+                          onChange={handleChange}
+                          placeholder="Age"
+                          min="13"
+                          max="120"
+                          className="soft-input profile-input"
+                          disabled={isUpdating}
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group controlId="formExperienceLevel" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Experience Level *</Form.Label>
+                        <Form.Select
+                          name="experience_level"
+                          value={userData.experience_level}
+                          onChange={handleChange}
+                          className="soft-input profile-input"
+                          required
+                          disabled={isUpdating}
+                        >
+                          <option value="beginner">Beginner</option>
+                          <option value="intermediate">Intermediate</option>
+                          <option value="advanced">Advanced</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group controlId="formPreferredUnits" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Preferred Units</Form.Label>
+                        <Form.Select
+                          name="preferred_units"
+                          value={userData.preferred_units}
+                          onChange={handleChange}
+                          className="soft-input profile-input"
+                          disabled={isUpdating}
+                        >
+                          <option value="LB">Pounds (LB)</option>
+                          <option value="KG">Kilograms (KG)</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
 
-                  <Button type="submit" className="soft-button profile-button gradient">Update Profile</Button>
+                  <Row>
+                    <Col md={6}>
+                      <Form.Group controlId="formHeight" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">
+                          Height ({userData.preferred_units === 'KG' ? 'cm' : 'inches'})
+                        </Form.Label>
+                        <Form.Control
+                          type="number"
+                          name="height"
+                          value={userData.height}
+                          onChange={handleChange}
+                          placeholder={userData.preferred_units === 'KG' ? 'Height in cm' : 'Height in inches'}
+                          min="0"
+                          className="soft-input profile-input"
+                          disabled={isUpdating}
+                        />
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group controlId="formWeight" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">
+                          Weight ({userData.preferred_units})
+                        </Form.Label>
+                        <Form.Control
+                          type="number"
+                          name="weight"
+                          value={userData.weight}
+                          onChange={handleChange}
+                          placeholder={`Weight in ${userData.preferred_units}`}
+                          min="0"
+                          step="0.1"
+                          className="soft-input profile-input"
+                          disabled={isUpdating}
+                        />
+                      </Form.Group>
+                    </Col>
+                  </Row>
+
+                  <Button 
+                    type="submit" 
+                    className="soft-button profile-button gradient"
+                    disabled={isUpdating}
+                  >
+                    {isUpdating ? 'Updating...' : 'Update Profile'}
+                  </Button>
                 </Form>
 
                 <h3 className="soft-title password-section-title">Change Password</h3>
                 <Form onSubmit={handlePasswordUpdate}>
-                  <Form.Group controlId="formCurrentPassword" className="profile-form-group">
-                    <Form.Label className="soft-label profile-label">Current Password</Form.Label>
-                    <Form.Control
-                      type="password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Enter current password"
-                      required
-                      className="soft-input profile-input"
-                    />
-                  </Form.Group>
-
                   <Form.Group controlId="formNewPassword" className="profile-form-group">
                     <Form.Label className="soft-label profile-label">New Password</Form.Label>
                     <Form.Control
@@ -305,12 +335,23 @@ function UserProfile() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password (min 6 characters)"
+                      minLength={6}
                       required
                       className="soft-input profile-input"
+                      disabled={passwordUpdating}
                     />
+                    <Form.Text className="text-muted">
+                      Password must be at least 6 characters long.
+                    </Form.Text>
                   </Form.Group>
 
-                  <Button type="submit" className="soft-button profile-button gradient">Update Password</Button>
+                  <Button 
+                    type="submit" 
+                    className="soft-button profile-button gradient"
+                    disabled={passwordUpdating || !newPassword}
+                  >
+                    {passwordUpdating ? 'Updating...' : 'Update Password'}
+                  </Button>
                 </Form>
               </>
             )}

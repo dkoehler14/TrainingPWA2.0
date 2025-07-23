@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Exercise Tracker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        .title {
+            color: #333;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        .features {
+            margin: 30px 0;
+        }
+        .feature {
+            margin: 15px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">💪 Exercise Tracker</div>
+            <h1 class="title">Welcome to Your Fitness Journey!</h1>
+        </div>
+        
+        <p>Hi there!</p>
+        
+        <p>Welcome to Exercise Tracker! We're thrilled to have you join our community of fitness enthusiasts. You're about to embark on an amazing journey to track your progress and achieve your fitness goals.</p>
+        
+        <div style="text-align: center;">
+            <a href="{{ .ConfirmationURL }}" class="button">Confirm Your Account</a>
+        </div>
+        
+        <div class="features">
+            <h3>Here's what you can do with Exercise Tracker:</h3>
+            
+            <div class="feature">
+                <strong>📊 Track Your Progress</strong><br>
+                Log your workouts, track your personal records, and see your improvement over time.
+            </div>
+            
+            <div class="feature">
+                <strong>🏋️ Create Custom Programs</strong><br>
+                Build personalized workout programs tailored to your goals and equipment.
+            </div>
+            
+            <div class="feature">
+                <strong>📈 Analyze Your Performance</strong><br>
+                Get insights into your training patterns and optimize your workouts.
+            </div>
+            
+            <div class="feature">
+                <strong>🎯 Set and Achieve Goals</strong><br>
+                Set fitness goals and track your progress towards achieving them.
+            </div>
+        </div>
+        
+        <p>To get started:</p>
+        <ol>
+            <li>Click the confirmation button above to verify your email</li>
+            <li>Complete your profile setup</li>
+            <li>Create your first workout program</li>
+            <li>Start logging your workouts!</li>
+        </ol>
+        
+        <p>If you have any questions or need help getting started, don't hesitate to reach out to our support team.</p>
+        
+        <p>Happy training!</p>
+        <p>The Exercise Tracker Team</p>
+        
+        <div class="footer">
+            <p>If you didn't create an account with Exercise Tracker, you can safely ignore this email.</p>
+            <p>This confirmation link will expire in 24 hours.</p>
+        </div>
+    </div>
+</body>
+</html>

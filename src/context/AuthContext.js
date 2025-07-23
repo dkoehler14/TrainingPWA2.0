@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useEffect, useState, useCallback } from 'react'
 import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
 import { 
   getUserProfile, 
@@ -7,76 +7,135 @@ import {
   updateUserProfile 
 } from '../services/userService'
 import { handleSupabaseError } from '../utils/supabaseErrorHandler'
+import { authService } from '../services/authService'
+import { initializeAuthConfig, sessionManager, authEventHandler } from '../config/supabaseAuth'
 
 /**
  * Authentication Context for Supabase
- * Provides user authentication state and profile management
+ * Provides comprehensive user authentication state and profile management
  */
-const AuthContext = createContext({})
-
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
-}
+export const AuthContext = createContext({})
 
 export const AuthProvider = ({ children }) => {
   const {
     user: authUser,
     session,
     loading: authLoading,
-    signUp,
-    signIn,
-    signInWithGoogle,
-    signOut,
-    resetPassword,
-    updatePassword,
-    updateEmail
+    signUp: supabaseSignUp,
+    signIn: supabaseSignIn,
+    signInWithGoogle: supabaseSignInWithGoogle,
+    signOut: supabaseSignOut,
+    resetPassword: supabaseResetPassword,
+    updatePassword: supabaseUpdatePassword,
+    updateEmail: supabaseUpdateEmail,
+    signInWithMagicLink,
+    verifyOtp
   } = useSupabaseAuth()
 
   const [userProfile, setUserProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Load user profile when auth user changes
+  // Initialize authentication system
   useEffect(() => {
-    const loadUserProfile = async () => {
-      if (!authUser) {
-        setUserProfile(null)
-        return
-      }
-
-      setProfileLoading(true)
-      setError(null)
-
+    const initializeAuth = async () => {
       try {
-        const profile = await getUserProfile(authUser.id)
-        setUserProfile(profile)
+        console.log('🔐 Initializing authentication system...')
+        
+        // Initialize auth configuration
+        await initializeAuthConfig()
+        
+        // Initialize auth service
+        await authService.initialize()
+        
+        setIsInitialized(true)
+        console.log('✅ Authentication system initialized')
       } catch (error) {
-        console.error('Error loading user profile:', error)
+        console.error('❌ Failed to initialize authentication system:', error)
         setError(handleSupabaseError(error))
-      } finally {
-        setProfileLoading(false)
       }
     }
 
-    loadUserProfile()
+    initializeAuth()
+  }, [])
+
+  // Set up auth event listeners
+  useEffect(() => {
+    if (!isInitialized) return
+
+    const handleSignedIn = ({ user, session }) => {
+      console.log('🔐 User signed in event received')
+      loadUserProfile(user)
+    }
+
+    const handleSignedOut = () => {
+      console.log('🔐 User signed out event received')
+      setUserProfile(null)
+      setError(null)
+    }
+
+    const handleUserUpdated = ({ user }) => {
+      console.log('🔐 User updated event received')
+      if (user) {
+        loadUserProfile(user)
+      }
+    }
+
+    // Subscribe to auth events
+    authEventHandler.on('signedIn', handleSignedIn)
+    authEventHandler.on('signedOut', handleSignedOut)
+    authEventHandler.on('userUpdated', handleUserUpdated)
+
+    return () => {
+      authEventHandler.off('signedIn', handleSignedIn)
+      authEventHandler.off('signedOut', handleSignedOut)
+      authEventHandler.off('userUpdated', handleUserUpdated)
+    }
+  }, [isInitialized])
+
+  // Load user profile when auth user changes
+  const loadUserProfile = useCallback(async (user = authUser) => {
+    if (!user) {
+      setUserProfile(null)
+      return
+    }
+
+    setProfileLoading(true)
+    setError(null)
+
+    try {
+      const profile = await getUserProfile(user.id)
+      setUserProfile(profile)
+    } catch (error) {
+      console.error('Error loading user profile:', error)
+      setError(handleSupabaseError(error))
+    } finally {
+      setProfileLoading(false)
+    }
   }, [authUser])
+
+  // Load profile when auth user changes
+  useEffect(() => {
+    if (isInitialized) {
+      loadUserProfile()
+    }
+  }, [authUser, isInitialized, loadUserProfile])
 
   // Enhanced sign up with profile creation
   const signUpWithProfile = async (email, password, profileData = {}) => {
     try {
       setError(null)
-      const { user: newUser } = await signUp(email, password, profileData)
+      const result = await supabaseSignUp(email, password, profileData)
       
-      if (newUser) {
-        // Create user profile
-        const profile = await createUserProfile(newUser, profileData)
+      if (result.user && !result.needsConfirmation) {
+        // Create user profile for immediately confirmed users
+        const profile = await createUserProfile(result.user, profileData)
         setUserProfile(profile)
-        return { user: newUser, profile }
+        return { ...result, profile }
       }
+      
+      return result
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -88,13 +147,11 @@ export const AuthProvider = ({ children }) => {
   const signInWithProfile = async (email, password) => {
     try {
       setError(null)
-      const { user: signedInUser } = await signIn(email, password)
+      const result = await supabaseSignIn(email, password)
       
-      if (signedInUser) {
-        // Load or create profile
-        const profile = await getOrCreateUserProfile(signedInUser)
-        setUserProfile(profile)
-        return { user: signedInUser, profile }
+      if (result.user) {
+        // Profile will be loaded by the auth event handler
+        return result
       }
     } catch (error) {
       const handledError = handleSupabaseError(error)
@@ -107,9 +164,22 @@ export const AuthProvider = ({ children }) => {
   const signInWithGoogleAndProfile = async () => {
     try {
       setError(null)
-      const result = await signInWithGoogle()
+      const result = await supabaseSignInWithGoogle()
       
-      // Profile will be loaded by the useEffect when authUser changes
+      // Profile will be loaded by the auth event handler
+      return result
+    } catch (error) {
+      const handledError = handleSupabaseError(error)
+      setError(handledError)
+      throw handledError
+    }
+  }
+
+  // Enhanced magic link sign in
+  const signInWithMagicLinkAndProfile = async (email) => {
+    try {
+      setError(null)
+      const result = await signInWithMagicLink(email)
       return result
     } catch (error) {
       const handledError = handleSupabaseError(error)
@@ -140,8 +210,8 @@ export const AuthProvider = ({ children }) => {
   const signOutUser = async () => {
     try {
       setError(null)
-      await signOut()
-      setUserProfile(null)
+      await supabaseSignOut()
+      // Profile cleanup is handled by auth event handler
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -153,7 +223,8 @@ export const AuthProvider = ({ children }) => {
   const resetUserPassword = async (email) => {
     try {
       setError(null)
-      await resetPassword(email)
+      const result = await supabaseResetPassword(email)
+      return result
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -165,7 +236,7 @@ export const AuthProvider = ({ children }) => {
   const updateUserPassword = async (newPassword) => {
     try {
       setError(null)
-      await updatePassword(newPassword)
+      await supabaseUpdatePassword(newPassword)
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -177,13 +248,26 @@ export const AuthProvider = ({ children }) => {
   const updateUserEmail = async (newEmail) => {
     try {
       setError(null)
-      await updateEmail(newEmail)
+      await supabaseUpdateEmail(newEmail)
       
       // Update profile email if successful
       if (userProfile) {
         const updatedProfile = await updateUserProfile(userProfile.id, { email: newEmail })
         setUserProfile(updatedProfile)
       }
+    } catch (error) {
+      const handledError = handleSupabaseError(error)
+      setError(handledError)
+      throw handledError
+    }
+  }
+
+  // Verify OTP with error handling
+  const verifyOtpCode = async (email, token, type = 'email') => {
+    try {
+      setError(null)
+      const result = await verifyOtp(email, token, type)
+      return result
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -265,7 +349,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   // Clear error
-  const clearError = () => setError(null)
+  const clearError = useCallback(() => setError(null), [])
 
   // Check if user is authenticated
   const isAuthenticated = !!authUser
@@ -274,10 +358,25 @@ export const AuthProvider = ({ children }) => {
   const hasCompleteProfile = !!(userProfile?.name && userProfile?.experience_level)
 
   // Get user role (for backwards compatibility)
-  const userRole = userProfile?.role || 'user'
+  const userRole = userProfile?.role || authUser?.user_metadata?.role || 'user'
 
   // Check if profile is loading
   const isProfileLoading = profileLoading
+
+  // Check if system is ready
+  const isReady = isInitialized && !authLoading && !profileLoading
+
+  // Get session expiry information
+  const getSessionInfo = useCallback(() => {
+    if (!session) return null
+    
+    return {
+      expiresAt: new Date(session.expires_at * 1000),
+      isExpired: new Date(session.expires_at * 1000) <= new Date(),
+      accessToken: session.access_token,
+      refreshToken: session.refresh_token
+    }
+  }, [session])
 
   const value = {
     // Auth state
@@ -289,16 +388,20 @@ export const AuthProvider = ({ children }) => {
     userRole,
     loading: authLoading || profileLoading,
     isProfileLoading,
+    isInitialized,
+    isReady,
     error,
 
     // Auth methods
     signUp: signUpWithProfile,
     signIn: signInWithProfile,
     signInWithGoogle: signInWithGoogleAndProfile,
+    signInWithMagicLink: signInWithMagicLinkAndProfile,
     signOut: signOutUser,
     resetPassword: resetUserPassword,
     updatePassword: updateUserPassword,
     updateEmail: updateUserEmail,
+    verifyOtp: verifyOtpCode,
 
     // Profile methods
     updateProfile,
@@ -308,7 +411,9 @@ export const AuthProvider = ({ children }) => {
     updateSettings,
     
     // Utility methods
-    clearError
+    clearError,
+    getSessionInfo,
+    loadUserProfile
   }
 
   return (

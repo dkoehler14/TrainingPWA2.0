@@ -16,11 +16,10 @@ import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
 import CacheDemo from './components/CacheDemo';
-import { auth } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
-import { getDocCached, getCacheStats } from './api/enhancedFirestoreCache';
+import { getCacheStats } from './api/enhancedFirestoreCache';
 import cacheWarmingService from './services/cacheWarmingService';
 import {
   getDevelopmentDebuggingStatus,
@@ -28,22 +27,25 @@ import {
   serviceStatusLogger
 } from './utils/developmentDebugger';
 import DevelopmentDebugPanel from './components/DevelopmentDebugPanel';
+import { useAuth } from './hooks/useAuth';
 
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </ThemeProvider>
   );
 }
 
 function AppContent() {
-  const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [cacheInitialized, setCacheInitialized] = useState(false);
   // eslint-disable-next-line no-unused-vars
   const {} = useTheme();
+  
+  // Use auth hook instead of Firebase auth
+  const { user, userRole, loading, isReady } = useAuth();
 
   // Initialize app cache and development debugging on startup
   useEffect(() => {
@@ -88,59 +90,34 @@ function AppContent() {
     initializeCache();
   }, []);
 
+  // Smart cache warming when user is authenticated
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        try {
-          // Fetch user role using enhanced cache
-          const userDoc = await getDocCached('users', currentUser.uid, 30 * 60 * 1000); // 30-minute cache
-          if (userDoc) {
-            setUserRole(userDoc.role || 'user');
-          } else {
-            setUserRole('user');
-          }
+    if (user && cacheInitialized && isReady) {
+      const context = {
+        timeOfDay: new Date().getHours(),
+        dayOfWeek: new Date().getDay(),
+        isNewSession: true
+      };
 
-          // Smart cache warming based on user context
-          if (cacheInitialized) {
-            const context = {
-              timeOfDay: new Date().getHours(),
-              dayOfWeek: new Date().getDay(),
-              isNewSession: true
-            };
-
-            // Warm user cache in background
-            cacheWarmingService.smartWarmCache(currentUser.uid, context)
-              .catch(error => console.warn('⚠️ Cache warming failed:', error));
-          }
-        } catch (error) {
-          console.error('❌ User initialization failed:', error);
-          setUserRole('user'); // Fallback
-        }
-      } else {
-        setUserRole(null);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [cacheInitialized]);
+      // Warm user cache in background
+      cacheWarmingService.smartWarmCache(user.id, context)
+        .catch(error => console.warn('⚠️ Cache warming failed:', error));
+    }
+  }, [user, cacheInitialized, isReady]);
 
   // Track page navigation for smart cache warming
   useEffect(() => {
-    if (user && cacheInitialized) {
+    if (user && cacheInitialized && isReady) {
       const currentPath = window.location.pathname;
       const pageName = currentPath.split('/')[1] || 'home';
 
-      // Warm cache based on page context
-      // Progressive warming for heavy pages
-
       // Progressive warming for heavy pages
       if (['progress-tracker', 'log-workout', 'programs'].includes(pageName)) {
-        cacheWarmingService.progressiveWarmCache(user.uid)
+        cacheWarmingService.progressiveWarmCache(user.id)
           .catch(error => console.warn('⚠️ Progressive cache warming failed:', error));
       }
     }
-  }, [user, cacheInitialized]);
+  }, [user, cacheInitialized, isReady]);
 
   if (loading) {
     return (
