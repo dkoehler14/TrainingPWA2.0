@@ -128,16 +128,96 @@ export const getDevelopmentConfig = () => {
 };
 
 /**
+ * Get Supabase configuration based on environment
+ * @returns {Object} Supabase configuration object
+ */
+export const getSupabaseConfig = () => {
+  const useSupabase = process.env.REACT_APP_USE_SUPABASE === 'true';
+  const isLocalSupabase = isDevelopment && process.env.REACT_APP_SUPABASE_LOCAL_URL;
+  
+  if (!useSupabase) {
+    return {
+      enabled: false,
+      reason: 'Supabase is disabled via REACT_APP_USE_SUPABASE'
+    };
+  }
+  
+  if (isLocalSupabase) {
+    return {
+      enabled: true,
+      environment: 'local',
+      url: process.env.REACT_APP_SUPABASE_LOCAL_URL || 'http://localhost:54321',
+      anonKey: process.env.REACT_APP_SUPABASE_LOCAL_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY,
+      serviceRoleKey: process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY
+    };
+  }
+  
+  return {
+    enabled: true,
+    environment: 'remote',
+    url: process.env.REACT_APP_SUPABASE_URL,
+    anonKey: process.env.REACT_APP_SUPABASE_ANON_KEY,
+    serviceRoleKey: process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY
+  };
+};
+
+/**
+ * Check if we should use Supabase instead of Firebase
+ * @returns {boolean} True if Supabase should be used
+ */
+export const shouldUseSupabase = () => {
+  const config = getSupabaseConfig();
+  return config.enabled && !!(config.url && config.anonKey);
+};
+
+/**
+ * Validate Supabase environment configuration
+ * @throws {Error} If required Supabase environment variables are missing
+ */
+export const validateSupabaseConfig = () => {
+  const config = getSupabaseConfig();
+  
+  if (!config.enabled) {
+    return; // Supabase is disabled, no validation needed
+  }
+  
+  const requiredVars = ['url', 'anonKey'];
+  const missingVars = requiredVars.filter(key => !config[key]);
+  
+  if (missingVars.length > 0) {
+    const envVarNames = missingVars.map(key => {
+      switch (key) {
+        case 'url': return config.environment === 'local' ? 'REACT_APP_SUPABASE_LOCAL_URL' : 'REACT_APP_SUPABASE_URL';
+        case 'anonKey': return config.environment === 'local' ? 'REACT_APP_SUPABASE_LOCAL_ANON_KEY' : 'REACT_APP_SUPABASE_ANON_KEY';
+        default: return key;
+      }
+    });
+    
+    throw new Error(
+      `Missing required Supabase environment variables: ${envVarNames.join(', ')}. Please check your .env file.`
+    );
+  }
+};
+
+/**
  * Get current environment information for debugging
  * @returns {Object} Environment information
  */
 export const getEnvironmentInfo = () => {
+  const supabaseConfig = getSupabaseConfig();
+  
   return {
     nodeEnv: process.env.NODE_ENV,
     isDevelopment,
     isEmulatorMode,
     shouldUseEmulators: shouldUseEmulators(),
+    shouldUseSupabase: shouldUseSupabase(),
     emulatorPorts: shouldUseEmulators() ? emulatorPorts : null,
+    supabaseConfig: {
+      enabled: supabaseConfig.enabled,
+      environment: supabaseConfig.environment,
+      configured: !!(supabaseConfig.url && supabaseConfig.anonKey)
+    },
     developmentConfig: isDevelopment ? getDevelopmentConfig() : null
   };
 };
