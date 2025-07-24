@@ -305,7 +305,7 @@ import cacheWarmingService from './services/cacheWarmingService';
 
 useEffect(() => {
   if (user) {
-    cacheWarmingService.smartWarmCache(user.uid, {
+    cacheWarmingService.smartWarmCache(user.id, {
       lastVisitedPage: location.pathname,
       timeOfDay: new Date().getHours()
     });
@@ -338,7 +338,7 @@ import { progressiveWarmCache } from './services/cacheWarmingService';
 
 useEffect(() => {
   if (user) {
-    progressiveWarmCache(user.uid);
+    progressiveWarmCache(user.id);
   }
 }, [user]);`
       }

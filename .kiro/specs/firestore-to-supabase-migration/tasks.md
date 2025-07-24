@@ -63,7 +63,7 @@
     - Implement cache cleanup and memory management
     - _Requirements: 5.1, 5.2, 4.4_
 
-- [-] 5. Implement authentication migration
+- [x] 5. Implement authentication migration
   - [x] 5.1 Set up Supabase Auth configuration
     - Configure Supabase Auth providers and settings
     - Set up email templates and authentication flows
@@ -76,58 +76,64 @@
     - Implement protected route handling with new auth system
     - _Requirements: 2.1, 2.2, 2.3_
 
-  - [ ] 5.3 Update all authentication-dependent components
+
+  - [x] 5.3 Update all authentication-dependent components
     - Replace Firebase Auth calls with Supabase Auth throughout application
     - Update user profile management and settings
     - Test authentication flows and error handling
     - _Requirements: 2.1, 2.2, 2.3_
 
-- [ ] 6. Replace Firebase Functions with Supabase Edge Functions
-  - [ ] 6.1 Analyze and document existing Firebase Functions
+- [x] 6. Replace Firebase Functions with Supabase Edge Functions
+  - [x] 6.1 Analyze and document existing Firebase Functions
     - Audit current Firebase Functions for functionality and dependencies
     - Document function triggers, inputs, outputs, and business logic
     - Plan Edge Function equivalents with Deno/TypeScript
     - _Requirements: 3.1, 3.2_
 
-  - [ ] 6.2 Implement core Edge Functions
+  - [x] 6.2 Implement core Edge Functions
     - Create user analytics calculation Edge Function
     - Implement data validation and processing Edge Functions
     - Write database trigger functions for automated tasks
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-  - [ ] 6.3 Set up Edge Function deployment and testing
+  - [x] 6.3 Set up Edge Function deployment and testing
     - Configure Edge Function deployment pipeline
     - Create testing framework for Edge Functions
     - Implement monitoring and error handling for Edge Functions
     - _Requirements: 3.1, 3.3, 3.5_
 
-- [ ] 7. Create comprehensive data migration tooling
-  - [ ] 7.1 Build Firestore data extraction tools
+- [x] 7. Create comprehensive data migration tooling
+  - [x] 7.1 Build Firestore data extraction tools
     - Create scripts to export all user data from Firestore
     - Implement data validation and integrity checking
     - Handle large dataset extraction with batching and progress tracking
     - _Requirements: 6.1, 6.2, 6.5_
 
-  - [ ] 7.2 Implement data transformation and mapping
+  - [x] 7.2 Implement data transformation and mapping
     - Create transformation logic from Firestore documents to PostgreSQL rows
     - Handle data type conversions and relationship mapping
     - Implement data cleaning and normalization processes
     - _Requirements: 6.1, 6.2, 6.3_
 
-  - [ ] 7.3 Build PostgreSQL data import tools
+  - [x] 7.3 Build PostgreSQL data import tools
     - Create batch import scripts for PostgreSQL with transaction management
     - Implement foreign key relationship resolution
     - Add progress tracking and error recovery for large imports
     - _Requirements: 6.1, 6.2, 6.5_
 
-  - [ ] 7.4 Create migration verification and rollback tools
+  - [x] 7.4 Create migration verification and rollback tools
     - Build data integrity verification comparing Firestore vs PostgreSQL
     - Create rollback procedures for failed migrations
     - Implement migration status tracking and reporting
     - _Requirements: 6.3, 6.4, 8.4_
 
-- [ ] 8. Update all application components to use Supabase
+- [-] 8. Update all application components to use Supabase
+
+
+
   - [ ] 8.1 Update core application pages
+
+
     - Replace Firestore calls in Home, Auth, and UserProfile pages
     - Update ProgressTracker and ProgressCoach with new data access patterns
     - Implement real-time updates using Supabase subscriptions

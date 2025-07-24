@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, Card } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
-import { db, auth } from '../firebase';
-import { addDoc, updateDoc, doc, collection } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
@@ -10,6 +10,8 @@ import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getCollectionCached, getDocCached, invalidateProgramCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { db } from '../firebase';
+import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 
 // New Exercise Selection Modal Component using ExerciseGrid
 const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
@@ -70,7 +72,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [showExerciseModal, setShowExerciseModal] = useState(false); // New state for exercise selection modal
   const [currentExerciseSelection, setCurrentExerciseSelection] = useState({ weekIndex: 0, dayIndex: 0, exIndex: 0 }); // Track which exercise is being selected
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
-  const user = auth.currentUser;
+  const { user, isAuthenticated } = useContext(AuthContext);
   const [isLoading, setIsLoading] = useState(mode === 'edit');
   const [step, setStep] = useState(mode === 'edit' ? 3 : 1); // Stepper: 1=choose, 2=select, 3=edit
   const [creationSource, setCreationSource] = useState('scratch'); // 'scratch' | 'template' | 'previous'
@@ -100,7 +102,7 @@ function CreateProgram({ mode = 'create', userRole }) {
       try {
         // Add cache warming at the beginning if user exists
         if (user) {
-          await warmUserCache(user.uid, 'high');
+          await warmUserCache(user.id, 'high');
         }
         
         // Fetch global exercises from metadata
@@ -120,14 +122,14 @@ function CreateProgram({ mode = 'create', userRole }) {
         let userExercises = [];
         if (user?.uid) {
           try {
-            const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+            const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
             if (userMetadata && userMetadata.exercises) {
               userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
                 id,
                 ...ex,
                 isGlobal: false,
                 source: 'custom',
-                createdBy: user.uid,
+                createdBy: user.id,
                 label: ex.name,
                 value: id,
               }));
@@ -415,7 +417,7 @@ function CreateProgram({ mode = 'create', userRole }) {
     }
     if (step === 2 && creationSource === 'previous') {
       if (user) {
-        getCollectionCached('programs', { where: [['userId', '==', user.uid], ['isTemplate', '==', false]] }, 30 * 60 * 1000)
+        getCollectionCached('programs', { where: [['userId', '==', user.id], ['isTemplate', '==', false]] }, 30 * 60 * 1000)
           .then(setUserPrograms)
           .catch(console.error);
       }
@@ -669,18 +671,18 @@ function CreateProgram({ mode = 'create', userRole }) {
 
       if (mode === 'edit') {
         await updateDoc(doc(db, "programs", programId), programData);
-        invalidateProgramCache(user.uid);
+        invalidateProgramCache(user.id);
         alert('Program updated successfully!');
         navigate('/programs');
       } else {
         await addDoc(collection(db, "programs"), {
           ...programData,
           ...(userRole === 'admin' && isTemplate
-            ? { isTemplate: true, userId: user.uid, createdAt: new Date() }
-            : { userId: user.uid, isTemplate: false, createdAt: new Date() }
+            ? { isTemplate: true, userId: user.id, createdAt: new Date() }
+            : { userId: user.id, isTemplate: false, createdAt: new Date() }
           )
         });
-        invalidateProgramCache(user.uid);
+        invalidateProgramCache(user.id);
         alert('Program created successfully!');
         // Reset form for new program
         setProgramName('');

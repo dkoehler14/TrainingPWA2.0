@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
-import {
-  getDocCached,
-  getCollectionCached,
-  warmUserCache,
-  getCacheStats
-} from '../api/enhancedFirestoreCache';
+import { useAuth } from '../hooks/useAuth';
+import workoutLogService from '../services/workoutLogService';
+import { getUserProfile } from '../services/userService';
+import { getPrograms } from '../services/programService';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/Home.css';
 
@@ -17,10 +15,10 @@ const ProgressSnapshot = () => (
   </div>
 );
 
-function Home({ user }) {
+function Home() {
+  const { user, userProfile, isAuthenticated, loading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [cacheWarmed, setCacheWarmed] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     userName: '',
     volumeLifted: 0,
@@ -29,81 +27,69 @@ function Home({ user }) {
     recentActivity: [],
   });
 
-  // Cache warming effect - runs once when user is available
   useEffect(() => {
-    if (!user || cacheWarmed) return;
-
-    const warmCache = async () => {
-      try {
-        console.log('🔥 Warming cache for Home dashboard...');
-        
-        // Warm user-specific cache with high priority for dashboard
-        await warmUserCache(user.uid, 'high');
-        setCacheWarmed(true);
-        
-        // Log cache stats for debugging
-        if (process.env.NODE_ENV === 'development') {
-          const stats = getCacheStats();
-          console.log('📊 Cache stats after warming:', stats);
-        }
-      } catch (error) {
-        console.warn('⚠️ Cache warming failed, continuing with normal loading:', error);
-        setCacheWarmed(true); // Continue anyway
-      }
-    };
-
-    warmCache();
-  }, [user, cacheWarmed]);
-
-  useEffect(() => {
-    if (!user) return;
+    if (!isAuthenticated || !user || authLoading) return;
 
     const fetchData = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        // Enhanced cache usage with longer TTL for user profile (30 minutes)
-        const userProfile = await getDocCached('users', user.uid, 30 * 60 * 1000);
-        
-        // Fetch workout logs for stats with optimized caching (15 minutes)
+        // Get recent workout logs (last 7 days)
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
-        const workoutLogs = await getCollectionCached('workoutLogs', {
-          where: [['userId', '==', user.uid], ['date', '>=', sevenDaysAgo]],
-          orderBy: [['date', 'desc']],
-          limit: 5
-        }, 15 * 60 * 1000); // 15-minute cache for recent activity
-
-        // Fetch current program with extended cache (1 hour)
+        const recentWorkouts = await workoutLogService.getWorkoutHistory(user.id, 5);
+        
+        // Get current program
         let currentProgram = null;
-        if (userProfile && userProfile.activeProgramId) {
-          currentProgram = await getDocCached('programs', userProfile.activeProgramId, 60 * 60 * 1000);
+        if (userProfile?.current_program_id) {
+          try {
+            const programs = await getPrograms(user.id, { 
+              filters: { isCurrent: true },
+              limit: 1 
+            });
+            currentProgram = programs.length > 0 ? programs[0] : null;
+          } catch (programError) {
+            console.warn('Failed to fetch current program:', programError);
+          }
         }
         
-        // **Data Processing (Simplified)**
-        // NOTE: In a real app, these calculations might be more complex or done server-side.
-        // Calculate total volume for the week using reps and weights arrays
-        const volumeThisWeek = workoutLogs.reduce((total, log) =>
-          total + log.exercises.reduce((vol, ex) => {
-            // If reps and weights are arrays, sum over all sets
-            if (Array.isArray(ex.reps) && Array.isArray(ex.weights)) {
-              return vol + ex.reps.reduce((setSum, r, i) => setSum + (Number(r) * Number(ex.weights[i] ?? 0)), 0);
-            }
-            // Fallback for legacy data
-            if (typeof ex.sets === 'number' && typeof ex.reps === 'number' && typeof ex.weight === 'number') {
-              return vol + (ex.sets * ex.reps * ex.weight);
-            }
-            return vol;
-          }, 0), 0);
+        // Calculate total volume for the week using workout log exercises
+        const volumeThisWeek = recentWorkouts.reduce((total, log) => {
+          if (!log.workout_log_exercises) return total;
+          
+          return total + log.workout_log_exercises.reduce((vol, ex) => {
+            if (!ex.completed || !ex.weights || !ex.reps) return vol;
+            
+            // Sum volume for completed sets
+            return vol + ex.completed.reduce((setVol, isCompleted, index) => {
+              if (isCompleted && ex.weights[index] && ex.reps[index]) {
+                const weight = Number(ex.weights[index]) || 0;
+                const reps = Number(ex.reps[index]) || 0;
+                const bodyweight = Number(ex.bodyweight) || 0;
+                
+                // Handle different exercise types
+                let effectiveWeight = weight;
+                if (ex.exercises?.exercise_type === 'Bodyweight') {
+                  effectiveWeight = bodyweight;
+                } else if (ex.exercises?.exercise_type === 'Bodyweight Loadable') {
+                  effectiveWeight = bodyweight + weight;
+                }
+                
+                return setVol + (effectiveWeight * reps);
+              }
+              return setVol;
+            }, 0);
+          }, 0);
+        }, 0);
 
         setDashboardData({
           userName: userProfile?.name || user.email,
           volumeLifted: volumeThisWeek,
-          prsThisMonth: 0, // Placeholder - PR calculation is complex
+          prsThisMonth: 0, // Placeholder - PR calculation would need analytics data
           currentProgram: currentProgram,
-          recentActivity: workoutLogs,
+          recentActivity: recentWorkouts,
         });
 
       } catch (e) {
@@ -115,7 +101,7 @@ function Home({ user }) {
     };
 
     fetchData();
-  }, [user, cacheWarmed]); // Include cacheWarmed to ensure data loads after cache warming
+  }, [user, userProfile, isAuthenticated, authLoading]);
 
   return (
     <Container fluid className="soft-container home-container py-4">
@@ -180,20 +166,14 @@ function Home({ user }) {
                       {dashboardData.recentActivity.map(activity => (
                         <li key={activity.id} className="recent-activity-item">
                           <span>{activity.name || 'Workout'}</span>
-                          <span className="soft-text-secondary">{
-                            (() => {
-                              // Robust date handling: Firestore Timestamp or JS Date
-                              let d = activity.date;
-                              if (d && typeof d.toDate === 'function') {
-                                d = d.toDate();
-                              } else if (d && typeof d.seconds === 'number') {
-                                d = new Date(d.seconds * 1000);
-                              } else if (!(d instanceof Date)) {
-                                d = new Date(d);
-                              }
-                              return d && !isNaN(d) ? d.toLocaleDateString() : '';
-                            })()
-                          }</span>
+                          <span className="soft-text-secondary">
+                            {activity.completed_date ? 
+                              new Date(activity.completed_date).toLocaleDateString() : 
+                              activity.date ? 
+                                new Date(activity.date).toLocaleDateString() : 
+                                ''
+                            }
+                          </span>
                         </li>
                       ))}
                     </ul>

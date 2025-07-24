@@ -5,20 +5,15 @@
  * Provides automatic cleanup of old drafts and conflict resolution.
  */
 
-import { db } from '../firebase';
-import { 
-    addDoc, 
-    updateDoc, 
-    deleteDoc, 
-    doc, 
-    collection, 
-    Timestamp 
-} from 'firebase/firestore';
+import { supabase } from '../config/supabase';
+// Firestore operations will be replaced with Supabase operations
 import {
     getCollectionCached,
     invalidateWorkoutCache,
     invalidateUserCache
 } from '../api/enhancedFirestoreCache';
+import { db } from '../firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 
 class QuickWorkoutDraftService {
     constructor() {

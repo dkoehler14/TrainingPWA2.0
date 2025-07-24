@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash, X } from 'react-bootstrap-icons';
-import { db, auth, functions } from '../firebase';
-import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidateProgramCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { db, functions } from '../firebase';
+import { collection, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
@@ -143,7 +145,7 @@ function LogWorkout() {
   // User message state for enhanced error handling
   const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
 
-  const user = auth.currentUser;
+  const { user, isAuthenticated } = useContext(AuthContext);
 
   // Enhanced user message function
   const showUserMessage = (text, type = 'info') => {
@@ -230,11 +232,11 @@ function LogWorkout() {
           // Update existing log
           const logDocId = logsData[0].id;
           await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-          invalidateWorkoutCache(user.uid);
+          invalidateWorkoutCache(user.id);
         } else {
           // Create new log if none exists
           const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
-          invalidateWorkoutCache(user.uid);
+          invalidateWorkoutCache(user.id);
         }
         console.log('Workout log auto-saved');
       } catch (error) {
@@ -254,14 +256,14 @@ function LogWorkout() {
       if (user) {
         try {
           // Warm user cache before fetching data
-          await warmUserCache(user.uid, 'high');
+          await warmUserCache(user.id, 'high');
 
           // Fetch all user programs, ordered by createdAt (most recent first)
           const programsData = await getCollectionCached(
             'programs',
             {
               where: [
-                ['userId', '==', user.uid]
+                ['userId', '==', user.id]
               ],
               orderBy: [['createdAt', 'desc']]
             },
@@ -288,16 +290,16 @@ function LogWorkout() {
 
             // Fetch user-specific exercises if user exists
             let userExercises = [];
-            if (user?.uid) {
+            if (user?.id) {
               try {
-                const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
                 if (userMetadata && userMetadata.exercises) {
                   userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
                     id,
                     ...ex,
                     isGlobal: false,
                     source: 'custom',
-                    createdBy: user.uid
+                    createdBy: user.id
                   }));
                 }
               } catch (userError) {
@@ -353,7 +355,7 @@ function LogWorkout() {
           'workoutLogs',
           {
             where: [
-              ['userId', '==', user.uid],
+              ['userId', '==', user.id],
               ['programId', '==', selectedProgram.id]
             ]
           },
@@ -471,7 +473,7 @@ function LogWorkout() {
   //       'workoutLogs',
   //       {
   //         where: [
-  //           ['userId', '==', user.uid],
+  //           ['userId', '==', user.id],
   //           ['isWorkoutFinished', '==', true]
   //         ],
   //         orderBy: [['date', 'desc']],
@@ -688,7 +690,7 @@ function LogWorkout() {
           [`weeklyConfigs.${configKey}`]: updatedExercises
         });
       }
-      invalidateProgramCache(user.uid);
+      invalidateProgramCache(user.id);
 
       console.log(`Successfully updated program config for ${configKey}`);
 
@@ -738,7 +740,7 @@ function LogWorkout() {
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['programId', '==', program.id]
           ]
         }
@@ -886,7 +888,7 @@ function LogWorkout() {
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['programId', '==', selectedProgram.id],
             ['weekIndex', '==', selectedWeek],
             ['dayIndex', '==', selectedDay]
@@ -895,7 +897,7 @@ function LogWorkout() {
       );
 
       const logDataToSave = {
-        userId: user.uid,
+        userId: user.id,
         programId: selectedProgram.id,
         weekIndex: selectedWeek,
         dayIndex: selectedDay,
@@ -919,10 +921,10 @@ function LogWorkout() {
       if (logsData.length > 0) {
         const logDocId = logsData[0].id;
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateWorkoutCache(user.uid);
+        invalidateWorkoutCache(user.id);
       } else {
         await addDoc(collection(db, "workoutLogs"), logDataToSave);
-        invalidateWorkoutCache(user.uid);
+        invalidateWorkoutCache(user.id);
       }
       alert('Workout saved successfully!');
     } catch (error) {
@@ -968,7 +970,7 @@ function LogWorkout() {
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['programId', '==', selectedProgram.id],
             ['weekIndex', '==', selectedWeek],
             ['dayIndex', '==', selectedDay]
@@ -977,7 +979,7 @@ function LogWorkout() {
       );
 
       const logDataToSave = {
-        userId: user.uid,
+        userId: user.id,
         programId: selectedProgram.id,
         weekIndex: selectedWeek,
         dayIndex: selectedDay,
@@ -1003,11 +1005,11 @@ function LogWorkout() {
       if (logsData.length > 0) {
         logDocId = logsData[0].id;
         await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateWorkoutCache(user.uid);
+        invalidateWorkoutCache(user.id);
       } else {
         const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
         logDocId = docRef.id;
-        invalidateWorkoutCache(user.uid);
+        invalidateWorkoutCache(user.id);
       }
 
       // Trigger manual processing

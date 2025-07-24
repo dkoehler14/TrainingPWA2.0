@@ -72,7 +72,7 @@ const useAutoSave = (user, selectedExercises, workoutName) => {
     if (!user || !currentDraftId) return;
 
     try {
-      await quickWorkoutDraftService.deleteDraft(user.uid, currentDraftId);
+      await quickWorkoutDraftService.deleteDraft(user.id, currentDraftId);
       
       if (isMountedRef.current) {
         setCurrentDraftId(null);

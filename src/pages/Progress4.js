@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Form, Spinner } from 'react-bootstrap';
-import { db, auth } from '../firebase';
+import { AuthContext } from '../context/AuthContext';
 import '../styles/Progress4.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
 
@@ -67,6 +67,7 @@ const getPersonalRecords = (logs, exercises) => {
 };
 
 function Progress4() {
+  const { user, isAuthenticated } = useContext(AuthContext);
   const [workoutLogs, setWorkoutLogs] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [selectedExercise, setSelectedExercise] = useState('');
@@ -75,16 +76,15 @@ function Progress4() {
 
   useEffect(() => {
     const fetchData = async () => {
-      const user = auth.currentUser;
       setIsLoading(true);
-      if (!user?.uid) {
+      if (!user?.id) {
         setIsLoading(false);
         return;
       }
 
       try {
         // Enhanced cache warming before data fetching
-        await warmUserCache(user.uid, 'normal')
+        await warmUserCache(user.id, 'normal')
           .then(() => {
             console.log('Cache warming completed for Progress4');
           })
@@ -92,7 +92,7 @@ function Progress4() {
             console.warn('Cache warming failed, proceeding with data fetch:', error);
           });
 
-        const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
+        const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.id]] });
         setWorkoutLogs(logsData);
 
         // Use metadata approach for efficient exercise fetching
@@ -102,7 +102,7 @@ function Progress4() {
           const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
           
           // Get user-specific exercises from metadata
-          const userExercisesDoc = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+          const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
           const userExercises = userExercisesDoc?.exercises || [];
           
           // Combine global and user exercises

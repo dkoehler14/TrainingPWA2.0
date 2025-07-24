@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
-import { db } from '../firebase';
-import { collection, doc, runTransaction } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
 import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
 import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
+import { db } from '../firebase';
+import { runTransaction, doc, collection } from 'firebase/firestore';
 
 function ExerciseCreationModal({
     show,
@@ -85,7 +87,7 @@ function ExerciseCreationModal({
             let userExercises = [];
             if (user?.uid) {
                 try {
-                    const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                    const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
                     if (userMetadata && userMetadata.exercises) {
                         userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
                             id,
@@ -156,12 +158,12 @@ function ExerciseCreationModal({
                 exerciseType: formData.exerciseType
             };
             // Admin: set userId only if personal, not main
-            if (!isEditMode && userRole === 'admin' && adminVisibility === 'personal' && user && user.uid) {
-                exerciseData.userId = user.uid;
+            if (!isEditMode && userRole === 'admin' && adminVisibility === 'personal' && user && user.id) {
+                exerciseData.userId = user.id;
             }
             // Regular user: always set userId
-            if (!isEditMode && userRole !== 'admin' && user && user.uid) {
-                exerciseData.userId = user.uid;
+            if (!isEditMode && userRole !== 'admin' && user && user.id) {
+                exerciseData.userId = user.id;
             }
 
             // --- Begin Transaction for Exercise and Metadata ---

@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Card } from 'react-bootstrap';
 import { Plus, X, BarChart, Pencil } from 'react-bootstrap-icons';
-import { db, auth } from '../firebase';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import '../styles/QuickWorkoutDraft.css';
 import { debounce } from 'lodash';
 import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
 import ExerciseGrid from '../components/ExerciseGrid';
+import { db } from '../firebase';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 import quickWorkoutDraftService from '../services/quickWorkoutDraftService';
 import performanceMonitor from '../utils/performanceMonitor';
@@ -39,7 +41,7 @@ function QuickWorkout() {
     const [lastSaved, setLastSaved] = useState(null);
     const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
 
-    const user = auth.currentUser;
+    const { user, isAuthenticated } = useContext(AuthContext);
 
     // Refs for number inputs
     const repsInputRef = useRef(null);
@@ -69,7 +71,7 @@ function QuickWorkout() {
 
         try {
             const result = await quickWorkoutDraftService.saveDraft(
-                user.uid, 
+                user.id, 
                 exercises, 
                 name, 
                 currentDraft?.id
@@ -109,9 +111,9 @@ function QuickWorkout() {
 
         try {
             // Delete any existing draft
-            const existingDraft = await quickWorkoutDraftService.getSingleDraft(user.uid);
+            const existingDraft = await quickWorkoutDraftService.getSingleDraft(user.id);
             if (existingDraft) {
-                await quickWorkoutDraftService.deleteDraft(user.uid, existingDraft.id);
+                await quickWorkoutDraftService.deleteDraft(user.id, existingDraft.id);
             }
             
             // Clear current state
@@ -132,7 +134,7 @@ function QuickWorkout() {
         if (!user) return null;
 
         try {
-            const draftData = await quickWorkoutDraftService.getSingleDraft(user.uid);
+            const draftData = await quickWorkoutDraftService.getSingleDraft(user.id);
             setAvailableDrafts(draftData ? [draftData] : []);
             return draftData;
         } catch (error) {
@@ -160,7 +162,7 @@ function QuickWorkout() {
         if (!user) return;
 
         try {
-            const cleanedCount = await quickWorkoutDraftService.cleanupOldDrafts(user.uid);
+            const cleanedCount = await quickWorkoutDraftService.cleanupOldDrafts(user.id);
             if (cleanedCount > 0) {
                 console.log(`Cleaned up ${cleanedCount} old drafts`);
             }
@@ -180,7 +182,7 @@ function QuickWorkout() {
                     
                     // Phase 1 Optimization: Start smart cache warming immediately
                     const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
-                    const warmingPromise = cacheWarmingService.smartWarmCache(user.uid, {
+                    const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
                         lastVisitedPage: 'QuickWorkout',
                         timeOfDay: new Date().getHours(),
                         priority: 'high'
@@ -205,7 +207,7 @@ function QuickWorkout() {
                             throw error;
                         }),
                         // User exercises - 1 hour TTL (occasional changes)
-                        getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000).then(data => {
+                        getDocCached('exercises_metadata', user.id, 60 * 60 * 1000).then(data => {
                             if (data) performanceMonitor.recordCacheHit('user_exercises');
                             return data;
                         }).catch(() => {
@@ -237,7 +239,7 @@ function QuickWorkout() {
                             ...ex,
                             isGlobal: false,
                             source: 'custom',
-                            createdBy: user.uid
+                            createdBy: user.id
                         }));
                     }
 
@@ -512,7 +514,7 @@ function QuickWorkout() {
             if (currentDraft) {
                 // Complete existing draft
                 await quickWorkoutDraftService.completeDraft(
-                    user.uid,
+                    user.id,
                     currentDraft.id,
                     selectedExercises,
                     workoutName
@@ -520,7 +522,7 @@ function QuickWorkout() {
             } else {
                 // Create new completed workout directly
                 const workoutData = {
-                    userId: user.uid,
+                    userId: user.id,
                     name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
                     type: 'quick_workout',
                     exercises: selectedExercises.map(ex => ({
@@ -540,7 +542,7 @@ function QuickWorkout() {
                 };
 
                 await addDoc(collection(db, "workoutLogs"), workoutData);
-                invalidateWorkoutCache(user.uid);
+                invalidateWorkoutCache(user.id);
             }
 
             showUserMessage('Quick workout finished successfully!', 'success');

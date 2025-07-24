@@ -6,12 +6,13 @@
  * filtering, and detailed workout display.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import { Container, Row, Col, Spinner, Alert, Modal, Button } from 'react-bootstrap';
-import { auth } from '../firebase';
+import { AuthContext } from '../context/AuthContext';
 import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
-import { deleteDoc, doc } from 'firebase/firestore';
+import { supabase } from '../config/supabase';
 import { db } from '../firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
 
 // Import child components
 import WorkoutStatsCard from '../components/WorkoutStatsCard';
@@ -28,7 +29,7 @@ import '../styles/QuickWorkoutHistory.css';
 
 function QuickWorkoutHistoryContent() {
   // Authentication
-  const user = auth.currentUser;
+  const { user, isAuthenticated } = useContext(AuthContext);
 
   // Data fetching hook
   const { workouts, isLoading: isLoadingWorkouts, error: workoutsError, refetch } = useQuickWorkoutHistory();
@@ -78,7 +79,7 @@ function QuickWorkoutHistoryContent() {
       try {
         // Phase 1 Optimization: Start cache warming for history page
         const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
-        const warmingPromise = cacheWarmingService.smartWarmCache(user.uid, {
+        const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
           lastVisitedPage: 'QuickWorkoutHistory',
           timeOfDay: new Date().getHours(),
           priority: 'normal'
@@ -96,7 +97,7 @@ function QuickWorkoutHistoryContent() {
             return [];
           }),
           // User exercises - 1 hour TTL (occasional changes)
-          getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000).catch(() => null),
+          getDocCached('exercises_metadata', user.id, 60 * 60 * 1000).catch(() => null),
           // Ensure cache warming completes
           warmingPromise
         ]);
@@ -135,7 +136,7 @@ function QuickWorkoutHistoryContent() {
               ...ex,
               isGlobal: false,
               source: 'custom',
-              createdBy: user.uid
+              createdBy: user.id
             };
           }).filter(Boolean); // Remove null entries
         }
@@ -274,7 +275,7 @@ function QuickWorkoutHistoryContent() {
       await deleteDoc(doc(db, 'workoutLogs', workoutToDelete.id));
       
       // Invalidate cache and refetch data
-      invalidateWorkoutCache(user.uid);
+      invalidateWorkoutCache(user.id);
       await refetch();
       
       // Show success message

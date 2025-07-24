@@ -1,0 +1,41 @@
+[
+  {
+    "timestamp": "2025-07-24T02:22:48.482Z",
+    "level": "info",
+    "message": "Migration started",
+    "phase": "extraction",
+    "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9",
+    "startTime": "2025-07-24T02:22:48.482Z"
+  },
+  {
+    "timestamp": "2025-07-24T02:22:48.485Z",
+    "level": "info",
+    "message": "Started phase: extraction",
+    "phase": "extraction",
+    "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9"
+  },
+  {
+    "timestamp": "2025-07-24T02:22:48.487Z",
+    "level": "success",
+    "message": "Completed phase: extraction",
+    "phase": "extraction",
+    "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9",
+    "recordsExtracted": 100
+  },
+  {
+    "timestamp": "2025-07-24T02:22:48.488Z",
+    "level": "info",
+    "message": "Checkpoint: test-checkpoint",
+    "phase": "extraction",
+    "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9",
+    "test": true
+  },
+  {
+    "timestamp": "2025-07-24T02:22:48.490Z",
+    "level": "success",
+    "message": "Migration completed successfully",
+    "phase": "completed",
+    "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9",
+    "success": true
+  }
+]

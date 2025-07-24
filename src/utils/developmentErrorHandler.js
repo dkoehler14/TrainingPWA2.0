@@ -371,7 +371,7 @@ export const handleServiceInitializationFallback = (serviceName, error, options 
     auth: {
       canContinue: true, // App can run without auth in development
       message: 'Auth initialization failed. Authentication features will be disabled.',
-      action: 'Check Firebase Auth configuration or continue without authentication',
+      action: 'Check Supabase Auth configuration or continue without authentication',
       fallbackService: createMockAuthService(),
       criticalityLevel: 'medium'
     },
@@ -412,8 +412,8 @@ const createMockAuthService = () => {
       callback(null);
       return () => {}; // Unsubscribe function
     },
-    signInWithEmailAndPassword: () => {
-      console.warn('Mock auth: signInWithEmailAndPassword called');
+    signInWithPassword: () => {
+      console.warn('Mock auth: signInWithPassword called');
       return Promise.reject(new Error('Auth service not available in development'));
     },
     signOut: () => {

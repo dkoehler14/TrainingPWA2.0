@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import '../styles/CompoundLiftTracker.css';
 
 const CompoundLiftTracker = () => {
+    const { user, isAuthenticated } = useContext(AuthContext);
     const [compoundData, setCompoundData] = useState({
         lifts: [],
         progressionData: [],
@@ -25,11 +26,8 @@ const CompoundLiftTracker = () => {
     ];
 
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            setUserId(user ? user.uid : null);
-        });
-        return () => unsubscribe();
-    }, []);
+        setUserId(isAuthenticated && user ? user.id : null);
+    }, [user, isAuthenticated]);
 
     useEffect(() => {
         if (!userId) {

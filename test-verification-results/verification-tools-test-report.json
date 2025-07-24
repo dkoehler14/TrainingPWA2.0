@@ -1,0 +1,32 @@
+{
+  "summary": {
+    "testMode": "unit",
+    "dryRun": true,
+    "startTime": "2025-07-24T02:22:48.473Z",
+    "endTime": "2025-07-24T02:22:48.501Z",
+    "totalTests": 3,
+    "passedTests": 3,
+    "failedTests": 0,
+    "successRate": 100
+  },
+  "tests": [
+    {
+      "name": "Status Tracker Functionality",
+      "passed": true,
+      "message": "",
+      "timestamp": "2025-07-24T02:22:48.499Z"
+    },
+    {
+      "name": "Migration Verifier Initialization",
+      "passed": true,
+      "message": "",
+      "timestamp": "2025-07-24T02:22:48.500Z"
+    },
+    {
+      "name": "Rollback Manager Initialization",
+      "passed": true,
+      "message": "",
+      "timestamp": "2025-07-24T02:22:48.501Z"
+    }
+  ]
+}

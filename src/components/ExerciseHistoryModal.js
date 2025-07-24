@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Modal, Button, Spinner } from 'react-bootstrap';
-import { auth } from '../firebase';
+import { AuthContext } from '../context/AuthContext';
 import { getCollectionCached } from '../api/enhancedFirestoreCache';
 import {
   groupExerciseHistoryBySessions,
@@ -25,7 +25,7 @@ function ExerciseHistoryModal({
   const [historyData, setHistoryData] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   
-  const user = auth.currentUser;
+  const { user, isAuthenticated } = useContext(AuthContext);
 
   // Fetch exercise history when modal opens
   useEffect(() => {
@@ -44,7 +44,7 @@ function ExerciseHistoryModal({
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['isWorkoutFinished', '==', true]
           ],
           orderBy: [['date', 'desc']],

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import '../styles/HypertrophyHub.css';
@@ -14,6 +14,7 @@ const HypertrophyHub = () => {
     });
     const [loading, setLoading] = useState(true);
     const [selectedTimeRange, setSelectedTimeRange] = useState('4weeks');
+    const { user, isAuthenticated } = useContext(AuthContext);
     const [userId, setUserId] = useState(null);
 
     // Muscle group mapping for body heat map
@@ -34,11 +35,8 @@ const HypertrophyHub = () => {
     };
 
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            setUserId(user ? user.uid : null);
-        });
-        return () => unsubscribe();
-    }, []);
+        setUserId(isAuthenticated && user ? user.id : null);
+    }, [user, isAuthenticated]);
 
     useEffect(() => {
         if (!userId) {

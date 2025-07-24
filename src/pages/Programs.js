@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { db, auth } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../config/supabase';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 import { getCollectionCached, getDocCached, invalidateProgramCache, invalidateExerciseCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { db } from '../firebase';
+import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -20,7 +22,7 @@ function Programs({ userRole }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [workoutLogs, setWorkoutLogs] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
-  const user = auth.currentUser;
+  const { user, isAuthenticated } = useContext(AuthContext);
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
@@ -47,14 +49,14 @@ function Programs({ userRole }) {
         setIsLoading(true);
         try {
           // Warm cache before fetching data
-          await warmUserCache(user.uid, 'high');
+          await warmUserCache(user.id, 'high');
 
           // Fetch user programs
           const userProgramsData = await getCollectionCached(
             'programs',
             {
               where: [
-                ['userId', '==', user.uid],
+                ['userId', '==', user.id],
                 ['isTemplate', '==', false]
               ],
               orderBy: [['createdAt', 'desc']]
@@ -96,16 +98,16 @@ function Programs({ userRole }) {
 
             // Fetch user-specific exercises if user exists
             let userExercises = [];
-            if (user?.uid) {
+            if (user?.id) {
               try {
-                const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
                 if (userMetadata && userMetadata.exercises) {
                   userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
                     id,
                     ...ex,
                     isGlobal: false,
                     source: 'custom',
-                    createdBy: user.uid
+                    createdBy: user.id
                   }));
                 }
               } catch (userError) {
@@ -145,7 +147,7 @@ function Programs({ userRole }) {
     if (!user) return;
     try {
       await addDoc(collection(db, "programs"), {
-        userId: user.uid,
+        userId: user.id,
         isTemplate: false,
         name: `${program.name} (Adopted)`,
         duration: program.duration,
@@ -155,7 +157,7 @@ function Programs({ userRole }) {
         createdAt: new Date(),
         isCurrent: false
       });
-      invalidateProgramCache(user.uid);
+      invalidateProgramCache(user.id);
       alert('Program adopted successfully!');
     } catch (error) {
       console.error("Error adopting program: ", error);
@@ -169,7 +171,7 @@ function Programs({ userRole }) {
     try {
       await deleteDoc(doc(db, "programs", programId));
       setUserPrograms(userPrograms.filter(p => p.id !== programId));
-      invalidateProgramCache(user.uid);
+      invalidateProgramCache(user.id);
       alert('Program deleted successfully!');
     } catch (error) {
       console.error("Error deleting program: ", error);
@@ -188,7 +190,7 @@ function Programs({ userRole }) {
         'programs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['isTemplate', '==', false]
           ]
         },
@@ -208,7 +210,7 @@ function Programs({ userRole }) {
       });
 
       // Invalidate cache after all updates are complete
-      invalidateProgramCache(user.uid);
+      invalidateProgramCache(user.id);
 
       setUserPrograms(userPrograms.map(program => ({
         ...program,
@@ -230,7 +232,7 @@ function Programs({ userRole }) {
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['programId', '==', program.id]
           ]
         },

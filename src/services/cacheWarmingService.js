@@ -1,6 +1,6 @@
 // Cache warming service for optimal app performance
 import { warmUserCache, warmAppCache, getCacheStats } from '../api/enhancedFirestoreCache';
-import { auth } from '../firebase';
+import { authService } from './authService';
 
 class CacheWarmingService {
   constructor() {
@@ -27,9 +27,9 @@ class CacheWarmingService {
       await warmAppCache();
       
       // If user is already authenticated, warm their cache too
-      const currentUser = auth.currentUser;
+      const currentUser = authService.getCurrentUser();
       if (currentUser) {
-        await this.warmUserCacheWithRetry(currentUser.uid, 'high');
+        await this.warmUserCacheWithRetry(currentUser.id, 'high');
       }
 
       const duration = Date.now() - startTime;
@@ -193,9 +193,9 @@ class CacheWarmingService {
       if (hitRate < 70) {
         console.log(`⚠️ Low cache hit rate (${hitRate}%), considering additional warming`);
         
-        const currentUser = auth.currentUser;
+        const currentUser = authService.getCurrentUser();
         if (currentUser) {
-          await this.warmUserCacheWithRetry(currentUser.uid, 'normal');
+          await this.warmUserCacheWithRetry(currentUser.id, 'normal');
         }
       }
       

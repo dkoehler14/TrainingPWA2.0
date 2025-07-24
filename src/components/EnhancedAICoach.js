@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
-import { httpsCallable } from 'firebase/functions';
-import { functions } from '../firebase';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
+// Firebase Functions will be replaced with Supabase Edge Functions
 import '../styles/EnhancedAICoach.css';
+import { functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 
 const EnhancedAICoach = () => {
     const [coachingData, setCoachingData] = useState({
@@ -13,14 +14,12 @@ const EnhancedAICoach = () => {
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const { user, isAuthenticated } = useContext(AuthContext);
     const [userId, setUserId] = useState(null);
 
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            setUserId(user ? user.uid : null);
-        });
-        return () => unsubscribe();
-    }, []);
+        setUserId(isAuthenticated && user ? user.id : null);
+    }, [user, isAuthenticated]);
 
     useEffect(() => {
         if (!userId) {

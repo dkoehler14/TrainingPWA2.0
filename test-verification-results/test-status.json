@@ -1,0 +1,71 @@
+{
+  "migrationId": "migration-2025-07-24T02-22-48-475Z-g0hir9",
+  "startTime": "2025-07-24T02:22:48.482Z",
+  "endTime": "2025-07-24T02:22:48.490Z",
+  "duration": 8,
+  "currentPhase": "completed",
+  "overallStatus": "completed",
+  "phases": {
+    "extraction": {
+      "status": "completed",
+      "startTime": "2025-07-24T02:22:48.485Z",
+      "endTime": "2025-07-24T02:22:48.487Z",
+      "progress": 100,
+      "errors": [],
+      "results": {
+        "recordsExtracted": 100
+      }
+    },
+    "transformation": {
+      "status": "not_started",
+      "startTime": null,
+      "endTime": null,
+      "progress": 0,
+      "errors": []
+    },
+    "import": {
+      "status": "not_started",
+      "startTime": null,
+      "endTime": null,
+      "progress": 0,
+      "errors": []
+    },
+    "verification": {
+      "status": "not_started",
+      "startTime": null,
+      "endTime": null,
+      "progress": 0,
+      "errors": []
+    },
+    "rollback": {
+      "status": "not_started",
+      "startTime": null,
+      "endTime": null,
+      "progress": 0,
+      "errors": []
+    }
+  },
+  "collections": {},
+  "statistics": {
+    "totalRecords": 100,
+    "processedRecords": 0,
+    "failedRecords": 0,
+    "tablesCreated": 0,
+    "relationshipsEstablished": 0
+  },
+  "errors": [],
+  "warnings": [],
+  "checkpoints": [
+    {
+      "name": "test-checkpoint",
+      "timestamp": "2025-07-24T02:22:48.488Z",
+      "phase": "extraction",
+      "data": {
+        "test": true
+      }
+    }
+  ],
+  "results": {
+    "success": true
+  }
+}

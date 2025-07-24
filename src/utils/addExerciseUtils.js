@@ -3,9 +3,10 @@
  * Extracted from LogWorkout component for better testability
  */
 
-import { updateDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../config/supabase';
 import { getDocCached, invalidateProgramCache } from '../api/enhancedFirestoreCache';
+import { db } from '../firebase';
+import { updateDoc, doc } from 'firebase/firestore';
 
 /**
  * Creates a new exercise object with default values

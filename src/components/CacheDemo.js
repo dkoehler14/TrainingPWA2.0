@@ -1,7 +1,7 @@
 // Cache Demo Component - Shows enhanced caching features and migration example
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Card, Button, Badge, Table, Alert, Tabs, Tab } from 'react-bootstrap';
-import { auth } from '../firebase';
+import { AuthContext } from '../context/AuthContext';
 import {
   getCacheStats,
   getEnhancedCacheStats,
@@ -15,6 +15,7 @@ import {
 import cacheWarmingService from '../services/cacheWarmingService';
 
 const CacheDemo = () => {
+  const { user, isAuthenticated } = useContext(AuthContext);
   const [cacheStats, setCacheStats] = useState(null);
   const [enhancedStats, setEnhancedStats] = useState(null);
   const [warmingStats, setWarmingStats] = useState(null);
@@ -49,11 +50,11 @@ const CacheDemo = () => {
 
   // Cache warming demonstrations
   const handleWarmUserCache = async () => {
-    if (!auth.currentUser) return;
+    if (!user) return;
     
     setLoading(true);
     try {
-      await warmUserCache(auth.currentUser.uid, 'high');
+      await warmUserCache(user.id, 'high');
       refreshStats();
     } catch (error) {
       console.error('Cache warming failed:', error);
@@ -63,11 +64,11 @@ const CacheDemo = () => {
   };
 
   const handleSmartWarmCache = async () => {
-    if (!auth.currentUser) return;
+    if (!user) return;
     
     setLoading(true);
     try {
-      await cacheWarmingService.smartWarmCache(auth.currentUser.uid, {
+      await cacheWarmingService.smartWarmCache(user.id, {
         lastVisitedPage: 'demo',
         timeOfDay: new Date().getHours(),
         dayOfWeek: new Date().getDay()
@@ -81,11 +82,11 @@ const CacheDemo = () => {
   };
 
   const handleProgressiveWarmCache = async () => {
-    if (!auth.currentUser) return;
+    if (!user) return;
     
     setLoading(true);
     try {
-      await cacheWarmingService.progressiveWarmCache(auth.currentUser.uid);
+      await cacheWarmingService.progressiveWarmCache(user.id);
       refreshStats();
     } catch (error) {
       console.error('Progressive cache warming failed:', error);
@@ -96,20 +97,20 @@ const CacheDemo = () => {
 
   // Cache invalidation demonstrations
   const handleInvalidateUserCache = () => {
-    if (!auth.currentUser) return;
-    invalidateUserCache(auth.currentUser.uid);
+    if (!user) return;
+    invalidateUserCache(user.id);
     refreshStats();
   };
 
   const handleInvalidateWorkoutCache = () => {
-    if (!auth.currentUser) return;
-    invalidateWorkoutCache(auth.currentUser.uid);
+    if (!user) return;
+    invalidateWorkoutCache(user.id);
     refreshStats();
   };
 
   const handleInvalidateProgramCache = () => {
-    if (!auth.currentUser) return;
-    invalidateProgramCache(auth.currentUser.uid);
+    if (!user) return;
+    invalidateProgramCache(user.id);
     refreshStats();
   };
 
@@ -470,21 +471,21 @@ const CacheDemo = () => {
               <Button 
                 variant="primary" 
                 onClick={handleWarmUserCache}
-                disabled={loading || !auth.currentUser}
+                disabled={loading || !user}
               >
                 🔥 Warm User Cache
               </Button>
               <Button 
                 variant="info" 
                 onClick={handleSmartWarmCache}
-                disabled={loading || !auth.currentUser}
+                disabled={loading || !user}
               >
                 🧠 Smart Warm Cache
               </Button>
               <Button 
                 variant="success" 
                 onClick={handleProgressiveWarmCache}
-                disabled={loading || !auth.currentUser}
+                disabled={loading || !user}
               >
                 📈 Progressive Warm Cache
               </Button>
@@ -496,21 +497,21 @@ const CacheDemo = () => {
               <Button 
                 variant="warning" 
                 onClick={handleInvalidateUserCache}
-                disabled={!auth.currentUser}
+                disabled={!user}
               >
                 🗑️ Invalidate User Cache
               </Button>
               <Button 
                 variant="outline-warning" 
                 onClick={handleInvalidateWorkoutCache}
-                disabled={!auth.currentUser}
+                disabled={!user}
               >
                 🏋️ Invalidate Workout Cache
               </Button>
               <Button 
                 variant="outline-warning" 
                 onClick={handleInvalidateProgramCache}
-                disabled={!auth.currentUser}
+                disabled={!user}
               >
                 📋 Invalidate Program Cache
               </Button>
@@ -557,7 +558,7 @@ const CacheDemo = () => {
     </Card>
   );
 
-  if (!auth.currentUser) {
+  if (!user) {
     return (
       <Alert variant="warning">
         Please log in to view cache demo features.

@@ -1,15 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
-import { auth } from '../firebase';
+import { useState, useEffect, useCallback, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { getCollectionCached } from '../api/enhancedFirestoreCache';
 
 const useQuickWorkoutHistory = () => {
+  const { user, isAuthenticated } = useContext(AuthContext);
   const [workouts, setWorkouts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
 
   const fetchWorkouts = useCallback(async (isRetry = false) => {
-    const user = auth.currentUser;
     
     if (!user) {
       setError('Please sign in to view your workout history');
@@ -27,7 +27,7 @@ const useQuickWorkoutHistory = () => {
         'workoutLogs',
         {
           where: [
-            ['userId', '==', user.uid],
+            ['userId', '==', user.id],
             ['type', '==', 'quick_workout'],
             ['isWorkoutFinished', '==', true]
           ],

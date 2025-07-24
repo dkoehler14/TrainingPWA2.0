@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { auth } from '../firebase';
+import React, { useState, useEffect, useContext } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import EnhancedAICoach from '../components/EnhancedAICoach';
@@ -88,12 +88,11 @@ const ProgressCoach = () => {
     const [userId, setUserId] = useState(null);
     const [exercisesList, setExercisesList] = useState([]);
 
+    const { user, isAuthenticated } = useContext(AuthContext);
+
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(user => {
-            setUserId(user ? user.uid : null);
-        });
-        return () => unsubscribe();
-    }, []);
+        setUserId(isAuthenticated && user ? user.id : null);
+    }, [user, isAuthenticated]);
 
     useEffect(() => {
         if (!userId) {

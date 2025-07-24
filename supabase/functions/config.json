@@ -1,0 +1,99 @@
+{
+  "functions": {
+    "process-workout": {
+      "description": "Process completed workouts and update user analytics",
+      "memory": 256,
+      "timeout": 30,
+      "environment": {
+        "FUNCTION_VERSION": "1.0.0"
+      },
+      "cors": {
+        "allowOrigin": "*",
+        "allowMethods": ["POST", "OPTIONS"],
+        "allowHeaders": ["authorization", "content-type", "x-client-info", "apikey"]
+      }
+    },
+    "coaching-insights": {
+      "description": "Generate AI-powered coaching recommendations",
+      "memory": 256,
+      "timeout": 45,
+      "environment": {
+        "FUNCTION_VERSION": "1.0.0"
+      },
+      "cors": {
+        "allowOrigin": "*",
+        "allowMethods": ["POST", "OPTIONS"],
+        "allowHeaders": ["authorization", "content-type", "x-client-info", "apikey"]
+      }
+    },
+    "data-validation": {
+      "description": "Validate and sanitize user input data",
+      "memory": 128,
+      "timeout": 15,
+      "environment": {
+        "FUNCTION_VERSION": "1.0.0"
+      },
+      "cors": {
+        "allowOrigin": "*",
+        "allowMethods": ["POST", "OPTIONS"],
+        "allowHeaders": ["authorization", "content-type", "x-client-info", "apikey"]
+      }
+    },
+    "workout-triggers": {
+      "description": "Handle database triggers for workout events",
+      "memory": 128,
+      "timeout": 20,
+      "environment": {
+        "FUNCTION_VERSION": "1.0.0"
+      },
+      "cors": {
+        "allowOrigin": "*",
+        "allowMethods": ["POST", "OPTIONS"],
+        "allowHeaders": ["authorization", "content-type", "x-client-info", "apikey"]
+      }
+    }
+  },
+  "deployment": {
+    "environments": {
+      "development": {
+        "project_ref": "local",
+        "verify_jwt": false,
+        "debug": true
+      },
+      "staging": {
+        "project_ref": "${SUPABASE_STAGING_PROJECT_REF}",
+        "verify_jwt": true,
+        "debug": true
+      },
+      "production": {
+        "project_ref": "${SUPABASE_PROJECT_REF}",
+        "verify_jwt": true,
+        "debug": false
+      }
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics": {
+      "performance": true,
+      "errors": true,
+      "usage": true
+    },
+    "alerts": {
+      "error_rate_threshold": 0.05,
+      "response_time_threshold": 5000,
+      "memory_usage_threshold": 0.8
+    }
+  },
+  "security": {
+    "rate_limiting": {
+      "enabled": true,
+      "window_ms": 60000,
+      "max_requests": 100
+    },
+    "input_validation": {
+      "enabled": true,
+      "max_payload_size": "1MB"
+    }
+  }
+}

@@ -24,7 +24,7 @@ function Exercises({ user, userRole }) {
   useEffect(() => {
     if (user) {
       // Warm cache and fetch exercises
-      warmUserCache(user.uid, 'high').then(() => {
+      warmUserCache(user.id, 'high').then(() => {
         fetchExercises();
       });
     } else {
@@ -51,16 +51,16 @@ function Exercises({ user, userRole }) {
       
       // Fetch user-specific exercises if user exists
       let userExercises = [];
-      if (user?.uid) {
+      if (user?.id) {
         try {
-          const userMetadata = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+          const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
           if (userMetadata && userMetadata.exercises) {
             userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
               id,
               ...ex,
               isGlobal: false,
               source: 'custom',
-              createdBy: user.uid
+              createdBy: user.id
             }));
           }
         } catch (userError) {

@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
 import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button } from 'react-bootstrap';
 import { useNavigate } from'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
-import { db, auth } from '../firebase';
-import { orderBy as fsOrderBy, where as fsWhere } from 'firebase/firestore';
+import { AuthContext } from '../context/AuthContext';
 import Select from 'react-select';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -14,6 +13,7 @@ import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCac
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 function ProgressTracker() {
+	const { user, isAuthenticated } = useContext(AuthContext);
 	const [exercises, setExercises] = useState([]);
 	const [selectedExercise, setSelectedExercise] = useState(null);
 	const [logs, setLogs] = useState([]);
@@ -55,8 +55,8 @@ function ProgressTracker() {
 		setIsExercisesLoading(true);
 		try {
 			// Enhanced cache warming before data fetching
-			if (auth.currentUser?.uid) {
-				await warmUserCache(auth.currentUser.uid, 'normal')
+			if (user?.id) {
+				await warmUserCache(user.id, 'normal')
 					.then(() => {
 						console.log('Cache warming completed for ProgressTracker');
 					})
@@ -72,7 +72,7 @@ function ProgressTracker() {
 				const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
 				
 				// Get user-specific exercises from metadata
-				const userExercisesDoc = await getDocCached('exercises_metadata', auth.currentUser.uid, 60 * 60 * 1000);
+				const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
 				const userExercises = userExercisesDoc?.exercises || [];
 				
 				// Combine global and user exercises
@@ -134,7 +134,7 @@ function ProgressTracker() {
 		try {
 			const logsData = await getCollectionCached('workoutLogs', {
 				where: [
-					['userId', '==', auth.currentUser.uid],
+					['userId', '==', user.id],
 					['date', '>=', startDate],
 					['date', '<=', endDate],
 					['isWorkoutFinished', '==', true]
@@ -210,7 +210,7 @@ function ProgressTracker() {
 			// Use cache utility to get all logs for consistency and body part analysis
 			const allLogs = await getCollectionCached('workoutLogs', {
 				where: [
-					['userId', '==', auth.currentUser.uid],
+					['userId', '==', user.id],
 					['date', '>=', startDate],
 					['date', '<=', endDate],
 					['isWorkoutFinished', '==', true]

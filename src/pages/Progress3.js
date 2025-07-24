@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
-import { db, auth } from '../firebase';
+import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
@@ -20,7 +20,7 @@ function Analytics() {
     const [completionRate, setCompletionRate] = useState(0);
     const [volumeData, setVolumeData] = useState([]);
     const [personalRecords, setPersonalRecords] = useState([]);
-    const user = auth.currentUser;
+    const { user, isAuthenticated } = useContext(AuthContext);
     const [isLoading, setIsLoading] = useState(true);
 
     const getWeekStartDate = (date) => {
@@ -41,7 +41,7 @@ function Analytics() {
                 setIsLoading(true);
                 try {
                     // Enhanced cache warming before data fetching
-                    await warmUserCache(user.uid, 'normal')
+                    await warmUserCache(user.id, 'normal')
                         .then(() => {
                             console.log('Cache warming completed for Progress3');
                         })
@@ -49,7 +49,7 @@ function Analytics() {
                             console.warn('Cache warming failed, proceeding with data fetch:', error);
                         });
 
-                    const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.uid]] });
+                    const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.id]] });
                     const logsWithDate = logsData.map(log => ({
                         ...log,
                         date: log.date.toDate ? log.date.toDate() : log.date
@@ -63,7 +63,7 @@ function Analytics() {
                         const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
                         
                         // Get user-specific exercises from metadata
-                        const userExercisesDoc = await getDocCached('exercises_metadata', user.uid, 60 * 60 * 1000);
+                        const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
                         const userExercises = userExercisesDoc?.exercises || [];
                         
                         // Combine global and user exercises

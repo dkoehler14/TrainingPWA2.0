@@ -6,9 +6,14 @@ import '../styles/NavBar.css';
 
 function NavBar({ user, userRole }) {
   const { darkMode, toggleDarkMode } = useTheme();
+  const { signOut } = useAuth();
 
-  const handleLogout = () => {
-    signOut(auth);
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
   return (
