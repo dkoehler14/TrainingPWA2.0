@@ -1,108 +1,220 @@
 /**
  * Integration test for user service
  * This test verifies that the user service functions work correctly
- * without mocking Supabase (for manual testing)
+ * with real Supabase database connection
  */
 
 import { 
   createUserProfile, 
   getUserProfile, 
   updateUserProfile,
-  getOrCreateUserProfile
+  getOrCreateUserProfile,
+  getUserStatistics
 } from '../userService'
+import { DatabaseTestUtils, skipIfSupabaseUnavailable } from '../../utils/testHelpers'
 
-// Skip these tests in CI/automated testing
-const runIntegrationTests = process.env.RUN_INTEGRATION_TESTS === 'true'
+describe('UserService Integration Tests', () => {
+  let dbUtils
 
-describe.skip('UserService Integration Tests', () => {
-  const mockAuthUser = {
-    id: 'test-auth-id-' + Date.now(),
-    email: 'test-' + Date.now() + '@example.com'
-  }
+  // Skip tests if Supabase is not available
+  skipIfSupabaseUnavailable()
 
-  let createdUserId = null
-
-  beforeAll(() => {
-    if (!runIntegrationTests) {
-      console.log('Skipping integration tests. Set RUN_INTEGRATION_TESTS=true to run.')
-    }
+  beforeAll(async () => {
+    dbUtils = new DatabaseTestUtils()
+    await dbUtils.verifyConnection()
   })
 
   afterAll(async () => {
-    // Cleanup: delete test user if created
-    if (createdUserId && runIntegrationTests) {
-      try {
-        // Note: In a real test, you'd want to clean up the test data
-        console.log('Test user created with ID:', createdUserId)
-      } catch (error) {
-        console.error('Cleanup error:', error)
+    if (dbUtils) {
+      await dbUtils.cleanup()
+    }
+  })
+
+  afterEach(async () => {
+    // Clean up after each test
+    if (dbUtils) {
+      await dbUtils.cleanup()
+    }
+  })
+
+  describe('createUserProfile', () => {
+    it('should create a user profile in the database', async () => {
+      const mockAuthUser = {
+        id: 'test-auth-123',
+        email: 'integration-test@example.com'
       }
-    }
-  })
 
-  it('should create and retrieve user profile', async () => {
-    if (!runIntegrationTests) return
+      const mockProfileData = {
+        name: 'Integration Test User',
+        experienceLevel: 'intermediate',
+        age: 28,
+        weight: 160,
+        height: 72
+      }
 
-    const profileData = {
-      name: 'Test User',
-      experienceLevel: 'beginner',
-      age: 25,
-      preferredUnits: 'LB'
-    }
+      const result = await createUserProfile(mockAuthUser, mockProfileData)
 
-    // Create user profile
-    const createdProfile = await createUserProfile(mockAuthUser, profileData)
-    createdUserId = createdProfile.id
+      expect(result).toBeDefined()
+      expect(result.auth_id).toBe(mockAuthUser.id)
+      expect(result.email).toBe(mockAuthUser.email)
+      expect(result.name).toBe(mockProfileData.name)
+      expect(result.experience_level).toBe(mockProfileData.experienceLevel)
+      expect(result.age).toBe(mockProfileData.age)
 
-    expect(createdProfile).toBeDefined()
-    expect(createdProfile.email).toBe(mockAuthUser.email)
-    expect(createdProfile.name).toBe(profileData.name)
-    expect(createdProfile.experience_level).toBe(profileData.experienceLevel)
-
-    // Retrieve user profile
-    const retrievedProfile = await getUserProfile(mockAuthUser.id)
-    expect(retrievedProfile).toBeDefined()
-    expect(retrievedProfile.id).toBe(createdProfile.id)
-    expect(retrievedProfile.email).toBe(mockAuthUser.email)
-  })
-
-  it('should update user profile', async () => {
-    if (!runIntegrationTests || !createdUserId) return
-
-    const updates = {
-      name: 'Updated Test User',
-      age: 30
-    }
-
-    const updatedProfile = await updateUserProfile(createdUserId, updates)
-    
-    expect(updatedProfile).toBeDefined()
-    expect(updatedProfile.name).toBe(updates.name)
-    expect(updatedProfile.age).toBe(updates.age)
-  })
-
-  it('should handle getOrCreateUserProfile', async () => {
-    if (!runIntegrationTests) return
-
-    const newAuthUser = {
-      id: 'new-auth-id-' + Date.now(),
-      email: 'new-test-' + Date.now() + '@example.com'
-    }
-
-    // Should create new profile since it doesn't exist
-    const profile = await getOrCreateUserProfile(newAuthUser, {
-      name: 'New Test User',
-      experienceLevel: 'intermediate'
+      // Track for cleanup
+      dbUtils.createdRecords.users.push(result.id)
     })
 
-    expect(profile).toBeDefined()
-    expect(profile.email).toBe(newAuthUser.email)
-    expect(profile.name).toBe('New Test User')
-    expect(profile.experience_level).toBe('intermediate')
+    it('should handle duplicate email error', async () => {
+      const mockAuthUser = {
+        id: 'test-auth-456',
+        email: 'duplicate-test@example.com'
+      }
 
-    // Should return existing profile on second call
-    const existingProfile = await getOrCreateUserProfile(newAuthUser)
-    expect(existingProfile.id).toBe(profile.id)
+      const mockProfileData = {
+        name: 'First User'
+      }
+
+      // Create first user
+      const firstUser = await createUserProfile(mockAuthUser, mockProfileData)
+      dbUtils.createdRecords.users.push(firstUser.id)
+
+      // Try to create second user with same email
+      const duplicateAuthUser = {
+        id: 'test-auth-789',
+        email: 'duplicate-test@example.com'
+      }
+
+      await expect(
+        createUserProfile(duplicateAuthUser, { name: 'Second User' })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('getUserProfile', () => {
+    it('should retrieve an existing user profile', async () => {
+      // Create a test user first
+      const testUser = await dbUtils.createTestUser({
+        auth_id: 'test-get-user-123',
+        email: 'get-user-test@example.com',
+        name: 'Get User Test'
+      })
+
+      const result = await getUserProfile(testUser.auth_id)
+
+      expect(result).toBeDefined()
+      expect(result.id).toBe(testUser.id)
+      expect(result.auth_id).toBe(testUser.auth_id)
+      expect(result.email).toBe(testUser.email)
+      expect(result.name).toBe(testUser.name)
+    })
+
+    it('should return null for non-existent user', async () => {
+      const result = await getUserProfile('non-existent-auth-id')
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('updateUserProfile', () => {
+    it('should update an existing user profile', async () => {
+      // Create a test user first
+      const testUser = await dbUtils.createTestUser({
+        name: 'Original Name',
+        age: 25
+      })
+
+      const updateData = {
+        name: 'Updated Name',
+        age: 30,
+        weight: 170
+      }
+
+      const result = await updateUserProfile(testUser.id, updateData)
+
+      expect(result).toBeDefined()
+      expect(result.id).toBe(testUser.id)
+      expect(result.name).toBe(updateData.name)
+      expect(result.age).toBe(updateData.age)
+      expect(result.weight).toBe(updateData.weight)
+      expect(result.updated_at).not.toBe(testUser.updated_at)
+    })
+
+    it('should handle updating non-existent user', async () => {
+      await expect(
+        updateUserProfile('non-existent-id', { name: 'Test' })
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('getOrCreateUserProfile', () => {
+    it('should create new profile when user does not exist', async () => {
+      const newAuthUser = {
+        id: 'new-auth-id-' + Date.now(),
+        email: 'new-test-' + Date.now() + '@example.com'
+      }
+
+      const profileData = {
+        name: 'New Test User',
+        experienceLevel: 'intermediate'
+      }
+
+      const profile = await getOrCreateUserProfile(newAuthUser, profileData)
+
+      expect(profile).toBeDefined()
+      expect(profile.email).toBe(newAuthUser.email)
+      expect(profile.name).toBe(profileData.name)
+      expect(profile.experience_level).toBe(profileData.experienceLevel)
+
+      // Track for cleanup
+      dbUtils.createdRecords.users.push(profile.id)
+    })
+
+    it('should return existing profile when user exists', async () => {
+      // Create a test user first
+      const testUser = await dbUtils.createTestUser()
+
+      const existingProfile = await getOrCreateUserProfile({ 
+        id: testUser.auth_id,
+        email: testUser.email 
+      })
+
+      expect(existingProfile.id).toBe(testUser.id)
+      expect(existingProfile.email).toBe(testUser.email)
+    })
+  })
+
+  describe('getUserStatistics', () => {
+    it('should calculate user statistics from workout data', async () => {
+      // Create test user
+      const testUser = await dbUtils.createTestUser()
+      
+      // Create test exercise
+      const testExercise = await dbUtils.createTestExercise({
+        name: 'Test Bench Press',
+        primary_muscle_group: 'Chest'
+      })
+
+      // Create test workout log
+      const testWorkoutLog = await dbUtils.createTestWorkoutLog(testUser.id, {
+        is_finished: true,
+        completed_date: new Date().toISOString()
+      })
+
+      // Create test workout log exercise
+      await dbUtils.createTestWorkoutLogExercise(testWorkoutLog.id, testExercise.id, {
+        sets: 3,
+        reps: [10, 8, 6],
+        weights: [135, 140, 145],
+        completed: [true, true, true]
+      })
+
+      const result = await getUserStatistics(testUser.id)
+
+      expect(result).toBeDefined()
+      expect(result.totalWorkouts).toBeGreaterThan(0)
+      expect(result.totalVolume).toBeGreaterThan(0)
+      expect(result.exerciseStats).toBeDefined()
+    })
   })
 })
 

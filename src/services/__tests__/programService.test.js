@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals'
-import { supabase } from '../../config/supabase'
+import { createMockSupabaseClient } from '../../utils/testHelpers'
 import {
   getUserPrograms,
   getProgramById,
@@ -12,23 +12,14 @@ import {
 } from '../programService'
 
 // Mock Supabase
-jest.mock('../../config/supabase')
+const mockSupabase = createMockSupabaseClient()
+jest.mock('../../config/supabase', () => ({
+  supabase: mockSupabase
+}))
 
 describe('Program Service', () => {
-  let mockQuery
-
   beforeEach(() => {
     jest.clearAllMocks()
-    mockQuery = {
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      order: jest.fn().mockReturnThis(),
-      single: jest.fn().mockReturnThis(),
-      insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis(),
-      delete: jest.fn().mockReturnThis()
-    }
-    supabase.from.mockReturnValue(mockQuery)
   })
 
   describe('getUserPrograms', () => {
@@ -39,34 +30,34 @@ describe('Program Service', () => {
         { id: '2', name: 'Program 2', user_id: userId }
       ]
 
-      mockQuery.order.mockResolvedValue({ data: mockPrograms, error: null })
+      mockSupabase.from().order.mockResolvedValue({ data: mockPrograms, error: null })
 
       const result = await getUserPrograms(userId)
 
-      expect(supabase.from).toHaveBeenCalledWith('programs')
-      expect(mockQuery.eq).toHaveBeenCalledWith('user_id', userId)
-      expect(mockQuery.order).toHaveBeenCalledWith('created_at', { ascending: false })
+      expect(mockSupabase.from).toHaveBeenCalledWith('programs')
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(mockSupabase.from().order).toHaveBeenCalledWith('created_at', { ascending: false })
       expect(result).toEqual(mockPrograms)
     })
 
     it('should apply isActive filter', async () => {
       const userId = 'user123'
       const filters = { isActive: true }
-      mockQuery.order.mockResolvedValue({ data: [], error: null })
+      mockSupabase.from().order.mockResolvedValue({ data: [], error: null })
 
       await getUserPrograms(userId, filters)
 
-      expect(mockQuery.eq).toHaveBeenCalledWith('is_active', true)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_active', true)
     })
 
     it('should apply isCurrent filter', async () => {
       const userId = 'user123'
       const filters = { isCurrent: true }
-      mockQuery.order.mockResolvedValue({ data: [], error: null })
+      mockSupabase.from().order.mockResolvedValue({ data: [], error: null })
 
       await getUserPrograms(userId, filters)
 
-      expect(mockQuery.eq).toHaveBeenCalledWith('is_current', true)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_current', true)
     })
   })
 
@@ -89,12 +80,12 @@ describe('Program Service', () => {
         ]
       }
 
-      mockQuery.single.mockResolvedValue({ data: mockProgram, error: null })
+      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await getProgramById(programId)
 
-      expect(mockQuery.select).toHaveBeenCalledWith(expect.stringContaining('program_workouts'))
-      expect(mockQuery.eq).toHaveBeenCalledWith('id', programId)
+      expect(mockSupabase.from().select).toHaveBeenCalledWith(expect.stringContaining('program_workouts'))
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
       expect(result).toEqual(mockProgram)
     })
   })
@@ -109,19 +100,19 @@ describe('Program Service', () => {
         is_active: true
       }
 
-      mockQuery.single.mockResolvedValue({ data: mockProgram, error: null })
+      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await getCurrentProgram(userId)
 
-      expect(mockQuery.eq).toHaveBeenCalledWith('user_id', userId)
-      expect(mockQuery.eq).toHaveBeenCalledWith('is_current', true)
-      expect(mockQuery.eq).toHaveBeenCalledWith('is_active', true)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_current', true)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_active', true)
       expect(result).toEqual(mockProgram)
     })
 
     it('should return null when no current program found', async () => {
       const userId = 'user123'
-      mockQuery.single.mockResolvedValue({ 
+      mockSupabase.from().single.mockResolvedValue({ 
         data: null, 
         error: { code: 'PGRST116' } 
       })
@@ -142,12 +133,12 @@ describe('Program Service', () => {
       }
       const mockCreatedProgram = { id: 'prog123', ...programData }
 
-      mockQuery.single.mockResolvedValue({ data: mockCreatedProgram, error: null })
+      mockSupabase.from().single.mockResolvedValue({ data: mockCreatedProgram, error: null })
 
       const result = await createProgram(programData)
 
-      expect(mockQuery.insert).toHaveBeenCalledWith([programData])
-      expect(mockQuery.select).toHaveBeenCalled()
+      expect(mockSupabase.from().insert).toHaveBeenCalledWith([programData])
+      expect(mockSupabase.from().select).toHaveBeenCalled()
       expect(result).toEqual(mockCreatedProgram)
     })
   })
@@ -158,17 +149,17 @@ describe('Program Service', () => {
       const updates = { name: 'Updated Program' }
       const mockUpdatedProgram = { id: programId, ...updates }
 
-      mockQuery.single.mockResolvedValue({ data: mockUpdatedProgram, error: null })
+      mockSupabase.from().single.mockResolvedValue({ data: mockUpdatedProgram, error: null })
 
       const result = await updateProgram(programId, updates)
 
-      expect(mockQuery.update).toHaveBeenCalledWith(
+      expect(mockSupabase.from().update).toHaveBeenCalledWith(
         expect.objectContaining({
           ...updates,
           updated_at: expect.any(String)
         })
       )
-      expect(mockQuery.eq).toHaveBeenCalledWith('id', programId)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
       expect(result).toEqual(mockUpdatedProgram)
     })
   })
@@ -179,18 +170,18 @@ describe('Program Service', () => {
       const userId = 'user123'
       const mockProgram = { id: programId, is_current: true }
 
-      mockQuery.single.mockResolvedValue({ data: mockProgram, error: null })
+      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await setCurrentProgram(programId, userId)
 
-      expect(mockQuery.update).toHaveBeenCalledWith(
+      expect(mockSupabase.from().update).toHaveBeenCalledWith(
         expect.objectContaining({
           is_current: true,
           updated_at: expect.any(String)
         })
       )
-      expect(mockQuery.eq).toHaveBeenCalledWith('id', programId)
-      expect(mockQuery.eq).toHaveBeenCalledWith('user_id', userId)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
       expect(result).toEqual(mockProgram)
     })
   })
@@ -199,13 +190,13 @@ describe('Program Service', () => {
     it('should delete program', async () => {
       const programId = 'prog123'
       const userId = 'user123'
-      mockQuery.delete.mockResolvedValue({ error: null })
+      mockSupabase.from().delete.mockResolvedValue({ error: null })
 
       const result = await deleteProgram(programId, userId)
 
-      expect(mockQuery.delete).toHaveBeenCalled()
-      expect(mockQuery.eq).toHaveBeenCalledWith('id', programId)
-      expect(mockQuery.eq).toHaveBeenCalledWith('user_id', userId)
+      expect(mockSupabase.from().delete).toHaveBeenCalled()
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
       expect(result).toBe(true)
     })
   })

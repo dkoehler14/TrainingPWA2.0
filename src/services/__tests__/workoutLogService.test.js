@@ -6,18 +6,13 @@
  */
 
 import workoutLogService from '../workoutLogService'
-import { supabase } from '../../config/supabase'
+import { createMockSupabaseClient } from '../../utils/testHelpers'
 
 // Mock Supabase client
-const mockSupabaseClient = {
-  from: jest.fn(),
-  auth: {
-    getUser: jest.fn()
-  }
-}
+const mockSupabase = createMockSupabaseClient()
 
 jest.mock('../../config/supabase', () => ({
-  supabase: mockSupabaseClient,
+  supabase: mockSupabase,
   withSupabaseErrorHandling: jest.fn((fn) => fn())
 }))
 
@@ -72,13 +67,10 @@ describe('WorkoutLogService', () => {
         is_draft: false
       }
 
-      const mockChain = {
-        insert: jest.fn().mockReturnThis(),
-        select: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: mockCreatedLog, error: null })
-      }
-
-      mockSupabaseClient.from.mockReturnValue(mockChain)
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: mockCreatedLog, 
+        error: null 
+      })
 
       // Mock createWorkoutLogExercises
       const createExercisesSpy = jest.spyOn(workoutLogService, 'createWorkoutLogExercises')
@@ -104,12 +96,9 @@ describe('WorkoutLogService', () => {
         program_id: mockProgramId
       }
 
-      supabase.from.mockReturnValue({
-        insert: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: mockCreatedLog, error: null })
-          })
-        })
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: mockCreatedLog, 
+        error: null 
       })
 
       const result = await workoutLogService.createWorkoutLog(mockUserId, mockWorkoutData)
@@ -145,13 +134,9 @@ describe('WorkoutLogService', () => {
         ]
       }
 
-      const mockQuery = {
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ data: mockWorkoutLog, error: null })
-      }
-
-      supabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: mockWorkoutLog, 
+        error: null 
       })
 
       const result = await workoutLogService.getWorkoutLog(mockUserId, mockProgramId, 0, 1)
@@ -161,16 +146,9 @@ describe('WorkoutLogService', () => {
     })
 
     it('should return null when workout log not found', async () => {
-      const mockQuery = {
-        eq: jest.fn().mockReturnThis(),
-        single: jest.fn().mockResolvedValue({ 
-          data: null, 
-          error: { code: 'PGRST116' } // Not found error
-        })
-      }
-
-      supabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: null, 
+        error: { code: 'PGRST116' } // Not found error
       })
 
       const result = await workoutLogService.getWorkoutLog(mockUserId, mockProgramId, 0, 1)
@@ -223,16 +201,9 @@ describe('WorkoutLogService', () => {
         is_draft: true
       }
 
-      const mockQuery = {
-        eq: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: mockUpdatedDraft, error: null })
-          })
-        })
-      }
-
-      supabase.from.mockReturnValue({
-        update: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: mockUpdatedDraft, 
+        error: null 
       })
 
       // Mock updateWorkoutLogExercises
@@ -263,16 +234,9 @@ describe('WorkoutLogService', () => {
         completed_date: new Date().toISOString()
       }
 
-      const mockQuery = {
-        eq: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: mockCompletedDraft, error: null })
-          })
-        })
-      }
-
-      supabase.from.mockReturnValue({
-        update: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: mockCompletedDraft, 
+        error: null 
       })
 
       // Mock updateWorkoutLogExercises and updateUserAnalytics
@@ -324,14 +288,9 @@ describe('WorkoutLogService', () => {
         }
       ]
 
-      const mockQuery = {
-        eq: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({ data: mockHistoryData, error: null })
-      }
-
-      supabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().limit.mockResolvedValue({ 
+        data: mockHistoryData, 
+        error: null 
       })
 
       const result = await workoutLogService.getExerciseHistory(mockUserId, exerciseId)
@@ -363,14 +322,12 @@ describe('WorkoutLogService', () => {
         }
       ]
 
-      supabase.from.mockReturnValue({
-        upsert: jest.fn().mockResolvedValue({ error: null })
-      })
+      mockSupabase.from().upsert.mockResolvedValue({ error: null })
 
       await workoutLogService.updateUserAnalytics(mockUserId, mockExercisesWithCompletion)
 
-      expect(supabase.from).toHaveBeenCalledWith('user_analytics')
-      expect(supabase.from().upsert).toHaveBeenCalledWith(
+      expect(mockSupabase.from).toHaveBeenCalledWith('user_analytics')
+      expect(mockSupabase.from().upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
             user_id: mockUserId,
@@ -397,13 +354,11 @@ describe('WorkoutLogService', () => {
         }
       ]
 
-      supabase.from.mockReturnValue({
-        upsert: jest.fn().mockResolvedValue({ error: null })
-      })
+      mockSupabase.from().upsert.mockResolvedValue({ error: null })
 
       await workoutLogService.updateUserAnalytics(mockUserId, mockBodyweightExercises)
 
-      expect(supabase.from().upsert).toHaveBeenCalledWith(
+      expect(mockSupabase.from().upsert).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
             total_volume: 180 * 12 + 180 * 10, // Bodyweight * reps
@@ -440,14 +395,9 @@ describe('WorkoutLogService', () => {
         }
       ]
 
-      const mockQuery = {
-        eq: jest.fn().mockReturnThis(),
-        gte: jest.fn().mockReturnThis(),
-        order: jest.fn().mockResolvedValue({ data: mockWorkoutData, error: null })
-      }
-
-      supabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue(mockQuery)
+      mockSupabase.from().order.mockResolvedValue({ 
+        data: mockWorkoutData, 
+        error: null 
       })
 
       const result = await workoutLogService.getWorkoutStats(mockUserId, '30d')
@@ -472,12 +422,9 @@ describe('WorkoutLogService', () => {
     it('should handle database errors gracefully', async () => {
       const mockError = new Error('Database connection failed')
       
-      supabase.from.mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue({ data: null, error: mockError })
-          })
-        })
+      mockSupabase.from().single.mockResolvedValue({ 
+        data: null, 
+        error: mockError 
       })
 
       await expect(

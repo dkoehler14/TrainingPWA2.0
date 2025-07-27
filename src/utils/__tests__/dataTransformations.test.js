@@ -18,6 +18,17 @@ import {
   ensureBackwardCompatibility
 } from '../dataTransformations';
 
+// Mock programUtils for testing
+jest.mock('../programUtils', () => ({
+  parseWeeklyConfigs: jest.fn((configString) => {
+    try {
+      return JSON.parse(configString)
+    } catch {
+      return []
+    }
+  })
+}));
+
 describe('Data Transformation Utilities', () => {
   describe('transformSupabaseProgramToWeeklyConfigs', () => {
     it('should transform Supabase program structure to weeklyConfigs format', () => {
@@ -528,14 +539,7 @@ describe('Data Transformation Utilities', () => {
           days_per_week: 1
         };
 
-        // Mock parseWeeklyConfigs
-        const mockParseWeeklyConfigs = jest.fn(() => [
-          [{ name: 'Day 1', exercises: [] }]
-        ]);
-        
-        // Temporarily replace the import
-        const originalModule = require('../programUtils');
-        originalModule.parseWeeklyConfigs = mockParseWeeklyConfigs;
+        // parseWeeklyConfigs is already mocked at the top of the file
 
         const result = ensureBackwardCompatibility(firebaseProgram, 'program');
 

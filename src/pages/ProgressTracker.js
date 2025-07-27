@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button } from 'react-bootstrap';
+import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button, Alert } from 'react-bootstrap';
 import { useNavigate } from'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import { useAuth } from '../hooks/useAuth';
+import useRealtimeProgress, { useRealtimePRNotifications } from '../hooks/useRealtimeProgress';
 import Select from 'react-select';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -30,6 +31,46 @@ function ProgressTracker() {
 
 	// Temporary
 	const navigate = useNavigate();
+
+	// Real-time progress tracking with PR notifications
+	const {
+		analytics: realtimeAnalytics,
+		exerciseHistory: realtimeHistory,
+		isConnected: isRealtimeConnected,
+		lastUpdate,
+		setAnalytics,
+		setExerciseHistory
+	} = useRealtimeProgress({
+		enabled: true,
+		exerciseId: selectedExercise?.value,
+		onAnalyticsUpdate: (update) => {
+			console.log('📈 Analytics updated in real-time:', update);
+			// Refresh metrics when analytics are updated
+			if (selectedExercise && update.data.exercise_id === selectedExercise.value) {
+				fetchLogs(); // Refresh the current exercise data
+			}
+		},
+		onHistoryUpdate: (update) => {
+			console.log('🏋️ Exercise history updated in real-time:', update);
+			// Update logs if it affects the current exercise
+			if (selectedExercise && update.data.exercise_id === selectedExercise.value) {
+				fetchLogs(); // Refresh the current exercise data
+			}
+		}
+	});
+
+	// PR notifications with enhanced display
+	const {
+		prNotifications,
+		clearPRNotifications
+	} = useRealtimePRNotifications({
+		enabled: true,
+		showNotifications: true,
+		onPR: (prUpdate) => {
+			console.log('🎉 New PR achieved!', prUpdate);
+			// Could show a toast notification here
+		}
+	});
 
 	// Combined metrics state to reduce re-renders
 	const [metrics, setMetrics] = useState({
@@ -632,7 +673,46 @@ function ProgressTracker() {
 
 	return (
 		<Container className="progress-tracker">
-			<h1>Progress Tracker</h1>
+			<div className="d-flex justify-content-between align-items-center mb-3">
+				<h1>Progress Tracker</h1>
+				<div className="d-flex align-items-center">
+					{/* Real-time connection indicator */}
+					<Badge 
+						bg={isRealtimeConnected ? 'success' : 'secondary'} 
+						className="me-2"
+						title={isRealtimeConnected ? 'Real-time updates active' : 'Real-time updates inactive'}
+					>
+						{isRealtimeConnected ? '🟢 Live' : '⚫ Offline'}
+					</Badge>
+					{lastUpdate && (
+						<small className="text-muted">
+							Last update: {new Date(lastUpdate.timestamp).toLocaleTimeString()}
+						</small>
+					)}
+				</div>
+			</div>
+
+			{/* PR Notifications */}
+			{prNotifications.length > 0 && (
+				<Alert variant="success" dismissible onClose={clearPRNotifications} className="mb-3">
+					<Alert.Heading>🎉 New Personal Records!</Alert.Heading>
+					{prNotifications.slice(0, 3).map((pr, index) => (
+						<div key={index} className="mb-1">
+							<strong>{pr.exerciseName}:</strong> {pr.newPR} lbs 
+							<span className="text-success"> (+{pr.improvement} lbs)</span>
+							<small className="text-muted ms-2">
+								{new Date(pr.date).toLocaleDateString()}
+							</small>
+						</div>
+					))}
+					{prNotifications.length > 3 && (
+						<small className="text-muted">
+							...and {prNotifications.length - 3} more PRs
+						</small>
+					)}
+				</Alert>
+			)}
+
 			<Button 
                 variant="primary" 
                 size="lg" 

@@ -57,11 +57,22 @@ const WorkoutRealtimeIndicator = ({
 
   const getConnectionStatus = () => {
     if (connectionError) {
+      const errorType = connectionError.type || 'UNKNOWN'
+      const errorMessages = {
+        'NETWORK_ERROR': 'Network connection lost',
+        'AUTH_ERROR': 'Authentication failed',
+        'SERVER_ERROR': 'Server unavailable',
+        'RATE_LIMIT_ERROR': 'Rate limit exceeded',
+        'SUBSCRIPTION_ERROR': 'Subscription failed',
+        'TIMEOUT_ERROR': 'Connection timeout',
+        'UNKNOWN': 'Connection error'
+      }
+      
       return {
         variant: 'danger',
         icon: <ExclamationTriangle size={12} />,
-        text: 'Connection Error',
-        tooltip: `Error: ${connectionError.message}`
+        text: errorMessages[errorType] || 'Connection Error',
+        tooltip: `${errorMessages[errorType]}: ${connectionError.message}${reconnectAttempts > 0 ? ` (Attempt ${reconnectAttempts}/5)` : ''}`
       }
     }
     
@@ -80,7 +91,7 @@ const WorkoutRealtimeIndicator = ({
       variant: 'success',
       icon: <Wifi size={12} />,
       text: 'Connected',
-      tooltip: 'Real-time updates are active'
+      tooltip: `Real-time updates active on channel: ${channelName || 'unknown'}`
     }
   }
 

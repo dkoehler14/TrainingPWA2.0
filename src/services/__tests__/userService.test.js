@@ -4,13 +4,12 @@ import {
   updateUserProfile,
   getUserStatistics
 } from '../userService'
-import { supabase } from '../../config/supabase'
+import { createMockSupabaseClient, DatabaseTestUtils } from '../../utils/testHelpers'
 
-// Mock Supabase
+// Mock Supabase for unit tests
+const mockSupabase = createMockSupabaseClient()
 jest.mock('../../config/supabase', () => ({
-  supabase: {
-    from: jest.fn()
-  }
+  supabase: mockSupabase
 }))
 
 // Mock error handler
@@ -24,26 +23,16 @@ describe('UserService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     
-    // Reset mock implementation
-    supabase.from.mockReturnValue({
-      insert: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({
-          single: jest.fn()
-        })
-      }),
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          single: jest.fn()
-        })
-      }),
-      update: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          select: jest.fn().mockReturnValue({
-            single: jest.fn()
-          })
-        })
-      })
-    })
+    // Reset mock implementation with proper chaining
+    const mockChain = {
+      insert: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn()
+    }
+    
+    mockSupabase.from.mockReturnValue(mockChain)
   })
 
   describe('createUserProfile', () => {
@@ -69,7 +58,7 @@ describe('UserService', () => {
       }
 
       // Mock successful database response
-      supabase.from().insert().select().single.mockResolvedValue({
+      mockSupabase.from().single.mockResolvedValue({
         data: mockCreatedProfile,
         error: null
       })
@@ -77,7 +66,7 @@ describe('UserService', () => {
       const result = await createUserProfile(mockAuthUser, mockProfileData)
 
       expect(result).toEqual(mockCreatedProfile)
-      expect(supabase.from).toHaveBeenCalledWith('users')
+      expect(mockSupabase.from).toHaveBeenCalledWith('users')
     })
 
     it('should handle validation errors', async () => {
@@ -103,7 +92,7 @@ describe('UserService', () => {
         name: 'Test User'
       }
 
-      supabase.from().select().eq().single.mockResolvedValue({
+      mockSupabase.from().single.mockResolvedValue({
         data: mockProfile,
         error: null
       })
@@ -111,11 +100,11 @@ describe('UserService', () => {
       const result = await getUserProfile('auth-123')
 
       expect(result).toEqual(mockProfile)
-      expect(supabase.from).toHaveBeenCalledWith('users')
+      expect(mockSupabase.from).toHaveBeenCalledWith('users')
     })
 
     it('should return null for non-existent user', async () => {
-      supabase.from().select().eq().single.mockResolvedValue({
+      mockSupabase.from().single.mockResolvedValue({
         data: null,
         error: { code: 'PGRST116' } // Not found error
       })
@@ -135,7 +124,7 @@ describe('UserService', () => {
         updated_at: expect.any(String)
       }
 
-      supabase.from().update().eq().select().single.mockResolvedValue({
+      mockSupabase.from().single.mockResolvedValue({
         data: mockUpdatedProfile,
         error: null
       })
@@ -143,7 +132,7 @@ describe('UserService', () => {
       const result = await updateUserProfile('user-123', { name: 'Updated Name', age: 30 })
 
       expect(result).toEqual(mockUpdatedProfile)
-      expect(supabase.from).toHaveBeenCalledWith('users')
+      expect(mockSupabase.from).toHaveBeenCalledWith('users')
     })
   })
 
@@ -169,7 +158,7 @@ describe('UserService', () => {
         experience_level: 'beginner'
       }
 
-      supabase.from().insert().select().single.mockResolvedValue({
+      mockSupabase.from().single.mockResolvedValue({
         data: mockCreatedProfile,
         error: null
       })

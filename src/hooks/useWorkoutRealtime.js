@@ -41,21 +41,24 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
     console.log('📡 Real-time workout update received:', payload)
     
     try {
-      const { eventType, new: newRecord, old: oldRecord } = payload
+      const { eventType, new: newRecord, old: oldRecord, table } = payload
       
-      setLastUpdate({
+      // Enhanced update object with more context
+      const updateData = {
         type: eventType,
+        table: table,
         data: newRecord || oldRecord,
-        timestamp: new Date().toISOString()
-      })
+        oldData: oldRecord,
+        timestamp: new Date().toISOString(),
+        userId: newRecord?.user_id || oldRecord?.user_id,
+        workoutLogId: newRecord?.workout_log_id || oldRecord?.workout_log_id
+      }
+      
+      setLastUpdate(updateData)
 
-      // Call user-provided update handler
+      // Call user-provided update handler with enhanced data
       if (onUpdate) {
-        onUpdate({
-          type: eventType,
-          data: newRecord || oldRecord,
-          timestamp: new Date().toISOString()
-        })
+        onUpdate(updateData)
       }
     } catch (error) {
       console.error('Error handling real-time update:', error)
@@ -64,22 +67,35 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
   }, [onUpdate])
 
   /**
-   * Handle connection errors
+   * Handle connection errors with enhanced error classification
    */
   const handleError = useCallback((error) => {
     console.error('🔴 Real-time connection error:', error)
-    setConnectionError(error)
+    
+    // Classify error type for better handling
+    const errorType = classifyRealtimeError(error)
+    const enhancedError = {
+      ...error,
+      type: errorType,
+      timestamp: new Date().toISOString(),
+      channelName,
+      reconnectAttempts: reconnectAttemptsRef.current
+    }
+    
+    setConnectionError(enhancedError)
     setIsConnected(false)
     
     if (onError) {
-      onError(error)
+      onError(enhancedError)
     }
 
-    // Attempt reconnection if enabled
-    if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
+    // Attempt reconnection based on error type
+    if (autoReconnect && shouldRetryConnection(errorType) && reconnectAttemptsRef.current < maxReconnectAttempts) {
       scheduleReconnect()
+    } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.error('🚫 Max reconnection attempts reached. Manual intervention required.')
     }
-  }, [onError, autoReconnect])
+  }, [onError, autoReconnect, channelName])
 
   /**
    * Handle connection status changes
@@ -151,9 +167,9 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
   }, [])
 
   /**
-   * Connect to real-time channel
+   * Connect to real-time channel using enhanced channel manager
    */
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!enabled || !userId || !programId || weekIndex === null || dayIndex === null) {
       return
     }
@@ -164,74 +180,64 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
 
       console.log(`🔌 Connecting to real-time channel: ${channelName}`)
 
-      // Create new channel
-      channelRef.current = supabase.channel(channelName, {
-        config: {
-          presence: {
-            key: userId
-          }
+      // Import channel manager dynamically to avoid circular dependencies
+      const { default: channelManager } = await import('../utils/realtimeChannelManager')
+
+      // Create channel with enhanced configuration
+      const channel = channelManager.createWorkoutChannel(userId, programId, weekIndex, dayIndex, {
+        onWorkoutLogChange: handleRealtimeUpdate,
+        onWorkoutExerciseChange: handleRealtimeUpdate,
+        onUserAnalyticsChange: handleRealtimeUpdate,
+        onBroadcast: (broadcastData) => {
+          handleRealtimeUpdate({
+            eventType: 'BROADCAST',
+            new: broadcastData.payload,
+            table: 'broadcast',
+            timestamp: broadcastData.timestamp
+          })
+        },
+        onPresenceChange: (presenceData) => {
+          console.log('👥 Presence change:', presenceData)
+          // Could trigger additional callbacks here if needed
         }
       })
 
-      // Subscribe to workout log changes
-      channelRef.current
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'workout_logs',
-          filter: `user_id=eq.${userId} AND program_id=eq.${programId} AND week_index=eq.${weekIndex} AND day_index=eq.${dayIndex}`
-        }, handleRealtimeUpdate)
-        
-        // Subscribe to workout log exercises changes
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'workout_log_exercises',
-          filter: `workout_logs.user_id=eq.${userId}`
-        }, handleRealtimeUpdate)
-        
-        // Handle presence events (other users working on same workout)
-        .on('presence', { event: 'sync' }, () => {
-          const state = channelRef.current.presenceState()
-          console.log('👥 Presence sync:', state)
-        })
-        
-        // Handle broadcast events (custom real-time messages)
-        .on('broadcast', { event: 'workout_progress' }, (payload) => {
-          console.log('📊 Workout progress broadcast:', payload)
-          handleRealtimeUpdate({
-            eventType: 'BROADCAST',
-            new: payload.payload
-          })
-        })
-        
-        // Handle heartbeat responses
-        .on('broadcast', { event: 'heartbeat' }, (payload) => {
-          console.log('💓 Heartbeat response:', payload)
-        })
-        
-        // Subscribe and handle status changes
-        .subscribe((status, error) => {
-          if (error) {
-            handleError(error)
-          } else {
-            handleConnectionChange(status)
-          }
-        })
+      channelRef.current = channel
+
+      // Subscribe with enhanced error handling
+      await channelManager.subscribeChannel(channelName, {
+        onStatusChange: handleConnectionChange,
+        onError: handleError,
+        maxRetries: 3
+      })
+
+      console.log(`✅ Successfully connected to channel: ${channelName}`)
 
     } catch (error) {
+      console.error(`❌ Failed to connect to channel: ${channelName}`, error)
       handleError(error)
     }
   }, [enabled, userId, programId, weekIndex, dayIndex, channelName, handleRealtimeUpdate, handleError, handleConnectionChange])
 
   /**
-   * Disconnect from real-time channel
+   * Disconnect from real-time channel using enhanced channel manager
    */
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     console.log('🔌 Disconnecting from real-time channel')
     
     if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
+      try {
+        // Import channel manager dynamically
+        const { default: channelManager } = await import('../utils/realtimeChannelManager')
+        
+        // Remove channel through manager
+        channelManager.removeChannel(channelName)
+      } catch (error) {
+        console.error('Error removing channel through manager:', error)
+        // Fallback to direct removal
+        supabase.removeChannel(channelRef.current)
+      }
+      
       channelRef.current = null
     }
     
@@ -245,50 +251,67 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
     setIsConnected(false)
     setConnectionError(null)
     reconnectAttemptsRef.current = 0
-  }, [stopHeartbeat])
+  }, [stopHeartbeat, channelName])
 
   /**
-   * Broadcast workout progress to other connected clients
+   * Broadcast workout progress to other connected clients using channel manager
    */
-  const broadcastProgress = useCallback((progressData) => {
-    if (channelRef.current && isConnected) {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'workout_progress',
-        payload: {
+  const broadcastProgress = useCallback(async (progressData) => {
+    if (isConnected) {
+      try {
+        const { default: channelManager } = await import('../utils/realtimeChannelManager')
+        
+        const success = channelManager.broadcast(channelName, 'workout_progress', {
           userId,
           programId,
           weekIndex,
           dayIndex,
-          progress: progressData,
-          timestamp: new Date().toISOString()
+          progress: progressData
+        })
+        
+        if (!success) {
+          console.warn('Failed to broadcast progress - channel not ready')
         }
-      })
+      } catch (error) {
+        console.error('Error broadcasting progress:', error)
+      }
     }
-  }, [isConnected, userId, programId, weekIndex, dayIndex])
+  }, [isConnected, channelName, userId, programId, weekIndex, dayIndex])
 
   /**
-   * Send presence update (user is actively working on workout)
+   * Send presence update using channel manager
    */
-  const updatePresence = useCallback((presenceData = {}) => {
-    if (channelRef.current && isConnected) {
-      channelRef.current.track({
-        user_id: userId,
-        online_at: new Date().toISOString(),
-        ...presenceData
-      })
+  const updatePresence = useCallback(async (presenceData = {}) => {
+    if (isConnected) {
+      try {
+        const { default: channelManager } = await import('../utils/realtimeChannelManager')
+        
+        const success = channelManager.updatePresence(channelName, {
+          user_id: userId,
+          ...presenceData
+        })
+        
+        if (!success) {
+          console.warn('Failed to update presence - channel not ready')
+        }
+      } catch (error) {
+        console.error('Error updating presence:', error)
+      }
     }
-  }, [isConnected, userId])
+  }, [isConnected, channelName, userId])
 
   /**
-   * Get current presence state (other users working on same workout)
+   * Get current presence state using channel manager
    */
-  const getPresence = useCallback(() => {
-    if (channelRef.current) {
-      return channelRef.current.presenceState()
+  const getPresence = useCallback(async () => {
+    try {
+      const { default: channelManager } = await import('../utils/realtimeChannelManager')
+      return channelManager.getPresence(channelName)
+    } catch (error) {
+      console.error('Error getting presence:', error)
+      return {}
     }
-    return {}
-  }, [])
+  }, [channelName])
 
   /**
    * Force reconnection
@@ -384,6 +407,146 @@ export const useWorkoutProgressBroadcast = (realtimeHook) => {
     broadcastSetCompletion,
     broadcastExerciseCompletion,
     broadcastWorkoutProgress
+  }
+}
+
+/**
+ * Classify real-time connection errors for better handling
+ */
+function classifyRealtimeError(error) {
+  if (!error) return 'UNKNOWN'
+  
+  const message = error.message?.toLowerCase() || ''
+  const code = error.code || error.status
+  
+  // Network connectivity issues
+  if (message.includes('network') || message.includes('fetch') || message.includes('connection')) {
+    return 'NETWORK_ERROR'
+  }
+  
+  // Authentication/authorization issues
+  if (code === 401 || code === 403 || message.includes('unauthorized') || message.includes('forbidden')) {
+    return 'AUTH_ERROR'
+  }
+  
+  // Server errors
+  if (code >= 500 || message.includes('server') || message.includes('internal')) {
+    return 'SERVER_ERROR'
+  }
+  
+  // Rate limiting
+  if (code === 429 || message.includes('rate limit') || message.includes('too many')) {
+    return 'RATE_LIMIT_ERROR'
+  }
+  
+  // Subscription specific errors
+  if (message.includes('subscription') || message.includes('channel')) {
+    return 'SUBSCRIPTION_ERROR'
+  }
+  
+  // Timeout errors
+  if (message.includes('timeout') || message.includes('aborted')) {
+    return 'TIMEOUT_ERROR'
+  }
+  
+  return 'UNKNOWN'
+}
+
+/**
+ * Determine if connection should be retried based on error type
+ */
+function shouldRetryConnection(errorType) {
+  const retryableErrors = [
+    'NETWORK_ERROR',
+    'SERVER_ERROR',
+    'TIMEOUT_ERROR',
+    'SUBSCRIPTION_ERROR',
+    'UNKNOWN'
+  ]
+  
+  return retryableErrors.includes(errorType)
+}
+
+/**
+ * Enhanced connection status monitoring
+ */
+export function useRealtimeConnectionStatus(realtimeHook) {
+  const [connectionHistory, setConnectionHistory] = useState([])
+  const [metrics, setMetrics] = useState({
+    totalConnections: 0,
+    totalDisconnections: 0,
+    totalErrors: 0,
+    averageConnectionTime: 0,
+    lastConnectionTime: null,
+    uptime: 0
+  })
+  
+  const connectionStartTime = useRef(null)
+  
+  useEffect(() => {
+    if (!realtimeHook) return
+    
+    const { isConnected, connectionError } = realtimeHook
+    
+    // Track connection events
+    if (isConnected && !connectionStartTime.current) {
+      connectionStartTime.current = Date.now()
+      setMetrics(prev => ({
+        ...prev,
+        totalConnections: prev.totalConnections + 1,
+        lastConnectionTime: new Date().toISOString()
+      }))
+      
+      setConnectionHistory(prev => [...prev, {
+        event: 'CONNECTED',
+        timestamp: new Date().toISOString()
+      }].slice(-50)) // Keep last 50 events
+    }
+    
+    if (!isConnected && connectionStartTime.current) {
+      const connectionDuration = Date.now() - connectionStartTime.current
+      connectionStartTime.current = null
+      
+      setMetrics(prev => ({
+        ...prev,
+        totalDisconnections: prev.totalDisconnections + 1,
+        averageConnectionTime: (prev.averageConnectionTime * (prev.totalConnections - 1) + connectionDuration) / prev.totalConnections
+      }))
+      
+      setConnectionHistory(prev => [...prev, {
+        event: 'DISCONNECTED',
+        timestamp: new Date().toISOString(),
+        duration: connectionDuration
+      }].slice(-50))
+    }
+    
+    if (connectionError) {
+      setMetrics(prev => ({
+        ...prev,
+        totalErrors: prev.totalErrors + 1
+      }))
+      
+      setConnectionHistory(prev => [...prev, {
+        event: 'ERROR',
+        timestamp: new Date().toISOString(),
+        error: connectionError.type || 'UNKNOWN',
+        message: connectionError.message
+      }].slice(-50))
+    }
+  }, [realtimeHook?.isConnected, realtimeHook?.connectionError])
+  
+  return {
+    connectionHistory,
+    metrics,
+    isHealthy: realtimeHook?.isConnected && !realtimeHook?.connectionError,
+    getConnectionQuality: () => {
+      if (metrics.totalConnections === 0) return 'UNKNOWN'
+      const errorRate = metrics.totalErrors / metrics.totalConnections
+      if (errorRate < 0.1) return 'EXCELLENT'
+      if (errorRate < 0.3) return 'GOOD'
+      if (errorRate < 0.5) return 'FAIR'
+      return 'POOR'
+    }
   }
 }
 

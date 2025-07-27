@@ -1,21 +1,24 @@
 # Real-time Workout Features
 
-This document describes the real-time capabilities added to the workout logging system.
+This document describes the enhanced real-time capabilities for the workout logging system using Supabase real-time subscriptions.
 
 ## Overview
 
-The real-time workout features provide live updates during workout sessions, including:
+The real-time workout features provide comprehensive live updates during workout sessions, including:
 
 - **Live Progress Updates**: See workout progress in real-time as sets are completed
-- **Connection Management**: Automatic reconnection on network issues
+- **Enhanced Connection Management**: Automatic reconnection with exponential backoff and error classification
+- **User-specific Data Subscriptions**: Secure, filtered real-time updates for individual users
 - **Multi-user Support**: See when other users are working on the same workout
 - **Optimistic Updates**: Immediate UI feedback with server synchronization
+- **Performance Monitoring**: Connection quality tracking and health checks
+- **Error Recovery**: Intelligent error handling and recovery strategies
 
 ## Components
 
-### 1. useWorkoutRealtime Hook
+### 1. Enhanced useWorkoutRealtime Hook
 
-The main hook that provides real-time capabilities for workout sessions.
+The main hook that provides comprehensive real-time capabilities for workout sessions with enhanced error handling and connection management.
 
 ```javascript
 import useWorkoutRealtime from '../hooks/useWorkoutRealtime'
@@ -29,23 +32,92 @@ const realtimeHook = useWorkoutRealtime(
     enabled: true,
     onUpdate: (update) => {
       console.log('Real-time update:', update)
+      // Enhanced update object includes:
+      // - type: 'INSERT' | 'UPDATE' | 'DELETE' | 'BROADCAST'
+      // - table: 'workout_logs' | 'workout_log_exercises' | 'user_analytics'
+      // - data: updated record
+      // - oldData: previous record (for updates/deletes)
+      // - timestamp: ISO timestamp
+      // - userId: user who made the change
+      // - workoutLogId: related workout log ID
     },
     onError: (error) => {
       console.error('Connection error:', error)
+      // Enhanced error object includes:
+      // - type: error classification
+      // - timestamp: when error occurred
+      // - channelName: affected channel
+      // - reconnectAttempts: current retry count
     },
     onConnectionChange: (connected, status) => {
       console.log('Connection status:', connected, status)
-    }
+    },
+    autoReconnect: true,
+    heartbeatInterval: 30000
   }
 )
 ```
 
-#### Features:
-- **Connection Status**: `isConnected`, `connectionError`
-- **Update Tracking**: `lastUpdate` with timestamp and type
-- **Connection Management**: `connect()`, `disconnect()`, `reconnect()`
-- **Broadcasting**: `broadcastProgress()` for sending updates
-- **Presence**: `updatePresence()`, `getPresence()` for multi-user awareness
+#### Enhanced Features:
+- **Connection Status**: `isConnected`, `connectionError` with detailed error classification
+- **Update Tracking**: `lastUpdate` with enhanced metadata and context
+- **Connection Management**: `connect()`, `disconnect()`, `reconnect()` with intelligent retry logic
+- **Broadcasting**: `broadcastProgress()` using centralized channel manager
+- **Presence**: `updatePresence()`, `getPresence()` with async support
+- **Error Classification**: Automatic categorization of connection errors
+- **Retry Logic**: Exponential backoff with configurable limits
+- **Channel Management**: Centralized channel lifecycle management
+
+### 2. RealtimeChannelManager
+
+A centralized manager for all real-time channels with advanced features:
+
+```javascript
+import channelManager from '../utils/realtimeChannelManager'
+
+// Create a workout channel with comprehensive callbacks
+const channel = channelManager.createWorkoutChannel(userId, programId, weekIndex, dayIndex, {
+  onWorkoutLogChange: (payload) => {
+    console.log('Workout log updated:', payload)
+  },
+  onWorkoutExerciseChange: (payload) => {
+    console.log('Exercise updated:', payload)
+  },
+  onUserAnalyticsChange: (payload) => {
+    console.log('Analytics updated:', payload)
+  },
+  onBroadcast: (broadcastData) => {
+    console.log('Broadcast received:', broadcastData)
+  },
+  onPresenceChange: (presenceData) => {
+    console.log('Presence changed:', presenceData)
+  }
+})
+
+// Subscribe with enhanced error handling
+await channelManager.subscribeChannel(channelName, {
+  onStatusChange: (status, error) => console.log('Status:', status),
+  onError: (error) => console.error('Error:', error),
+  maxRetries: 3
+})
+
+// Get performance metrics
+const metrics = channelManager.getMetrics()
+console.log('Channel metrics:', metrics)
+
+// Perform health check
+const health = await channelManager.healthCheck()
+console.log('Health status:', health)
+```
+
+#### Channel Manager Features:
+- **Lifecycle Management**: Create, subscribe, and cleanup channels
+- **User-specific Subscriptions**: Automatic filtering for user data
+- **Performance Metrics**: Track connections, errors, and performance
+- **Health Monitoring**: Regular health checks and status reporting
+- **Error Recovery**: Intelligent retry with exponential backoff
+- **Broadcasting**: Centralized message broadcasting
+- **Presence Management**: Multi-user awareness and tracking
 
 ### 2. useWorkoutProgressBroadcast Hook
 
