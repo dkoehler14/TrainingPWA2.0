@@ -6,10 +6,12 @@ import ExerciseOrganizer from '../components/ExerciseOrganizer';
 import '../styles/Exercises.css';
 import '../styles/ExerciseGrid.css';
 import '../styles/ExerciseOrganizer.css';
-import { getCollectionCached, warmUserCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
+import { getAvailableExercises, getUserExercises, createExercise, updateExercise, deleteExercise } from '../services/exerciseService';
+import { useAuth } from '../hooks/useAuth';
 import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 
-function Exercises({ user, userRole }) {
+function Exercises() {
+  const { user, isAuthenticated } = useAuth();
   const [exercises, setExercises] = useState([]);
 
   // State for validation and feedback
@@ -22,67 +24,32 @@ function Exercises({ user, userRole }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      // Warm cache and fetch exercises
-      warmUserCache(user.id, 'high').then(() => {
-        fetchExercises();
-      });
-    } else {
-      // If no user, still fetch global exercises
-      fetchExercises();
-    }
+    fetchExercises();
   }, [user]);
-
-  // Removed client-side filtering - now handled in fetchExercises
 
   const fetchExercises = async () => {
     setIsLoading(true);
     try {
-      // Fetch global exercises from metadata
-      const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+      let allExercises = [];
       
-      // Add source metadata to global exercises
-      const enhancedGlobalExercises = globalExercises.map(ex => ({
+      if (isAuthenticated && user) {
+        // Fetch available exercises for authenticated user (global + user-created)
+        allExercises = await getAvailableExercises(user.id);
+      } else {
+        // Fetch only global exercises for non-authenticated users
+        const { getExercises } = await import('../services/exerciseService');
+        allExercises = await getExercises({ isGlobal: true });
+      }
+
+      // Add source metadata to exercises
+      const enhancedExercises = allExercises.map(ex => ({
         ...ex,
-        isGlobal: true,
-        source: 'global',
-        createdBy: null
+        isGlobal: ex.is_global,
+        source: ex.is_global ? 'global' : 'user',
+        createdBy: ex.created_by
       }));
       
-      // Fetch user-specific exercises if user exists
-      let userExercises = [];
-      if (user?.id) {
-        try {
-          const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-          if (userMetadata && userMetadata.exercises) {
-            userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
-              id,
-              ...ex,
-              isGlobal: false,
-              source: 'custom',
-              createdBy: user.id
-            }));
-          }
-        } catch (userError) {
-          // User metadata document doesn't exist yet - this is normal for new users
-          console.log('No user-specific exercises found');
-        }
-      }
-      
-      // Combine global and user exercises
-      const allExercises = [...enhancedGlobalExercises, ...userExercises];
-      
-      // Filter based on user role
-      let filteredExercises;
-      if (userRole === 'admin') {
-        // Admin sees all exercises
-        filteredExercises = allExercises;
-      } else {
-        // Regular users see global exercises + their own personal exercises
-        filteredExercises = allExercises.filter(ex => !ex.userId || ex.userId === user?.uid);
-      }
-      
-      setExercises(filteredExercises);
+      setExercises(enhancedExercises);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
       setValidationError("Failed to load exercises. Please refresh the page.");
@@ -107,16 +74,26 @@ function Exercises({ user, userRole }) {
 
   // Callback for when a new exercise is added
   const handleExerciseAdded = (newExercise) => {
-    // Cache invalidation is now handled in ExerciseCreationModal
-    setExercises(prev => [...prev, newExercise]);
+    const enhancedExercise = {
+      ...newExercise,
+      isGlobal: newExercise.is_global,
+      source: newExercise.is_global ? 'global' : 'user',
+      createdBy: newExercise.created_by
+    };
+    setExercises(prev => [...prev, enhancedExercise]);
     setSuccessMessage(`Exercise "${newExercise.name}" added successfully!`);
     setShowModal(false);
   };
 
   // Callback for when an exercise is updated
   const handleExerciseUpdated = (updatedExercise) => {
-    // Cache invalidation is now handled in ExerciseCreationModal
-    setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? updatedExercise : ex));
+    const enhancedExercise = {
+      ...updatedExercise,
+      isGlobal: updatedExercise.is_global,
+      source: updatedExercise.is_global ? 'global' : 'user',
+      createdBy: updatedExercise.created_by
+    };
+    setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? enhancedExercise : ex));
     setSuccessMessage(`Exercise "${updatedExercise.name}" updated successfully!`);
     setShowModal(false);
   };
@@ -165,7 +142,6 @@ function Exercises({ user, userRole }) {
                   showEditButton={true}
                   onEditClick={openEditModal}
                   className="exercises-organizer"
-                  userRole={userRole}
                 />
               </>
             )}
@@ -182,8 +158,6 @@ function Exercises({ user, userRole }) {
         initialData={isEditMode ? currentExercise : null}
         onExerciseAdded={handleExerciseAdded}
         onExerciseUpdated={handleExerciseUpdated}
-        user={user}
-        userRole={userRole}
       />
     </Container>
   );

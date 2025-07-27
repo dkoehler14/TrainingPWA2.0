@@ -4,9 +4,7 @@
  */
 
 import { supabase } from '../config/supabase';
-import { getDocCached, invalidateProgramCache } from '../api/enhancedFirestoreCache';
-import { db } from '../firebase';
-import { updateDoc, doc } from 'firebase/firestore';
+import { getProgramById, updateProgram } from '../services/programService';
 
 /**
  * Creates a new exercise object with default values

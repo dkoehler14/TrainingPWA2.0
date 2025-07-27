@@ -1,17 +1,16 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, Card } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getCollectionCached, getDocCached, invalidateProgramCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
+import { createCompleteProgram, getProgramById, updateProgram } from '../services/programService';
+import { getAvailableExercises } from '../services/exerciseService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
-import { db } from '../firebase';
-import { collection, addDoc, updateDoc, doc } from 'firebase/firestore';
 
 // New Exercise Selection Modal Component using ExerciseGrid
 const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
@@ -52,7 +51,7 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
   );
 };
 
-function CreateProgram({ mode = 'create', userRole }) {
+function CreateProgram({ mode = 'create' }) {
   const { programId } = useParams();
   const navigate = useNavigate();
   const [programName, setProgramName] = useState('');
@@ -72,7 +71,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [showExerciseModal, setShowExerciseModal] = useState(false); // New state for exercise selection modal
   const [currentExerciseSelection, setCurrentExerciseSelection] = useState({ weekIndex: 0, dayIndex: 0, exIndex: 0 }); // Track which exercise is being selected
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(mode === 'edit');
   const [step, setStep] = useState(mode === 'edit' ? 3 : 1); // Stepper: 1=choose, 2=select, 3=edit
   const [creationSource, setCreationSource] = useState('scratch'); // 'scratch' | 'template' | 'previous'
@@ -100,67 +99,29 @@ function CreateProgram({ mode = 'create', userRole }) {
   useEffect(() => {
     const fetchExercises = async () => {
       try {
-        // Add cache warming at the beginning if user exists
-        if (user) {
-          await warmUserCache(user.id, 'high');
-        }
+        if (!user) return;
         
-        // Fetch global exercises from metadata
-        const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+        // Fetch exercises using Supabase
+        const exercisesData = await getAvailableExercises(user.id);
         
-        // Add source metadata to global exercises and format for UI
-        const enhancedGlobalExercises = globalExercises.map(ex => ({
+        // Format for UI
+        const formattedExercises = exercisesData.map(ex => ({
           ...ex,
-          isGlobal: true,
-          source: 'global',
-          createdBy: null,
+          isGlobal: ex.is_global,
+          source: ex.is_global ? 'global' : 'user',
+          createdBy: ex.created_by,
           label: ex.name,
           value: ex.id,
         }));
         
-        // Fetch user-specific exercises if user exists
-        let userExercises = [];
-        if (user?.uid) {
-          try {
-            const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-            if (userMetadata && userMetadata.exercises) {
-              userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
-                id,
-                ...ex,
-                isGlobal: false,
-                source: 'custom',
-                createdBy: user.id,
-                label: ex.name,
-                value: id,
-              }));
-            }
-          } catch (userError) {
-            // User metadata document doesn't exist yet - this is normal for new users
-            console.log('No user-specific exercises found');
-          }
-        }
-        
-        // Combine global and user exercises
-        const allExercises = [...enhancedGlobalExercises, ...userExercises];
-        
-        // Filter based on user role (similar to Exercises.js)
-        let filteredExercises;
-        if (userRole === 'admin') {
-          // Admin sees all exercises
-          filteredExercises = allExercises;
-        } else {
-          // Regular users see global exercises + their own personal exercises
-          filteredExercises = allExercises.filter(ex => !ex.userId || ex.userId === user?.uid);
-        }
-        
-        setExercises(filteredExercises);
+        setExercises(formattedExercises);
       } catch (error) {
         console.error("Error fetching exercises: ", error);
       }
     };
     
     fetchExercises();
-  }, [user, userRole]);
+  }, [user]);
 
   useEffect(() => {
     console.log('CreateProgram mounted:', { mode, programId, isLoading });
@@ -172,7 +133,7 @@ function CreateProgram({ mode = 'create', userRole }) {
       if (mode === 'edit' && programId) {
         try {
           console.log('📡 Fetching program document...');
-          const programDoc = await getDocCached('programs', programId, 30 * 60 * 1000);
+          const programDoc = await getProgramById(programId);
           console.log('📄 Raw program document:', programDoc);
           
           if (programDoc) {

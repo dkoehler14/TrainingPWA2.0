@@ -1,19 +1,21 @@
-import React, { useState, useEffect, useMemo, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button } from 'react-bootstrap';
 import { useNavigate } from'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import Select from 'react-select';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import '../styles/ProgressTracker.css';
-import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { supabase } from '../config/supabase';
+import workoutLogService from '../services/workoutLogService';
+import { getExercises } from '../services/exerciseService';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 function ProgressTracker() {
-	const { user, isAuthenticated } = useContext(AuthContext);
+	const { user, isAuthenticated } = useAuth();
 	const [exercises, setExercises] = useState([]);
 	const [selectedExercise, setSelectedExercise] = useState(null);
 	const [logs, setLogs] = useState([]);
@@ -54,68 +56,14 @@ function ProgressTracker() {
 	const fetchExercises = useCallback(async () => {
 		setIsExercisesLoading(true);
 		try {
-			// Enhanced cache warming before data fetching
-			if (user?.id) {
-				await warmUserCache(user.id, 'normal')
-					.then(() => {
-						console.log('Cache warming completed for ProgressTracker');
-					})
-					.catch((error) => {
-						console.warn('Cache warming failed, proceeding with data fetch:', error);
-					});
-			}
-
-			// Use metadata approach for efficient exercise fetching
-			let exercisesData = [];
-			try {
-				// Get global exercises from metadata
-				const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
-				
-				// Get user-specific exercises from metadata
-				const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-				const userExercises = userExercisesDoc?.exercises || [];
-				
-				// Combine global and user exercises
-				const allExercises = [...globalExercises, ...userExercises];
-				
-				// Add source metadata for consistency
-				exercisesData = allExercises.map(exercise => ({
-					...exercise,
-					source: globalExercises.includes(exercise) ? 'global' : 'user'
-				}));
-				
-				// Remove duplicates based on ID (user exercises override global ones)
-				const uniqueExercises = [];
-				const seenIds = new Set();
-				
-				// Process user exercises first (higher priority)
-				exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
-					if (!seenIds.has(exercise.id)) {
-						uniqueExercises.push(exercise);
-						seenIds.add(exercise.id);
-					}
-				});
-				
-				// Then process global exercises
-				exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
-					if (!seenIds.has(exercise.id)) {
-						uniqueExercises.push(exercise);
-						seenIds.add(exercise.id);
-					}
-				});
-				
-				exercisesData = uniqueExercises;
-			} catch (error) {
-				console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
-				// Fallback to original method
-				exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-			}
+			// Fetch exercises using Supabase
+			const exercisesData = await getExercises();
 			
 			const fetchedExercises = exercisesData.map(ex => ({
 				value: ex.id,
 				label: ex.name,
-				primaryMuscleGroup: ex.primaryMuscleGroup || 'Other',
-				exerciseType: ex.exerciseType || 'Unknown'
+				primaryMuscleGroup: ex.primary_muscle_group || 'Other',
+				exerciseType: ex.exercise_type || 'Unknown'
 			}));
 			setExercises(fetchedExercises);
 			if (fetchedExercises.length > 0 && !selectedExercise) {
@@ -132,33 +80,53 @@ function ProgressTracker() {
 		if (!selectedExercise) return;
 		setIsLoading(true);
 		try {
-			const logsData = await getCollectionCached('workoutLogs', {
-				where: [
-					['userId', '==', user.id],
-					['date', '>=', startDate],
-					['date', '<=', endDate],
-					['isWorkoutFinished', '==', true]
-				],
-				orderBy: [['date', 'asc']]
+			// Get exercise history using Supabase
+			const exerciseHistory = await workoutLogService.getExerciseHistory(user.id, selectedExercise.value, 100);
+			
+			// Group by workout date and transform to match expected format
+			const logsByDate = {};
+			exerciseHistory.forEach(historyItem => {
+				const dateKey = historyItem.date.toDateString();
+				if (!logsByDate[dateKey]) {
+					logsByDate[dateKey] = {
+						id: `${selectedExercise.value}-${dateKey}`,
+						date: historyItem.date,
+						exercises: [{
+							exerciseId: selectedExercise.value,
+							sets: 0,
+							reps: [],
+							weights: [],
+							completed: []
+						}]
+					};
+				}
+				
+				const log = logsByDate[dateKey];
+				const exercise = log.exercises[0];
+				
+				// Add this set to the exercise
+				exercise.sets = Math.max(exercise.sets, historyItem.set);
+				exercise.reps[historyItem.set - 1] = historyItem.reps;
+				exercise.weights[historyItem.set - 1] = historyItem.weight;
+				exercise.completed[historyItem.set - 1] = historyItem.completed;
 			});
-			const fetchedLogs = logsData
-				.map(data => ({
-					id: data.id,
-					...data,
-					date: data.date.toDate ? data.date.toDate() : data.date,
-					exercises: data.exercises.filter(ex => ex.exerciseId === selectedExercise.value),
-				}))
-				.filter(log =>
-					log.exercises.length > 0 &&
-					log.exercises[0].completed.some(c => c === true)
-				);
+			
+			// Convert to array and filter by date range
+			const fetchedLogs = Object.values(logsByDate)
+				.filter(log => {
+					const logDate = log.date;
+					return logDate >= startDate && logDate <= endDate;
+				})
+				.sort((a, b) => a.date - b.date)
+				.filter(log => log.exercises[0].completed.some(c => c === true));
+			
 			setLogs(fetchedLogs);
 		} catch (error) {
 			console.error("Error fetching logs:", error);
 		} finally {
 			setIsLoading(false);
 		}
-	}, [selectedExercise, startDate, endDate]);
+	}, [selectedExercise, startDate, endDate, user.id]);
 
 	// Run analysis calculations in a separate effect to prevent UI blocking
 	useEffect(() => {
@@ -207,23 +175,21 @@ function ProgressTracker() {
 	// Calculate all metrics at once to avoid multiple re-renders
 	const calculateAllMetrics = async () => {
 		try {
-			// Use cache utility to get all logs for consistency and body part analysis
-			const allLogs = await getCollectionCached('workoutLogs', {
-				where: [
-					['userId', '==', user.id],
-					['date', '>=', startDate],
-					['date', '<=', endDate],
-					['isWorkoutFinished', '==', true]
-				],
-				orderBy: [['date', 'desc']]
+			// Get all workout logs for the date range using Supabase
+			const allLogs = await workoutLogService.getWorkoutHistory(user.id, 100);
+			
+			// Filter by date range
+			const filteredLogs = allLogs.filter(log => {
+				const logDate = new Date(log.completed_date || log.date);
+				return logDate >= startDate && logDate <= endDate;
 			});
 
 			// Calculate all metrics
-			const bodyPartFocus = analyzeBodyPartFocus(allLogs.map(log => ({ data: () => log })));
-			const consistencyScore = calculateConsistencyScore(allLogs.map(log => ({ data: () => log })));
+			const bodyPartFocus = analyzeBodyPartFocus(filteredLogs.map(log => ({ data: () => log })));
+			const consistencyScore = calculateConsistencyScore(filteredLogs.map(log => ({ data: () => log })));
 			const { pr, volume, frequency, estimatedOneRepMax } = calculateStats(logs);
 			const exerciseProgress = calculateProgressTrend(logs);
-			const summaryStats = await calculateSummaryStats(allLogs);
+			const summaryStats = await calculateSummaryStats(filteredLogs);
 
 			// Update all metrics at once
 			setMetrics({
@@ -458,13 +424,27 @@ function ProgressTracker() {
 
 		logs.forEach(doc => {
 			const log = doc.data();
-			log.exercises.forEach(exercise => {
-				if (exercise.completed.some(c => c === true)) {
-					const exerciseInfo = exercises.find(e => e.value === exercise.exerciseId);
-					if (exerciseInfo) {
-						const muscleGroup = exerciseInfo.primaryMuscleGroup || 'Other';
-						bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
+			// Handle both old Firestore structure and new Supabase structure
+			const logExercises = log.exercises || log.workout_log_exercises || [];
+			
+			logExercises.forEach(exercise => {
+				const completed = exercise.completed || [];
+				if (completed.some(c => c === true)) {
+					// Try to get muscle group from exercise data or lookup
+					let muscleGroup = 'Other';
+					
+					if (exercise.exercises?.primary_muscle_group) {
+						// Supabase structure with joined exercise data
+						muscleGroup = exercise.exercises.primary_muscle_group;
+					} else {
+						// Fallback to exercise lookup
+						const exerciseInfo = exercises.find(e => e.value === (exercise.exerciseId || exercise.exercise_id));
+						if (exerciseInfo) {
+							muscleGroup = exerciseInfo.primaryMuscleGroup || 'Other';
+						}
 					}
+					
+					bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
 				}
 			});
 		});
@@ -482,8 +462,16 @@ function ProgressTracker() {
 		const workoutDates = new Set();
 		logs.forEach(doc => {
 			const log = doc.data();
-			const date = log.date.toDate().toDateString();
-			workoutDates.add(date);
+			// Handle both Firestore and Supabase date formats
+			let date;
+			if (log.completed_date) {
+				date = new Date(log.completed_date).toDateString();
+			} else if (log.date) {
+				date = (log.date.toDate ? log.date.toDate() : new Date(log.date)).toDateString();
+			}
+			if (date) {
+				workoutDates.add(date);
+			}
 		});
 
 		// Calculate weekly workout frequency
@@ -529,14 +517,17 @@ function ProgressTracker() {
 		// Group exercises by type
 		exercises.forEach(exercise => {
 			const exerciseLogs = allLogs.filter(log => {
-				const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-				return ex && ex.completed.some(c => c === true);
+				// Handle both Firestore and Supabase structures
+				const logExercises = log.exercises || log.workout_log_exercises || [];
+				const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
+				return ex && (ex.completed || []).some(c => c === true);
 			});
 
 			if (exerciseLogs.length > 0) {
 				const allCompletedWeights = exerciseLogs.flatMap(log => {
-					const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-					return ex ? ex.weights.filter((_, index) => ex.completed[index]) : [];
+					const logExercises = log.exercises || log.workout_log_exercises || [];
+					const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
+					return ex ? (ex.weights || []).filter((_, index) => (ex.completed || [])[index]) : [];
 				});
 				const maxWeight = allCompletedWeights.length > 0 ? Math.max(...allCompletedWeights) : 0;
 
@@ -544,16 +535,23 @@ function ProgressTracker() {
 				let volumeTrend = 'stable';
 				if (exerciseLogs.length >= 2) {
 					// Sort logs by date
-					const sortedLogs = [...exerciseLogs].sort((a, b) => a.date - b.date);
+					const sortedLogs = [...exerciseLogs].sort((a, b) => {
+						const dateA = new Date(a.completed_date || a.date);
+						const dateB = new Date(b.completed_date || b.date);
+						return dateA - dateB;
+					});
 
 					// Calculate volume for each workout
 					const volumeData = sortedLogs.map(log => {
-						const ex = log.exercises.find(e => e.exerciseId === exercise.value);
+						const logExercises = log.exercises || log.workout_log_exercises || [];
+						const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
+						const logDate = new Date(log.completed_date || log.date);
+						
 						return {
-							date: log.date.getTime(),
-							volume: ex ? ex.weights.reduce((sum, weight, index) => {
-								if (ex.completed[index]) {
-									return sum + weight * ex.reps[index];
+							date: logDate.getTime(),
+							volume: ex ? (ex.weights || []).reduce((sum, weight, index) => {
+								if ((ex.completed || [])[index]) {
+									return sum + weight * ((ex.reps || [])[index] || 0);
 								}
 								return sum;
 							}, 0) : 0

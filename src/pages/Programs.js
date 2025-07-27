@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
 import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
-import { getCollectionCached, getDocCached, invalidateProgramCache, invalidateExerciseCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
+import { getUserPrograms, getProgramById, setCurrentProgram, deleteProgram, copyProgram, getProgramStatistics } from '../services/programService';
+import { getAvailableExercises } from '../services/exerciseService';
+import workoutLogService from '../services/workoutLogService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
-import { db } from '../firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -22,7 +22,7 @@ function Programs({ userRole }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [workoutLogs, setWorkoutLogs] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
@@ -48,83 +48,29 @@ function Programs({ userRole }) {
       if (user) {
         setIsLoading(true);
         try {
-          // Warm cache before fetching data
-          await warmUserCache(user.id, 'high');
-
-          // Fetch user programs
-          const userProgramsData = await getCollectionCached(
-            'programs',
-            {
-              where: [
-                ['userId', '==', user.id],
-                ['isTemplate', '==', false]
-              ],
-              orderBy: [['createdAt', 'desc']]
-            },
-            30 * 60 * 1000
-          );
-          setUserPrograms(userProgramsData.map(doc => ({
-            ...doc,
-            weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
+          // Fetch user programs using Supabase
+          const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
+          setUserPrograms(userProgramsData.map(program => ({
+            ...program,
+            weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
           })));
 
-          // Fetch template programs
-          const templateProgramsData = await getCollectionCached(
-            'programs',
-            {
-              where: [
-                ['isTemplate', '==', true]
-              ]
-            },
-            30 * 60 * 1000
-          );
-          setTemplatePrograms(templateProgramsData.map(doc => ({
-            ...doc,
-            weeklyConfigs: parseWeeklyConfigs(doc.weeklyConfigs, doc.duration, doc.daysPerWeek)
+          // Fetch template programs using Supabase
+          const templateProgramsData = await getUserPrograms(user.id, { isTemplate: true });
+          setTemplatePrograms(templateProgramsData.map(program => ({
+            ...program,
+            weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
           })));
 
-          // Fetch exercises using metadata approach (same as LogWorkout.js)
-          try {
-            // Fetch global exercises from metadata
-            const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+          // Fetch exercises using Supabase
+          const exercisesData = await getAvailableExercises(user.id);
+          setExercises(exercisesData.map(ex => ({
+            ...ex,
+            isGlobal: ex.is_global,
+            source: ex.is_global ? 'global' : 'user',
+            createdBy: ex.created_by
+          })));
 
-            // Add source metadata to global exercises
-            const enhancedGlobalExercises = globalExercises.map(ex => ({
-              ...ex,
-              isGlobal: true,
-              source: 'global',
-              createdBy: null
-            }));
-
-            // Fetch user-specific exercises if user exists
-            let userExercises = [];
-            if (user?.id) {
-              try {
-                const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-                if (userMetadata && userMetadata.exercises) {
-                  userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
-                    id,
-                    ...ex,
-                    isGlobal: false,
-                    source: 'custom',
-                    createdBy: user.id
-                  }));
-                }
-              } catch (userError) {
-                // User metadata document doesn't exist yet - this is normal for new users
-                console.log('No user-specific exercises found');
-              }
-            }
-
-            // Combine global and user exercises
-            const allExercises = [...enhancedGlobalExercises, ...userExercises];
-            setExercises(allExercises);
-          } catch (error) {
-            console.error('Error fetching exercises metadata, falling back to original method:', error);
-            // Fallback to original method if metadata approach fails
-            const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-            setExercises(exercisesData);
-          }
         } catch (error) {
           console.error("Error fetching data: ", error);
         } finally {
@@ -135,7 +81,6 @@ function Programs({ userRole }) {
       }
     };
     fetchData();
-    // eslint-disable-next-line
   }, [user]);
 
 
@@ -146,32 +91,39 @@ function Programs({ userRole }) {
   const adoptProgram = async (program) => {
     if (!user) return;
     try {
-      await addDoc(collection(db, "programs"), {
-        userId: user.id,
-        isTemplate: false,
+      const newProgramData = {
+        user_id: user.id,
+        is_template: false,
         name: `${program.name} (Adopted)`,
         duration: program.duration,
-        daysPerWeek: program.daysPerWeek,
-        weightUnit: program.weightUnit || 'LB',
-        weeklyConfigs: program.weeklyConfigs,
-        createdAt: new Date(),
-        isCurrent: false
-      });
-      invalidateProgramCache(user.id);
+        days_per_week: program.days_per_week,
+        weight_unit: program.weight_unit || 'LB',
+        weekly_configs: program.weekly_configs,
+        is_current: false,
+        is_active: true,
+        completed_weeks: 0
+      };
+
+      await copyProgram(program.id, newProgramData, user.id);
+
+      // Refresh programs list
+      const updatedPrograms = await getUserPrograms(user.id, { isTemplate: false });
+      setUserPrograms(updatedPrograms);
+
       alert('Program adopted successfully!');
     } catch (error) {
       console.error("Error adopting program: ", error);
+      alert('Failed to adopt program');
     }
   };
 
-  const deleteProgram = async (programId) => {
+  const handleDeleteProgram = async (programId) => {
     if (!window.confirm('Are you sure you want to delete this program?')) return;
 
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "programs", programId));
+      await deleteProgram(programId, user.id);
       setUserPrograms(userPrograms.filter(p => p.id !== programId));
-      invalidateProgramCache(user.id);
       alert('Program deleted successfully!');
     } catch (error) {
       console.error("Error deleting program: ", error);
@@ -181,45 +133,22 @@ function Programs({ userRole }) {
     }
   };
 
-  const setCurrentProgram = async (programId) => {
+  const handleSetCurrentProgram = async (programId) => {
     if (!user) return;
 
     try {
-      // First, set all user's programs to not current
-      const userProgramsData = await getCollectionCached(
-        'programs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['isTemplate', '==', false]
-          ]
-        },
-        30 * 60 * 1000
-      );
-      // Batch update to set all programs to not current
-      const batch = [];
-      userProgramsData.forEach(programDoc => {
-        const updatePromise = updateDoc(doc(db, "programs", programDoc.id), {
-          isCurrent: false
-        });
-        batch.push(updatePromise);
-      });
-      await Promise.all(batch);
-      await updateDoc(doc(db, "programs", programId), {
-        isCurrent: true
-      });
+      await setCurrentProgram(programId, user.id);
 
-      // Invalidate cache after all updates are complete
-      invalidateProgramCache(user.id);
-
-      setUserPrograms(userPrograms.map(program => ({
-        ...program,
-        isCurrent: program.id === programId
+      // Update local state
+      setUserPrograms(prev => prev.map(p => ({
+        ...p,
+        is_current: p.id === programId
       })));
-      alert('Current program updated successfully!');
+
+      alert('Program set as current!');
     } catch (error) {
       console.error("Error setting current program: ", error);
-      alert('Failed to update current program');
+      alert('Failed to set current program');
     }
   };
 
@@ -227,32 +156,44 @@ function Programs({ userRole }) {
     if (!user) return {};
 
     try {
-      // Use cache utility instead of direct Firestore queries
-      const logsData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['programId', '==', program.id]
-          ]
-        },
-        15 * 60 * 1000
-      );
+      // Fetch workout logs using Supabase
+      const { data: logsData, error } = await supabase
+        .from('workout_logs')
+        .select(`
+          *,
+          workout_log_exercises (
+            *,
+            exercises (
+              id,
+              name
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('program_id', program.id);
+
+      if (error) throw error;
 
       const logs = {};
       logsData.forEach(log => {
-        const key = `week${log.weekIndex + 1}_day${log.dayIndex + 1}`;
+        const key = `week${(log.week_index || 0) + 1}_day${(log.day_index || 0) + 1}`;
 
         if (!logs[key]) {
           logs[key] = {
             exercises: {},
-            isWorkoutFinished: log.isWorkoutFinished || false,
-            completedDate: log.completedDate || null
+            isWorkoutFinished: log.is_finished || false,
+            completedDate: log.completed_date || null
           };
         }
 
-        log.exercises.forEach(ex => {
-          logs[key].exercises[ex.exerciseId] = ex;
+        (log.workout_log_exercises || []).forEach(ex => {
+          logs[key].exercises[ex.exercise_id] = {
+            exerciseId: ex.exercise_id,
+            sets: ex.sets,
+            reps: ex.reps,
+            weights: ex.weights,
+            completed: ex.completed
+          };
         });
       });
 
@@ -290,7 +231,7 @@ function Programs({ userRole }) {
                   <div>
                     <strong>Set {index + 1}:</strong>
                     <span className="ms-2">
-                      {log.reps[index]} reps @ {log.weights[index] || 'N/A'} {selectedProgram.weightUnit || 'LB'}
+                      {log.reps[index]} reps @ {log.weights[index] || 'N/A'} {selectedProgram.weight_unit || 'LB'}
                     </span>
                   </div>
                   {log.completed?.[index] && <Check className="text-success" />}
@@ -330,11 +271,11 @@ function Programs({ userRole }) {
               >
                 <Pencil className="me-1" /> Edit
               </Button>
-              {!isTemplate && !program.isCurrent && (
+              {!isTemplate && !program.is_current && (
                 <Button
                   variant="outline-success"
                   size="sm"
-                  onClick={() => setCurrentProgram(program.id)}
+                  onClick={() => handleSetCurrentProgram(program.id)}
                   className="w-100"
                 >
                   <Clock className="me-1" /> Set Current
@@ -344,7 +285,7 @@ function Programs({ userRole }) {
                 <Button
                   variant="outline-danger"
                   size="sm"
-                  onClick={() => deleteProgram(program.id)}
+                  onClick={() => handleDeleteProgram(program.id)}
                   disabled={isDeleting}
                   className="w-100"
                 >
@@ -395,11 +336,11 @@ function Programs({ userRole }) {
             >
               <Pencil className="me-1" /> Edit
             </Button>
-            {!isTemplate && !program.isCurrent && (
+            {!isTemplate && !program.is_current && (
               <Button
                 variant="outline-success"
                 size="sm"
-                onClick={() => setCurrentProgram(program.id)}
+                onClick={() => handleSetCurrentProgram(program.id)}
               >
                 <Clock className="me-1" /> Set Current
               </Button>
@@ -408,22 +349,22 @@ function Programs({ userRole }) {
               <Button
                 variant="outline-danger"
                 size="sm"
-                onClick={() => deleteProgram(program.id)}
+                onClick={() => handleDeleteProgram(program.id)}
                 disabled={isDeleting}
               >
                 <Trash className="me-1" /> Delete
               </Button>
             )}
             {isTemplate && (
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={() => adoptProgram(program)}
-                  className="w-100"
-                >
-                  <Copy className="me-1" /> Adopt
-                </Button>
-              )}
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => adoptProgram(program)}
+                className="w-100"
+              >
+                <Copy className="me-1" /> Adopt
+              </Button>
+            )}
           </>
         ) : (
           <Button
@@ -446,10 +387,10 @@ function Programs({ userRole }) {
             <div>
               <Card.Title>{program.name}</Card.Title>
               <Card.Subtitle className="text-muted mb-2">
-                {program.duration} weeks | {program.daysPerWeek} days/week
+                {program.duration} weeks | {program.days_per_week} days/week
               </Card.Subtitle>
             </div>
-            {program.isCurrent && !isTemplate && (
+            {program.is_current && !isTemplate && (
               <Star className="text-warning" size={24} />
             )}
           </div>
@@ -525,18 +466,18 @@ function Programs({ userRole }) {
 
           // Get completion date - this should be stored when workout is completed
           const completionDate = logEntry.completedDate ?
-            new Date(logEntry.completedDate.toDate()) :
+            new Date(logEntry.completedDate) :
             null;
 
           Object.keys(logEntry.exercises).forEach(exerciseId => {
             const exerciseLog = logEntry.exercises[exerciseId];
             const exercise = exercises.find(e => e.id === exerciseId);
-            const exerciseType = exercise?.exerciseType || '';
+            const exerciseType = exercise?.exercise_type || '';
 
             if (!exerciseMetrics[exerciseId]) {
               exerciseMetrics[exerciseId] = {
                 name: getExerciseName(exerciseId),
-                exerciseType: exerciseType,
+                exercise_type: exerciseType,
                 sessions: [],
                 maxWeight: 0,
                 totalVolume: 0,
@@ -696,7 +637,7 @@ function Programs({ userRole }) {
             <div>
               <h4 className="mb-0">{selectedProgram.name}</h4>
               <div className="text-muted small">
-                {selectedProgram.duration} weeks | {selectedProgram.daysPerWeek} days per week | {selectedProgram.weightUnit || 'LB'}
+                {selectedProgram.duration} weeks | {selectedProgram.days_per_week} days per week | {selectedProgram.weight_unit || 'LB'}
               </div>
             </div>
           </Modal.Title>
@@ -859,7 +800,7 @@ function Programs({ userRole }) {
                                 const exerciseName = getExerciseName(ex.exerciseId);
                                 const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
                                 const exercise = exercises.find(e => e.id === ex.exerciseId);
-                                const exerciseType = exercise?.exerciseType || '';
+                                const exerciseType = exercise?.exercise_type || '';
 
                                 return (
                                   <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
@@ -903,7 +844,7 @@ function Programs({ userRole }) {
                                                 <span>Set {setIndex + 1}:</span>
                                                 <span>
                                                   <strong>{repsValue || '-'}</strong> reps @
-                                                  <strong> {displayWeight || '-'}</strong> {selectedProgram.weightUnit}
+                                                  <strong> {displayWeight || '-'}</strong> {selectedProgram.weight_unit}
                                                   {exerciseLog.completed?.[setIndex] &&
                                                     <Check className="text-success ms-1" size={14} />
                                                   }
@@ -997,8 +938,8 @@ function Programs({ userRole }) {
                             <tbody>
                               {exerciseMetrics.slice(0, 5).map((exercise, index) => {
                                 const getWeightLabel = () => {
-                                  if (exercise.exerciseType === 'Bodyweight') return 'Bodyweight';
-                                  if (exercise.exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                  if (exercise.exercise_type === 'Bodyweight') return 'Bodyweight';
+                                  if (exercise.exercise_type === 'Bodyweight Loadable') return 'Total Weight';
                                   return 'Weight';
                                 };
 
@@ -1006,15 +947,15 @@ function Programs({ userRole }) {
                                   <tr key={index}>
                                     <td>
                                       {exercise.name}
-                                      {exercise.exerciseType && (
+                                      {exercise.exercise_type && (
                                         <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                          {exercise.exerciseType}
+                                          {exercise.exercise_type}
                                         </span>
                                       )}
                                     </td>
                                     <td>{exercise.sessions.length}</td>
-                                    <td>{exercise.maxWeight} {selectedProgram.weightUnit}</td>
-                                    <td>{Math.round(exercise.totalVolume)} {selectedProgram.weightUnit}</td>
+                                    <td>{exercise.maxWeight} {selectedProgram.weight_unit}</td>
+                                    <td>{Math.round(exercise.totalVolume)} {selectedProgram.weight_unit}</td>
                                   </tr>
                                 );
                               })}
@@ -1048,8 +989,8 @@ function Programs({ userRole }) {
                           <Accordion defaultActiveKey="0" alwaysOpen>
                             {exerciseMetrics.map((exercise, index) => {
                               const getWeightLabel = () => {
-                                if (exercise.exerciseType === 'Bodyweight') return 'Bodyweight';
-                                if (exercise.exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                if (exercise.exercise_type === 'Bodyweight') return 'Bodyweight';
+                                if (exercise.exercise_type === 'Bodyweight Loadable') return 'Total Weight';
                                 return 'Weight';
                               };
 
@@ -1061,9 +1002,9 @@ function Programs({ userRole }) {
                                       <div className="d-flex justify-content-between align-items-start mb-2">
                                         <span className="fw-bold text-truncate me-2">
                                           {exercise.name}
-                                          {exercise.exerciseType && (
+                                          {exercise.exercise_type && (
                                             <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                              {exercise.exerciseType}
+                                              {exercise.exercise_type}
                                             </span>
                                           )}
                                         </span>
@@ -1075,10 +1016,10 @@ function Programs({ userRole }) {
                                           <span className="metric-value">{exercise.maxWeight}</span>
                                           <span className="metric-label">
                                             {isMobile ?
-                                              (exercise.exerciseType === 'Bodyweight' ? 'Max BW' :
-                                                exercise.exerciseType === 'Bodyweight Loadable' ? 'Max Total' : 'Max Wt') :
+                                              (exercise.exercise_type === 'Bodyweight' ? 'Max BW' :
+                                                exercise.exercise_type === 'Bodyweight Loadable' ? 'Max Total' : 'Max Wt') :
                                               getWeightLabel()
-                                            } ({selectedProgram.weightUnit})
+                                            } ({selectedProgram.weight_unit})
                                           </span>
                                         </span>
                                         <span className="metric-box">
@@ -1114,7 +1055,7 @@ function Programs({ userRole }) {
                                               labels: exercise.progressTrend.map(session => session.label), // Use actual dates or week/day
                                               datasets: [
                                                 {
-                                                  label: `${getWeightLabel()} (${selectedProgram.weightUnit})`,
+                                                  label: `${getWeightLabel()} (${selectedProgram.weight_unit})`,
                                                   data: exercise.progressTrend.map(session => session.maxWeight),
                                                   fill: false,
                                                   borderColor: '#007bff',
@@ -1125,7 +1066,7 @@ function Programs({ userRole }) {
                                                   yAxisID: 'y1',
                                                 },
                                                 {
-                                                  label: `Total Volume (${selectedProgram.weightUnit})`,
+                                                  label: `Total Volume (${selectedProgram.weight_unit})`,
                                                   data: exercise.progressTrend.map(session => session.volume),
                                                   fill: false,
                                                   borderColor: '#28a745',
@@ -1177,7 +1118,7 @@ function Programs({ userRole }) {
                                                   position: 'left',
                                                   title: {
                                                     display: true,
-                                                    text: `${getWeightLabel()} (${selectedProgram.weightUnit})`,
+                                                    text: `${getWeightLabel()} (${selectedProgram.weight_unit})`,
                                                     font: { size: isMobile ? 10 : 14 }
                                                   },
                                                   beginAtZero: true,
@@ -1190,7 +1131,7 @@ function Programs({ userRole }) {
                                                   position: 'right',
                                                   title: {
                                                     display: true,
-                                                    text: `Total Volume (${selectedProgram.weightUnit})`,
+                                                    text: `Total Volume (${selectedProgram.weight_unit})`,
                                                     font: { size: isMobile ? 10 : 14 }
                                                   },
                                                   beginAtZero: true,
@@ -1210,7 +1151,7 @@ function Programs({ userRole }) {
                                             <th>Week</th>
                                             <th>Day</th>
                                             <th>Sets × Reps</th>
-                                            <th>{getWeightLabel()} ({selectedProgram.weightUnit})</th>
+                                            <th>{getWeightLabel()} ({selectedProgram.weight_unit})</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -1223,7 +1164,7 @@ function Programs({ userRole }) {
                                             ).join(' / ');
 
                                             const weights = session.weights.map(weightData => {
-                                              if (exercise.exerciseType === 'Bodyweight Loadable' && weightData.bodyweight > 0 && weightData.weight >= 0) {
+                                              if (exercise.exercise_type === 'Bodyweight Loadable' && weightData.bodyweight > 0 && weightData.weight >= 0) {
                                                 return `${weightData.totalWeight}`;
                                               }
                                               return weightData.displayWeight || weightData.weight;
@@ -1303,7 +1244,7 @@ function Programs({ userRole }) {
                                   const exerciseName = getExerciseName(ex.exerciseId);
                                   const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
                                   const exercise = exercises.find(e => e.id === ex.exerciseId);
-                                  const exerciseType = exercise?.exerciseType || '';
+                                  const exerciseType = exercise?.exercise_type || '';
 
                                   const getWeightLabel = () => {
                                     if (exerciseType === 'Bodyweight') return 'Bodyweight';
@@ -1336,7 +1277,7 @@ function Programs({ userRole }) {
                                               <tr>
                                                 <th style={{ width: '80px' }}>Set</th>
                                                 <th>Reps</th>
-                                                <th>{getWeightLabel()} ({selectedProgram.weightUnit})</th>
+                                                <th>{getWeightLabel()} ({selectedProgram.weight_unit})</th>
                                                 <th style={{ width: '80px' }}>Status</th>
                                               </tr>
                                             </thead>
@@ -1416,7 +1357,7 @@ function Programs({ userRole }) {
                         // Calculate completion date if available
                         let completionDate = null;
                         if (isWorkoutFinished && workoutLogs[weekKey]?.completedDate) {
-                          completionDate = new Date(workoutLogs[weekKey].completedDate.toDate());
+                          completionDate = new Date(workoutLogs[weekKey].completedDate);
                         }
 
                         return (
@@ -1429,7 +1370,7 @@ function Programs({ userRole }) {
                                   const exerciseName = getExerciseName(ex.exerciseId);
                                   const log = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
                                   const exercise = exercises.find(e => e.id === ex.exerciseId);
-                                  const exerciseType = exercise?.exerciseType || '';
+                                  const exerciseType = exercise?.exercise_type || '';
 
                                   return (
                                     <li key={exIndex} className="mb-1">

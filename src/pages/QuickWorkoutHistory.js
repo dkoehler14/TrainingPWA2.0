@@ -6,13 +6,12 @@
  * filtering, and detailed workout display.
  */
 
-import React, { useState, useEffect, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Container, Row, Col, Spinner, Alert, Modal, Button } from 'react-bootstrap';
-import { AuthContext } from '../context/AuthContext';
-import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
+import { useAuth } from '../hooks/useAuth';
+import { getAvailableExercises } from '../services/exerciseService';
+import workoutLogService from '../services/workoutLogService';
 import { supabase } from '../config/supabase';
-import { db } from '../firebase';
-import { deleteDoc, doc } from 'firebase/firestore';
 
 // Import child components
 import WorkoutStatsCard from '../components/WorkoutStatsCard';
@@ -29,7 +28,7 @@ import '../styles/QuickWorkoutHistory.css';
 
 function QuickWorkoutHistoryContent() {
   // Authentication
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated } = useAuth();
 
   // Data fetching hook
   const { workouts, isLoading: isLoadingWorkouts, error: workoutsError, refetch } = useQuickWorkoutHistory();
@@ -88,64 +87,42 @@ function QuickWorkoutHistoryContent() {
           return null;
         });
 
-        // Phase 1 Optimization: Parallel loading with optimized TTL
-        const [globalExercises, userMetadata] = await Promise.all([
-          // Global exercises - 2 hours TTL (very stable data)
-          getAllExercisesMetadata(2 * 60 * 60 * 1000).catch(globalError => {
-            console.error('Error fetching global exercises:', globalError);
+        // Fetch exercises using Supabase
+        const [exercisesData] = await Promise.all([
+          // Fetch available exercises using Supabase
+          getAvailableExercises(user.id).catch(exerciseError => {
+            console.error('Error fetching exercises:', exerciseError);
             showUserMessage('Some exercise data may be unavailable', 'warning');
             return [];
           }),
-          // User exercises - 1 hour TTL (occasional changes)
-          getDocCached('exercises_metadata', user.id, 60 * 60 * 1000).catch(() => null),
           // Ensure cache warming completes
           warmingPromise
         ]);
 
-        // Validate and process global exercises
-        const validGlobalExercises = Array.isArray(globalExercises) ? globalExercises : [];
-        if (!Array.isArray(globalExercises)) {
-          console.warn('Global exercises data is not an array:', globalExercises);
+        // Validate and process exercises
+        const validExercises = Array.isArray(exercisesData) ? exercisesData : [];
+        if (!Array.isArray(exercisesData)) {
+          console.warn('Exercises data is not an array:', exercisesData);
         }
 
-        const enhancedGlobalExercises = validGlobalExercises.map(ex => {
+        const enhancedExercises = validExercises.map(ex => {
           // Validate exercise structure
           if (!ex || typeof ex !== 'object' || !ex.id) {
-            console.warn('Invalid global exercise data:', ex);
+            console.warn('Invalid exercise data:', ex);
             return null;
           }
           return {
             ...ex,
-            isGlobal: true,
-            source: 'global',
-            createdBy: null
+            isGlobal: ex.is_global,
+            source: ex.is_global ? 'global' : 'user',
+            createdBy: ex.created_by
           };
         }).filter(Boolean); // Remove null entries
 
-        // Process user-specific exercises
-        let userExercises = [];
-        if (userMetadata && userMetadata.exercises && typeof userMetadata.exercises === 'object') {
-          userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => {
-            // Validate user exercise structure
-            if (!ex || typeof ex !== 'object') {
-              console.warn('Invalid user exercise data:', id, ex);
-              return null;
-            }
-            return {
-              id,
-              ...ex,
-              isGlobal: false,
-              source: 'custom',
-              createdBy: user.id
-            };
-          }).filter(Boolean); // Remove null entries
-        }
-
-        const allExercises = [...enhancedGlobalExercises, ...userExercises];
-        setExercises(allExercises);
+        setExercises(enhancedExercises);
 
         // Show warning if no exercises were loaded
-        if (allExercises.length === 0) {
+        if (enhancedExercises.length === 0) {
           showUserMessage('No exercise data available. Some workout details may be limited.', 'warning');
         }
       } catch (error) {
@@ -271,11 +248,10 @@ function QuickWorkoutHistoryContent() {
     setIsDeleting(true);
 
     try {
-      // Delete from Firestore
-      await deleteDoc(doc(db, 'workoutLogs', workoutToDelete.id));
+      // Delete from Supabase
+      await workoutLogService.deleteWorkoutLog(workoutToDelete.id);
       
-      // Invalidate cache and refetch data
-      invalidateWorkoutCache(user.id);
+      // Refetch data
       await refetch();
       
       // Show success message

@@ -10,11 +10,14 @@
 
 import { supabase } from '../config/supabase'
 import { withSupabaseErrorHandling } from '../config/supabase'
+import { supabaseCache } from '../api/supabaseCache'
 
 class WorkoutLogService {
   constructor() {
     this.CACHE_TTL = 15 * 60 * 1000 // 15 minutes
     this.DRAFT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes for drafts
+    this.PROGRAM_LOGS_CACHE_TTL = 10 * 60 * 1000 // 10 minutes for program logs
+    this.EXERCISE_HISTORY_CACHE_TTL = 30 * 60 * 1000 // 30 minutes for exercise history
   }
 
   /**
@@ -83,84 +86,100 @@ class WorkoutLogService {
   }
 
   /**
-   * Get workout log by program, week, and day
+   * Get workout log by program, week, and day (with caching)
    */
   async getWorkoutLog(userId, programId, weekIndex, dayIndex) {
     return withSupabaseErrorHandling(async () => {
-      const { data, error } = await supabase
-        .from('workout_logs')
-        .select(`
-          *,
-          workout_log_exercises (
-            *,
-            exercises (
-              id,
-              name,
-              primary_muscle_group,
-              exercise_type,
-              instructions
-            )
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('program_id', programId)
-        .eq('week_index', weekIndex)
-        .eq('day_index', dayIndex)
-        .single()
-
-      if (error && error.code !== 'PGRST116') throw error
+      const cacheKey = `workout_log_${userId}_${programId}_${weekIndex}_${dayIndex}`
       
-      // Return null if no workout log found
-      if (error && error.code === 'PGRST116') return null
+      return supabaseCache.getWithCache(
+        cacheKey,
+        async () => {
+          const { data, error } = await supabase
+            .from('workout_logs')
+            .select(`
+              *,
+              workout_log_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type,
+                  instructions
+                )
+              )
+            `)
+            .eq('user_id', userId)
+            .eq('program_id', programId)
+            .eq('week_index', weekIndex)
+            .eq('day_index', dayIndex)
+            .single()
 
-      // Sort exercises by order_index
-      if (data?.workout_log_exercises) {
-        data.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
-      }
+          if (error && error.code !== 'PGRST116') throw error
+          
+          // Return null if no workout log found
+          if (error && error.code === 'PGRST116') return null
 
-      return data
+          // Sort exercises by order_index
+          if (data?.workout_log_exercises) {
+            data.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+          }
+
+          return data
+        },
+        { ttl: this.CACHE_TTL }
+      )
     }, 'getWorkoutLog')
   }
 
   /**
-   * Get all workout logs for a program
+   * Get all workout logs for a program (with caching)
    */
   async getProgramWorkoutLogs(userId, programId) {
     return withSupabaseErrorHandling(async () => {
-      const { data, error } = await supabase
-        .from('workout_logs')
-        .select(`
-          *,
-          workout_log_exercises (
-            *,
-            exercises (
-              id,
-              name,
-              primary_muscle_group,
-              exercise_type
-            )
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('program_id', programId)
-        .order('week_index', { ascending: true })
-        .order('day_index', { ascending: true })
+      const cacheKey = `program_workout_logs_${userId}_${programId}`
+      
+      return supabaseCache.getWithCache(
+        cacheKey,
+        async () => {
+          const { data, error } = await supabase
+            .from('workout_logs')
+            .select(`
+              *,
+              workout_log_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type
+                )
+              )
+            `)
+            .eq('user_id', userId)
+            .eq('program_id', programId)
+            .order('week_index', { ascending: true })
+            .order('day_index', { ascending: true })
 
-      if (error) throw error
+          if (error) throw error
 
-      // Sort exercises within each workout log
-      data.forEach(log => {
-        if (log.workout_log_exercises) {
-          log.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
-        }
-      })
+          // Sort exercises within each workout log
+          data.forEach(log => {
+            if (log.workout_log_exercises) {
+              log.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+            }
+          })
 
-      return data
+          return data
+        },
+        { ttl: this.PROGRAM_LOGS_CACHE_TTL }
+      )
     }, 'getProgramWorkoutLogs')
   }
 
   /**
-   * Update workout log
+   * Update workout log (with cache invalidation)
    */
   async updateWorkoutLog(workoutLogId, updates) {
     return withSupabaseErrorHandling(async () => {
@@ -184,6 +203,15 @@ class WorkoutLogService {
       // Update exercises if provided
       if (updates.exercises) {
         await this.updateWorkoutLogExercises(workoutLogId, updates.exercises)
+      }
+
+      // Invalidate related caches
+      if (data) {
+        const patterns = [
+          `workout_log_${data.user_id}_${data.program_id}_${data.week_index}_${data.day_index}`,
+          `program_workout_logs_${data.user_id}_${data.program_id}`
+        ]
+        supabaseCache.invalidate(patterns)
       }
 
       return data
@@ -483,80 +511,88 @@ class WorkoutLogService {
   }
 
   /**
-   * Get exercise history for specific exercise
+   * Get exercise history for specific exercise (with caching)
    */
   async getExerciseHistory(userId, exerciseId, limit = 50) {
     return withSupabaseErrorHandling(async () => {
-      const { data, error } = await supabase
-        .from('workout_log_exercises')
-        .select(`
-          *,
-          workout_logs!inner (
-            id,
-            user_id,
-            completed_date,
-            week_index,
-            day_index,
-            is_finished
-          ),
-          exercises (
-            id,
-            name,
-            primary_muscle_group,
-            exercise_type
-          )
-        `)
-        .eq('exercise_id', exerciseId)
-        .eq('workout_logs.user_id', userId)
-        .eq('workout_logs.is_finished', true)
-        .order('workout_logs(completed_date)', { ascending: false })
-        .limit(limit)
-
-      if (error) throw error
-
-      // Transform data to match expected format
-      const historyData = []
+      const cacheKey = `exercise_history_${userId}_${exerciseId}_${limit}`
       
-      data.forEach(logExercise => {
-        const workout = logExercise.workout_logs
-        const exercise = logExercise.exercises
-        
-        // Process each set
-        for (let setIndex = 0; setIndex < logExercise.sets; setIndex++) {
-          if (logExercise.completed && logExercise.completed[setIndex]) {
-            const weight = logExercise.weights[setIndex] || 0
-            const reps = logExercise.reps[setIndex] || 0
-            const bodyweight = logExercise.bodyweight || 0
+      return supabaseCache.getWithCache(
+        cacheKey,
+        async () => {
+          const { data, error } = await supabase
+            .from('workout_log_exercises')
+            .select(`
+              *,
+              workout_logs!inner (
+                id,
+                user_id,
+                completed_date,
+                week_index,
+                day_index,
+                is_finished
+              ),
+              exercises (
+                id,
+                name,
+                primary_muscle_group,
+                exercise_type
+              )
+            `)
+            .eq('exercise_id', exerciseId)
+            .eq('workout_logs.user_id', userId)
+            .eq('workout_logs.is_finished', true)
+            .order('workout_logs(completed_date)', { ascending: false })
+            .limit(limit)
 
-            let totalWeight = weight
-            let displayWeight = weight
+          if (error) throw error
 
-            if (exercise.exercise_type === 'Bodyweight') {
-              totalWeight = bodyweight
-              displayWeight = bodyweight
-            } else if (exercise.exercise_type === 'Bodyweight Loadable' && bodyweight > 0) {
-              totalWeight = bodyweight + weight
-              displayWeight = `${bodyweight} + ${weight} = ${totalWeight}`
+          // Transform data to match expected format
+          const historyData = []
+          
+          data.forEach(logExercise => {
+            const workout = logExercise.workout_logs
+            const exercise = logExercise.exercises
+            
+            // Process each set
+            for (let setIndex = 0; setIndex < logExercise.sets; setIndex++) {
+              if (logExercise.completed && logExercise.completed[setIndex]) {
+                const weight = logExercise.weights[setIndex] || 0
+                const reps = logExercise.reps[setIndex] || 0
+                const bodyweight = logExercise.bodyweight || 0
+
+                let totalWeight = weight
+                let displayWeight = weight
+
+                if (exercise.exercise_type === 'Bodyweight') {
+                  totalWeight = bodyweight
+                  displayWeight = bodyweight
+                } else if (exercise.exercise_type === 'Bodyweight Loadable' && bodyweight > 0) {
+                  totalWeight = bodyweight + weight
+                  displayWeight = `${bodyweight} + ${weight} = ${totalWeight}`
+                }
+
+                historyData.push({
+                  date: new Date(workout.completed_date),
+                  week: (workout.week_index || 0) + 1,
+                  day: (workout.day_index || 0) + 1,
+                  set: setIndex + 1,
+                  weight: weight,
+                  totalWeight: totalWeight,
+                  displayWeight: displayWeight,
+                  reps: reps,
+                  completed: true,
+                  bodyweight: bodyweight,
+                  exerciseType: exercise.exercise_type
+                })
+              }
             }
+          })
 
-            historyData.push({
-              date: new Date(workout.completed_date),
-              week: (workout.week_index || 0) + 1,
-              day: (workout.day_index || 0) + 1,
-              set: setIndex + 1,
-              weight: weight,
-              totalWeight: totalWeight,
-              displayWeight: displayWeight,
-              reps: reps,
-              completed: true,
-              bodyweight: bodyweight,
-              exerciseType: exercise.exercise_type
-            })
-          }
-        }
-      })
-
-      return historyData
+          return historyData
+        },
+        { ttl: this.EXERCISE_HISTORY_CACHE_TTL }
+      )
     }, 'getExerciseHistory')
   }
 
@@ -754,6 +790,74 @@ class WorkoutLogService {
         muscleGroupBreakdown
       }
     }, 'getWorkoutStats')
+  }
+
+  /**
+   * Finish workout and trigger processing
+   */
+  async finishWorkout(userId, programId, weekIndex, dayIndex, exercises) {
+    return withSupabaseErrorHandling(async () => {
+      let workoutLogId
+
+      // Check if workout log already exists
+      const existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex)
+
+      // Transform exercise data to Supabase format
+      const transformedExercises = exercises.map((ex, index) => ({
+        exerciseId: ex.exerciseId,
+        sets: Number(ex.sets),
+        reps: ex.reps || [],
+        weights: ex.weights || [],
+        completed: ex.completed || [],
+        bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
+        notes: ex.notes || '',
+        isAdded: ex.isAdded || false,
+        addedType: ex.addedType || null,
+        originalIndex: ex.originalIndex || -1
+      }))
+
+      const completedDate = new Date().toISOString()
+
+      if (existingLog) {
+        // Update existing log to mark as finished
+        await this.updateWorkoutLog(existingLog.id, {
+          name: existingLog.name,
+          isFinished: true,
+          isDraft: false,
+          completedDate: completedDate,
+          exercises: transformedExercises
+        })
+        workoutLogId = existingLog.id
+      } else {
+        // Create new completed workout log
+        const workoutData = {
+          programId: programId,
+          weekIndex: weekIndex,
+          dayIndex: dayIndex,
+          name: `Workout - Week ${weekIndex + 1}, Day ${dayIndex + 1}`,
+          type: 'program_workout',
+          date: new Date().toISOString().split('T')[0],
+          isFinished: true,
+          isDraft: false,
+          weightUnit: 'LB',
+          exercises: transformedExercises
+        }
+        const newLog = await this.createWorkoutLog(userId, workoutData)
+        workoutLogId = newLog.id
+      }
+
+      // Trigger workout processing using Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('process-workout', {
+        body: { workoutLogId: workoutLogId }
+      })
+
+      if (error) {
+        throw error
+      }
+
+      console.log('Workout processing triggered successfully:', data)
+      return { workoutLogId, processingResult: data }
+    }, 'finishWorkout')
   }
 }
 

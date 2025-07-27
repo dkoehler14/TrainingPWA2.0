@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "validationResults": {
+    "noFirebaseImports": true,
+    "noFirebaseOperations": true,
+    "usesSupabaseServices": true,
+    "usesSupabaseErrorHandling": true,
+    "issues": []
+  },
+  "stats": {
+    "fileSize": 84288,
+    "linesOfCode": 1895,
+    "serviceCalls": {
+      "workoutLogService": 10,
+      "programService": 4,
+      "exerciseService": 2
+    }
+  }
+}

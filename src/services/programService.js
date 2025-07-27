@@ -1,92 +1,117 @@
 import { supabase } from '../config/supabase'
 import { handleSupabaseError, executeSupabaseOperation } from '../utils/supabaseErrorHandler'
+import { supabaseCache } from '../api/supabaseCache'
 
 /**
  * Program Service for Supabase program operations
  * Handles CRUD operations for programs with complex workout configurations
+ * Enhanced with caching for improved performance
  */
 
+// Cache TTL constants
+const PROGRAM_CACHE_TTL = 20 * 60 * 1000 // 20 minutes
+const PROGRAM_SUMMARY_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const PROGRAM_TEMPLATES_CACHE_TTL = 60 * 60 * 1000 // 1 hour
+
 /**
- * Get all programs for a user
+ * Get all programs for a user (with caching)
  */
 export const getUserPrograms = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
-    let query = supabase
-      .from('programs')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
+    // Create cache key based on user ID and filters
+    const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
+    const cacheKey = `user_programs_${userId}_${filterKey}`
+    
+    return supabaseCache.getWithCache(
+      cacheKey,
+      async () => {
+        let query = supabase
+          .from('programs')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
 
-    // Apply filters
-    if (filters.isActive !== undefined) {
-      query = query.eq('is_active', filters.isActive)
-    }
+        // Apply filters
+        if (filters.isActive !== undefined) {
+          query = query.eq('is_active', filters.isActive)
+        }
 
-    if (filters.isCurrent !== undefined) {
-      query = query.eq('is_current', filters.isCurrent)
-    }
+        if (filters.isCurrent !== undefined) {
+          query = query.eq('is_current', filters.isCurrent)
+        }
 
-    if (filters.isTemplate !== undefined) {
-      query = query.eq('is_template', filters.isTemplate)
-    }
+        if (filters.isTemplate !== undefined) {
+          query = query.eq('is_template', filters.isTemplate)
+        }
 
-    if (filters.difficulty) {
-      query = query.eq('difficulty', filters.difficulty)
-    }
+        if (filters.difficulty) {
+          query = query.eq('difficulty', filters.difficulty)
+        }
 
-    const { data, error } = await query
+        const { data, error } = await query
 
-    if (error) throw error
-    return data || []
+        if (error) throw error
+        return data || []
+      },
+      { ttl: PROGRAM_CACHE_TTL }
+    )
   }, 'getUserPrograms')
 }
 
 /**
- * Get program by ID with full workout structure
+ * Get program by ID with full workout structure (with caching)
  */
 export const getProgramById = async (programId) => {
   return executeSupabaseOperation(async () => {
-    const { data, error } = await supabase
-      .from('programs')
-      .select(`
-        *,
-        program_workouts (
-          *,
-          program_exercises (
+    const cacheKey = `program_full_${programId}`
+    
+    return supabaseCache.getWithCache(
+      cacheKey,
+      async () => {
+        const { data, error } = await supabase
+          .from('programs')
+          .select(`
             *,
-            exercises (
-              id,
-              name,
-              primary_muscle_group,
-              exercise_type,
-              instructions
+            program_workouts (
+              *,
+              program_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type,
+                  instructions
+                )
+              )
             )
-          )
-        )
-      `)
-      .eq('id', programId)
-      .single()
+          `)
+          .eq('id', programId)
+          .single()
 
-    if (error) throw error
+        if (error) throw error
 
-    // Sort workouts by week and day
-    if (data.program_workouts) {
-      data.program_workouts.sort((a, b) => {
-        if (a.week_number !== b.week_number) {
-          return a.week_number - b.week_number
+        // Sort workouts by week and day
+        if (data.program_workouts) {
+          data.program_workouts.sort((a, b) => {
+            if (a.week_number !== b.week_number) {
+              return a.week_number - b.week_number
+            }
+            return a.day_number - b.day_number
+          })
+
+          // Sort exercises within each workout by order_index
+          data.program_workouts.forEach(workout => {
+            if (workout.program_exercises) {
+              workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+            }
+          })
         }
-        return a.day_number - b.day_number
-      })
 
-      // Sort exercises within each workout by order_index
-      data.program_workouts.forEach(workout => {
-        if (workout.program_exercises) {
-          workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
-        }
-      })
-    }
-
-    return data
+        return data
+      },
+      { ttl: PROGRAM_CACHE_TTL }
+    )
   }, 'getProgramById')
 }
 
@@ -507,6 +532,50 @@ export const searchPrograms = async (searchTerm, userId, filters = {}) => {
     if (error) throw error
     return data || []
   }, 'searchPrograms')
+}
+
+/**
+ * Update a specific exercise in a program workout
+ */
+export const updateProgramExercise = async (programId, weekNumber, dayNumber, oldExerciseId, newExerciseId) => {
+  return executeSupabaseOperation(async () => {
+    // Get the program with full workout structure to find the target exercise
+    const program = await getProgramById(programId)
+    
+    // Find the specific workout for the given week and day
+    const targetWorkout = program.program_workouts?.find(workout => 
+      workout.week_number === weekNumber && workout.day_number === dayNumber
+    )
+
+    if (!targetWorkout) {
+      throw new Error(`No workout found for week ${weekNumber}, day ${dayNumber}`)
+    }
+
+    // Find the specific exercise to replace within the workout
+    const targetExercise = targetWorkout.program_exercises?.find(ex => 
+      ex.exercise_id === oldExerciseId
+    )
+
+    if (!targetExercise) {
+      throw new Error(`Exercise ${oldExerciseId} not found in workout`)
+    }
+
+    // Update the exercise in the program_exercises table
+    const { data, error } = await supabase
+      .from('program_exercises')
+      .update({ 
+        exercise_id: newExerciseId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', targetExercise.id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    console.log(`Successfully updated exercise ${targetExercise.id} from ${oldExerciseId} to ${newExerciseId}`)
+    return data
+  }, 'updateProgramExercise')
 }
 
 /**

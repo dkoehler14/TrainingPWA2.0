@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Spinner } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useRealtimeWorkoutHistory } from '../hooks/useRealtimeWorkouts';
 import workoutLogService from '../services/workoutLogService';
-import { getUserProfile } from '../services/userService';
-import { getPrograms } from '../services/programService';
+import { getUserPrograms } from '../services/programService';
 import ErrorMessage from '../components/ErrorMessage';
+import { supabase } from '../config/supabase';
 import '../styles/Home.css';
 
 // A simple chart component placeholder
@@ -17,6 +18,7 @@ const ProgressSnapshot = () => (
 
 function Home() {
   const { user, userProfile, isAuthenticated, loading: authLoading } = useAuth();
+  const { workouts: recentWorkouts, isConnected } = useRealtimeWorkoutHistory(5);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dashboardData, setDashboardData] = useState({
@@ -27,6 +29,7 @@ function Home() {
     recentActivity: [],
   });
 
+  // Update dashboard data when real-time workouts change
   useEffect(() => {
     if (!isAuthenticated || !user || authLoading) return;
 
@@ -35,62 +38,40 @@ function Home() {
         setIsLoading(true);
         setError(null);
 
-        // Get recent workout logs (last 7 days)
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        
-        const recentWorkouts = await workoutLogService.getWorkoutHistory(user.id, 5);
-        
         // Get current program
         let currentProgram = null;
-        if (userProfile?.current_program_id) {
-          try {
-            const programs = await getPrograms(user.id, { 
-              filters: { isCurrent: true },
-              limit: 1 
-            });
-            currentProgram = programs.length > 0 ? programs[0] : null;
-          } catch (programError) {
-            console.warn('Failed to fetch current program:', programError);
-          }
+        try {
+          const programs = await getUserPrograms(user.id, { 
+            isCurrent: true
+          });
+          currentProgram = programs.length > 0 ? programs[0] : null;
+        } catch (programError) {
+          console.warn('Failed to fetch current program:', programError);
         }
-        
-        // Calculate total volume for the week using workout log exercises
-        const volumeThisWeek = recentWorkouts.reduce((total, log) => {
-          if (!log.workout_log_exercises) return total;
-          
-          return total + log.workout_log_exercises.reduce((vol, ex) => {
-            if (!ex.completed || !ex.weights || !ex.reps) return vol;
-            
-            // Sum volume for completed sets
-            return vol + ex.completed.reduce((setVol, isCompleted, index) => {
-              if (isCompleted && ex.weights[index] && ex.reps[index]) {
-                const weight = Number(ex.weights[index]) || 0;
-                const reps = Number(ex.reps[index]) || 0;
-                const bodyweight = Number(ex.bodyweight) || 0;
-                
-                // Handle different exercise types
-                let effectiveWeight = weight;
-                if (ex.exercises?.exercise_type === 'Bodyweight') {
-                  effectiveWeight = bodyweight;
-                } else if (ex.exercises?.exercise_type === 'Bodyweight Loadable') {
-                  effectiveWeight = bodyweight + weight;
-                }
-                
-                return setVol + (effectiveWeight * reps);
-              }
-              return setVol;
-            }, 0);
-          }, 0);
-        }, 0);
 
-        setDashboardData({
+        // Get PRs this month from user analytics
+        let prsThisMonth = 0;
+        try {
+          const oneMonthAgo = new Date();
+          oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+          
+          const { data: analytics } = await supabase
+            .from('user_analytics')
+            .select('*')
+            .eq('user_id', user.id)
+            .gte('pr_date', oneMonthAgo.toISOString().split('T')[0]);
+          
+          prsThisMonth = analytics?.length || 0;
+        } catch (analyticsError) {
+          console.warn('Failed to fetch PR data:', analyticsError);
+        }
+
+        setDashboardData(prev => ({
+          ...prev,
           userName: userProfile?.name || user.email,
-          volumeLifted: volumeThisWeek,
-          prsThisMonth: 0, // Placeholder - PR calculation would need analytics data
+          prsThisMonth: prsThisMonth,
           currentProgram: currentProgram,
-          recentActivity: recentWorkouts,
-        });
+        }));
 
       } catch (e) {
         console.error("Error fetching dashboard data:", e);
@@ -102,6 +83,54 @@ function Home() {
 
     fetchData();
   }, [user, userProfile, isAuthenticated, authLoading]);
+
+  // Update dashboard data when real-time workouts change
+  useEffect(() => {
+    if (!recentWorkouts || recentWorkouts.length === 0) return;
+
+    // Calculate total volume for the week using real-time workout data
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentWorkoutsThisWeek = recentWorkouts.filter(log => {
+      const logDate = new Date(log.completed_date || log.date);
+      return logDate >= sevenDaysAgo;
+    });
+
+    const volumeThisWeek = recentWorkoutsThisWeek.reduce((total, log) => {
+      if (!log.workout_log_exercises) return total;
+      
+      return total + log.workout_log_exercises.reduce((vol, ex) => {
+        if (!ex.completed || !ex.weights || !ex.reps) return vol;
+        
+        // Sum volume for completed sets
+        return vol + ex.completed.reduce((setVol, isCompleted, index) => {
+          if (isCompleted && ex.weights[index] && ex.reps[index]) {
+            const weight = Number(ex.weights[index]) || 0;
+            const reps = Number(ex.reps[index]) || 0;
+            const bodyweight = Number(ex.bodyweight) || 0;
+            
+            // Handle different exercise types
+            let effectiveWeight = weight;
+            if (ex.exercises?.exercise_type === 'Bodyweight') {
+              effectiveWeight = bodyweight;
+            } else if (ex.exercises?.exercise_type === 'Bodyweight Loadable') {
+              effectiveWeight = bodyweight + weight;
+            }
+            
+            return setVol + (effectiveWeight * reps);
+          }
+          return setVol;
+        }, 0);
+      }, 0);
+    }, 0);
+
+    setDashboardData(prev => ({
+      ...prev,
+      volumeLifted: volumeThisWeek,
+      recentActivity: recentWorkouts,
+    }));
+  }, [recentWorkouts]);
 
   return (
     <Container fluid className="soft-container home-container py-4">
@@ -120,6 +149,11 @@ function Home() {
               <h1 className="soft-title dashboard-greeting">
                 👋 Welcome back, {dashboardData.userName}!
               </h1>
+              {isConnected && (
+                <small className="text-success">
+                  🟢 Real-time updates active
+                </small>
+              )}
             </Col>
             <Col xs="auto">
               <Button as={Link} to="/log-workout" className="soft-button gradient cta-button">

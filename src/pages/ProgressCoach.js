@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { AuthContext } from '../context/AuthContext';
-import { getCollectionCached, getAllExercisesMetadata, getDocCached, getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { useRealtimeWorkouts } from '../hooks/useRealtimeWorkouts';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import EnhancedAICoach from '../components/EnhancedAICoach';
 import CompoundLiftTracker from '../components/CompoundLiftTracker';
 import HypertrophyHub from '../components/HypertrophyHub';
 import PRTracker from '../components/PRTracker';
+import workoutLogService from '../services/workoutLogService';
+import { getExercises } from '../services/exerciseService';
 import '../styles/ProgressCoach.css';
 
 // Helper to calculate e1RM
@@ -88,7 +90,12 @@ const ProgressCoach = () => {
     const [userId, setUserId] = useState(null);
     const [exercisesList, setExercisesList] = useState([]);
 
-    const { user, isAuthenticated } = useContext(AuthContext);
+    const { user, isAuthenticated } = useAuth();
+    const { workouts: realtimeWorkouts, analytics: realtimeAnalytics, isConnected } = useRealtimeWorkouts({
+        enableWorkoutLogs: true,
+        enableAnalytics: true,
+        limit: 100
+    });
 
     useEffect(() => {
         setUserId(isAuthenticated && user ? user.id : null);
@@ -103,84 +110,36 @@ const ProgressCoach = () => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Add cache warming before data fetching
-                if (userId) {
-                    try {
-                        await warmUserCache(userId, 'normal');
-                        console.log('Cache warming completed for ProgressCoach');
-                    } catch (error) {
-                        console.warn('Cache warming failed, proceeding with data fetch:', error);
-                    }
-                }
-
-                // Fetch workout logs
-                const workoutLogs = await getCollectionCached('workoutLogs', {
-                    where: [['userId', '==', userId], ['isWorkoutFinished', '==', true]],
-                    orderBy: [['completedDate', 'desc']]
-                }, 10 * 60 * 1000);
-
-                // Use metadata approach for efficient exercise fetching
-                let exercisesData = [];
-                try {
-                    // Get global exercises from metadata
-                    const globalExercises = await getAllExercisesMetadata(30 * 60 * 1000); // 30 minute TTL
-                    
-                    // Get user-specific exercises from metadata
-                    const userExercisesDoc = await getDocCached('exercises_metadata', userId, 30 * 60 * 1000);
-                    const userExercises = userExercisesDoc?.exercises || [];
-                    
-                    // Combine global and user exercises
-                    const allExercises = [...globalExercises, ...userExercises];
-                    
-                    // Add source metadata for consistency
-                    exercisesData = allExercises.map(exercise => ({
-                        ...exercise,
-                        source: globalExercises.includes(exercise) ? 'global' : 'user'
-                    }));
-                    
-                    // Remove duplicates based on ID (user exercises override global ones)
-                    const uniqueExercises = [];
-                    const seenIds = new Set();
-                    
-                    // Process user exercises first (higher priority)
-                    exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
-                        if (!seenIds.has(exercise.id)) {
-                            uniqueExercises.push(exercise);
-                            seenIds.add(exercise.id);
-                        }
-                    });
-                    
-                    // Then process global exercises
-                    exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
-                        if (!seenIds.has(exercise.id)) {
-                            uniqueExercises.push(exercise);
-                            seenIds.add(exercise.id);
-                        }
-                    });
-                    
-                    exercisesData = uniqueExercises;
-                } catch (error) {
-                    console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
-                    // Fallback to original method
-                    exercisesData = await getCollectionCached('exercises', {}, 30 * 60 * 1000);
-                }
-                
+                // Fetch exercises using Supabase
+                const exercisesData = await getExercises();
                 setExercisesList(exercisesData);
 
-                // Convert Firestore timestamps
+                // Use real-time data if available, otherwise fetch
+                const workoutLogs = realtimeWorkouts.length > 0 ? realtimeWorkouts : await workoutLogService.getWorkoutHistory(userId, 100);
+                const analytics = realtimeAnalytics.length > 0 ? realtimeAnalytics : await workoutLogService.getUserAnalytics(userId);
+
+                // Convert to expected format
                 const processedLogs = workoutLogs.map(log => ({
                     ...log,
-                    completedDate: log.completedDate.toDate()
+                    completedDate: new Date(log.completed_date || log.date),
+                    // Map Supabase structure to expected format
+                    exercises: (log.workout_log_exercises || []).map(ex => ({
+                        exerciseId: ex.exercise_id,
+                        sets: ex.sets,
+                        reps: ex.reps || [],
+                        weights: ex.weights || [],
+                        completed: ex.completed || []
+                    }))
                 }));
 
-                // Fetch analytics data
-                let exerciseAnalytics = [];
-                try {
-                    exerciseAnalytics = await getSubcollectionCached(`userAnalytics/${userId}`, 'exerciseAnalytics', {}, 15 * 60 * 1000);
-                } catch (error) {
-                    console.log("No analytics data found for user:", error.message);
-                    exerciseAnalytics = [];
-                }
+                // Process analytics data
+                const exerciseAnalytics = analytics.map(analytic => ({
+                    exerciseId: analytic.exercise_id,
+                    exerciseName: analytic.exercises?.name || 'Unknown Exercise',
+                    totalVolume: analytic.total_volume || 0,
+                    e1RM: analytic.max_weight || 0, // Simplified - would need proper 1RM calculation
+                    lastUpdated: { toDate: () => new Date(analytic.updated_at) }
+                }));
 
                 // Process dashboard data
                 processDashboardData(processedLogs, exerciseAnalytics, exercisesData);
@@ -193,7 +152,37 @@ const ProgressCoach = () => {
         };
 
         fetchData();
-    }, [userId]);
+    }, [userId, realtimeWorkouts, realtimeAnalytics]);
+
+    // Update dashboard when real-time data changes
+    useEffect(() => {
+        if (!userId || !exercisesList.length) return;
+        
+        if (realtimeWorkouts.length > 0 || realtimeAnalytics.length > 0) {
+            // Convert real-time data to expected format
+            const processedLogs = realtimeWorkouts.map(log => ({
+                ...log,
+                completedDate: new Date(log.completed_date || log.date),
+                exercises: (log.workout_log_exercises || []).map(ex => ({
+                    exerciseId: ex.exercise_id,
+                    sets: ex.sets,
+                    reps: ex.reps || [],
+                    weights: ex.weights || [],
+                    completed: ex.completed || []
+                }))
+            }));
+
+            const exerciseAnalytics = realtimeAnalytics.map(analytic => ({
+                exerciseId: analytic.exercise_id,
+                exerciseName: analytic.exercises?.name || 'Unknown Exercise',
+                totalVolume: analytic.total_volume || 0,
+                e1RM: analytic.max_weight || 0,
+                lastUpdated: { toDate: () => new Date(analytic.updated_at) }
+            }));
+
+            processDashboardData(processedLogs, exerciseAnalytics, exercisesList);
+        }
+    }, [realtimeWorkouts, realtimeAnalytics, userId, exercisesList]);
 
     const processDashboardData = (logs, analytics, exercises) => {
         if (!logs || logs.length === 0) {
@@ -339,6 +328,11 @@ const ProgressCoach = () => {
             <div className="progress-coach-header">
                 <h1>Progress & AI Coach</h1>
                 <p className="progress-coach-subtitle">Your intelligent training companion for optimized performance</p>
+                {isConnected && (
+                    <small className="text-success">
+                        🟢 Real-time analytics active
+                    </small>
+                )}
             </div>
 
             {/* Dynamic Dashboard Overview */}

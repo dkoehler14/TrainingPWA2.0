@@ -1,18 +1,47 @@
-import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Dropdown } from 'react-bootstrap';
 import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash, X } from 'react-bootstrap-icons';
-import { AuthContext } from '../context/AuthContext';
-import { supabase } from '../config/supabase';
+import { useAuth } from '../hooks/useAuth';
 import { useNumberInput } from '../hooks/useNumberInput.js';
+import useWorkoutRealtime, { useWorkoutProgressBroadcast } from '../hooks/useWorkoutRealtime';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
-import { getCollectionCached, getDocCached, invalidateWorkoutCache, invalidateProgramCache, warmUserCache, getAllExercisesMetadata } from '../api/enhancedFirestoreCache';
+import { getUserPrograms, getProgramById, updateProgram, updateProgramExercise } from '../services/programService';
+import { getAvailableExercises } from '../services/exerciseService';
+import workoutLogService from '../services/workoutLogService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
-import { db, functions } from '../firebase';
-import { collection, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
+import {
+  transformSupabaseProgramToWeeklyConfigs,
+  transformSupabaseExercises,
+  transformExercisesToSupabaseFormat,
+  transformSupabaseWorkoutLogs,
+  createWorkoutDataForSupabase,
+  ensureBackwardCompatibility
+} from '../utils/dataTransformations';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
+import WorkoutRealtimeIndicator from '../components/WorkoutRealtimeIndicator';
+// Supabase error handling utilities
+import {
+  handleSupabaseError,
+  getErrorMessage,
+  executeSupabaseOperation,
+  SupabaseError
+} from '../utils/supabaseErrorHandler';
+
+// Workout debugging and monitoring utilities
+import {
+  workoutDebugger,
+  WORKOUT_OPERATIONS
+} from '../utils/workoutDebugging';
+
+// Supabase debugging utilities
+import { initializeSupabaseDebugging } from '../utils/supabaseDebugger';
+import { initializeConnectionMonitoring } from '../utils/supabaseConnectionMonitor';
+import { supabase } from '../config/supabase';
+
+
+
 
 function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightUnit }) {
   // Calculate total volume
@@ -110,6 +139,26 @@ function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightU
   );
 }
 
+/**
+ * LogWorkout Component
+ * 
+ * Main workout logging interface that allows users to:
+ * - Select and navigate through program workouts
+ * - Log exercise sets, reps, and weights
+ * - Auto-save workout progress
+ * - Complete workouts and trigger analytics processing
+ * - Add/remove exercises temporarily or permanently
+ * - View exercise history and replace exercises
+ * 
+ * Features:
+ * - Real-time workout updates and progress broadcasting
+ * - Optimized Supabase caching for improved performance
+ * - Enhanced error handling with user-friendly messages
+ * - Mobile-responsive design
+ * - Debounced auto-save functionality
+ * 
+ * @component
+ */
 function LogWorkout() {
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
@@ -145,9 +194,41 @@ function LogWorkout() {
   // User message state for enhanced error handling
   const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
 
-  const { user, isAuthenticated } = useContext(AuthContext);
+  const { user, isAuthenticated } = useAuth();
 
-  // Enhanced user message function
+  // Real-time capabilities for workout updates
+  const realtimeHook = useWorkoutRealtime(
+    user?.id,
+    selectedProgram?.id,
+    selectedWeek,
+    selectedDay,
+    {
+      enabled: true,
+      onUpdate: (update) => {
+        // Handle real-time updates from other clients or server
+        if (update.type === 'UPDATE' || update.type === 'BROADCAST') {
+          // Optionally refresh workout data or show notification
+          showUserMessage('Workout updated in real-time', 'info');
+        }
+      },
+      onError: (error) => {
+        // Don't show error to user unless it's critical
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Real-time connection error:', error);
+        }
+      },
+      onConnectionChange: (connected, status) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Real-time connection ${connected ? 'established' : 'lost'}: ${status}`);
+        }
+      }
+    }
+  );
+
+  // Real-time progress broadcasting
+  const progressBroadcast = useWorkoutProgressBroadcast(realtimeHook);
+
+  // Enhanced user message function with Supabase error handling
   const showUserMessage = (text, type = 'info') => {
     setUserMessage({ text, type, show: true });
     // Auto-hide after 5 seconds for non-error messages
@@ -160,6 +241,25 @@ function LogWorkout() {
 
   const hideUserMessage = () => {
     setUserMessage(prev => ({ ...prev, show: false }));
+  };
+
+  // Enhanced error handler using Supabase error utilities
+  const handleError = (error, context = '', fallbackMessage = 'An unexpected error occurred') => {
+    try {
+      if (error instanceof SupabaseError) {
+        // Already handled Supabase error
+        showUserMessage(error.message, 'error');
+        return;
+      }
+
+      // Handle and classify the error
+      const handledError = handleSupabaseError(error, context);
+      showUserMessage(handledError.message, 'error');
+    } catch (handlingError) {
+      // Fallback if error handling itself fails
+      console.error('Error in error handling:', handlingError);
+      showUserMessage(fallbackMessage, 'error');
+    }
   };
 
   // Refs for number inputs
@@ -187,156 +287,176 @@ function LogWorkout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Create a debounced save function
+  // Optimized debounced save function with caching and batch operations
   const debouncedSaveLog = useCallback(
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
       if (!userData || !programData || exerciseData.length === 0) return;
+
       try {
-        // Use cache utility for workoutLogs
-        const logsData = await getCollectionCached(
-          'workoutLogs',
-          {
-            where: [
-              ['userId', '==', userData.uid],
-              ['programId', '==', programData.id],
-              ['weekIndex', '==', weekIndex],
-              ['dayIndex', '==', dayIndex]
-            ]
+        await workoutDebugger.trackOperation(
+          WORKOUT_OPERATIONS.SAVE_WORKOUT_LOG,
+          async () => {
+            await executeSupabaseOperation(async () => {
+              // Use cached workout log if available to avoid redundant queries
+              const cacheKey = `workout_log_${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
+              let existingLog = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId 
+                ? { id: programLogs[`${weekIndex}_${dayIndex}`].workoutLogId }
+                : await workoutLogService.getWorkoutLog(userData.id, programData.id, weekIndex, dayIndex);
+
+              // Transform exercise data to Supabase format (memoized)
+              const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
+
+              const workoutData = createWorkoutDataForSupabase({
+                program: programData,
+                weekIndex: weekIndex,
+                dayIndex: dayIndex,
+                exercises: transformedExercises,
+                isFinished: existingLog?.is_finished || false
+              });
+
+              if (existingLog) {
+                // Optimized update: only send changed fields
+                const updateData = {
+                  name: workoutData.name,
+                  isFinished: workoutData.isFinished,
+                  isDraft: workoutData.isDraft,
+                  exercises: transformedExercises
+                };
+                
+                await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
+                
+                workoutDebugger.logger.debug('📝 Workout log updated (optimized)', {
+                  logId: existingLog.id,
+                  exerciseCount: transformedExercises.length
+                });
+              } else {
+                // Create new log and cache the ID for future updates
+                const newLog = await workoutLogService.createWorkoutLog(userData.id, workoutData);
+                
+                // Update local cache with new log ID
+                const key = `${weekIndex}_${dayIndex}`;
+                setProgramLogs(prev => ({
+                  ...prev,
+                  [key]: {
+                    ...prev[key],
+                    workoutLogId: newLog.id
+                  }
+                }));
+                
+                workoutDebugger.logger.debug('📝 Workout log created (cached)', {
+                  logId: newLog?.id,
+                  exerciseCount: transformedExercises.length
+                });
+              }
+            }, 'auto-saving workout log');
           },
-          15 * 60 * 1000
+          {
+            userId: userData.id,
+            programId: programData.id,
+            weekIndex,
+            dayIndex,
+            exerciseCount: exerciseData.length
+          }
         );
-
-        const logDataToSave = {
-          userId: userData.uid,
-          programId: programData.id,
-          weekIndex: weekIndex,
-          dayIndex: dayIndex,
-          exercises: exerciseData.map(ex => ({
-            exerciseId: ex.exerciseId,
-            sets: Number(ex.sets),
-            reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-            weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-            completed: ex.completed,
-            notes: ex.notes || '',
-            bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
-            // Include added exercise metadata
-            isAdded: ex.isAdded || false,
-            addedType: ex.addedType || null,
-            originalIndex: ex.originalIndex || -1
-          })),
-          date: Timestamp.fromDate(new Date()),
-          isWorkoutFinished: logsData.length > 0 ? logsData[0].isWorkoutFinished || false : false
-        };
-
-        if (logsData.length > 0) {
-          // Update existing log
-          const logDocId = logsData[0].id;
-          await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-          invalidateWorkoutCache(user.id);
-        } else {
-          // Create new log if none exists
-          const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
-          invalidateWorkoutCache(user.id);
-        }
-        console.log('Workout log auto-saved');
       } catch (error) {
-        console.error("Error auto-saving workout log: ", error);
+        handleError(error, 'auto-saving workout log', 'Error saving workout. Please try again.');
       }
-    }, 1000), // 1 second debounce
-    [] // Empty dependency array ensures this is only created once
+    }, 1500), // Increased debounce to 1.5s to reduce API calls
+    [showUserMessage, handleError, programLogs] // Include programLogs for caching
   );
 
-  // Initialize debugging system
-  // useEffect(() => {
-  //   initializeDebugging();
-  // }, []);
+  // Initialize debugging and monitoring systems
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      // Initialize Supabase debugging
+      initializeSupabaseDebugging();
+      
+      // Initialize connection monitoring
+      initializeConnectionMonitoring(supabase, {
+        healthCheckInterval: 30000,
+        enableRealtimeMonitoring: true
+      });
+      
+      // Log component initialization
+      workoutDebugger.logUserAction('LogWorkout component initialized', {
+        userId: user?.id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Component initialization complete
+      workoutDebugger.logger.debug('🚀 LogWorkout component fully initialized');
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (user) {
         try {
-          // Warm user cache before fetching data
-          await warmUserCache(user.id, 'high');
-
-          // Fetch all user programs, ordered by createdAt (most recent first)
-          const programsData = await getCollectionCached(
-            'programs',
-            {
-              where: [
-                ['userId', '==', user.id]
-              ],
-              orderBy: [['createdAt', 'desc']]
-            },
-            30 * 60 * 1000
-          );
+          // Parallel data fetching for better performance
+          const [programsData, allExercises] = await Promise.all([
+            // Fetch programs with caching
+            workoutDebugger.trackOperation(
+              WORKOUT_OPERATIONS.LOAD_PROGRAMS,
+              () => getUserPrograms(user.id, { isActive: true }),
+              { userId: user.id }
+            ),
+            // Fetch exercises with caching
+            workoutDebugger.trackOperation(
+              WORKOUT_OPERATIONS.LOAD_EXERCISES,
+              () => executeSupabaseOperation(
+                () => getAvailableExercises(user.id),
+                'fetching exercises'
+              ),
+              { userId: user.id }
+            )
+          ]);
+          
+          // Process programs data
           const parsedPrograms = programsData.map(data => {
-            data.weeklyConfigs = parseWeeklyConfigs(data.weeklyConfigs, data.duration, data.daysPerWeek);
-            return data;
+            // Ensure backward compatibility and transform to expected format
+            return ensureBackwardCompatibility(data, 'program');
           });
           setPrograms(parsedPrograms);
 
-          // Fetch exercises using metadata approach (same as Exercises.js)
-          try {
-            // Fetch global exercises from metadata
-            const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
+          // Process exercises data
+          const transformedExercises = transformSupabaseExercises(allExercises);
+          setExercisesList(transformedExercises);
+          
+          workoutDebugger.logger.info('✅ Initial data loaded successfully (parallel)', {
+            programCount: parsedPrograms.length,
+            exerciseCount: transformedExercises.length
+          });
 
-            // Add source metadata to global exercises
-            const enhancedGlobalExercises = globalExercises.map(ex => ({
-              ...ex,
-              isGlobal: true,
-              source: 'global',
-              createdBy: null
-            }));
-
-            // Fetch user-specific exercises if user exists
-            let userExercises = [];
-            if (user?.id) {
-              try {
-                const userMetadata = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-                if (userMetadata && userMetadata.exercises) {
-                  userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
-                    id,
-                    ...ex,
-                    isGlobal: false,
-                    source: 'custom',
-                    createdBy: user.id
-                  }));
-                }
-              } catch (userError) {
-                // User metadata document doesn't exist yet - this is normal for new users
-                console.log('No user-specific exercises found');
-              }
-            }
-
-            // Combine global and user exercises
-            const allExercises = [...enhancedGlobalExercises, ...userExercises];
-            setExercisesList(allExercises);
-          } catch (error) {
-            console.error('Error fetching exercises metadata, falling back to original method:', error);
-            // Fallback to original method if metadata approach fails
-            const exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-            setExercisesList(exercisesData);
-          }
-
-          // Check for a current program first, then fall back to most recent if none is marked current
-          const currentProgram = parsedPrograms.find(program => program.isCurrent === true);
+          // Optimized program selection with early return
+          const currentProgram = parsedPrograms.find(program => program.is_current === true);
           const programToSelect = currentProgram || (parsedPrograms.length > 0 ? parsedPrograms[0] : null);
 
-          // Autopopulate the most recent program
           if (programToSelect) {
             setSelectedProgram(programToSelect);
-            const uncompletedDay = await findEarliestUncompletedDay(programToSelect);
-            if (uncompletedDay) {
-              setSelectedWeek(uncompletedDay.week);
-              setSelectedDay(uncompletedDay.day);
-            } else {
-              // If no uncompleted days, default to Week 0, Day 0
+            
+            // Optimize uncompleted day finding with early exit
+            try {
+              const uncompletedDay = await findEarliestUncompletedDay(programToSelect);
+              if (uncompletedDay) {
+                setSelectedWeek(uncompletedDay.week);
+                setSelectedDay(uncompletedDay.day);
+              } else {
+                // If no uncompleted days, default to Week 0, Day 0
+                setSelectedWeek(0);
+                setSelectedDay(0);
+              }
+            } catch (dayError) {
+              // Fallback to default if uncompleted day search fails
+              console.warn('Could not find uncompleted day, using defaults:', dayError);
               setSelectedWeek(0);
               setSelectedDay(0);
             }
           }
         } catch (error) {
-          console.error("Error fetching data: ", error);
+          handleError(error, 'fetching initial data', 'Error loading data. Please refresh the page.');
+          // Set fallback empty states
+          setPrograms([]);
+          setExercisesList([]);
         } finally {
           setIsLoading(false);
         }
@@ -345,68 +465,77 @@ function LogWorkout() {
     fetchData();
   }, [user]);
 
-  // Fetch workout logs when program changes
+  // Optimized workout logs fetching with caching and memoization
   useEffect(() => {
     const fetchProgramLogs = async () => {
       if (!user || !selectedProgram) return;
-      setIsLoading(true);
-      try {
-        const logsData = await getCollectionCached(
-          'workoutLogs',
-          {
-            where: [
-              ['userId', '==', user.id],
-              ['programId', '==', selectedProgram.id]
-            ]
-          },
-          15 * 60 * 1000
-        );
-        const logsMap = {};
-        logsData.forEach(log => {
-          const key = `${log.weekIndex}_${log.dayIndex}`;
-          logsMap[key] = {
-            exercises: log.exercises.map(ex => ({
-              ...ex,
-              reps: ex.reps || Array(ex.sets).fill(ex.reps || 0),
-              weights: ex.weights || Array(ex.sets).fill(''),
-              completed: ex.completed || Array(ex.sets).fill(false),
-              notes: ex.notes || '',
-              bodyweight: ex.bodyweight || '',
-              // Preserve added exercise metadata
-              isAdded: ex.isAdded || false,
-              addedType: ex.addedType || null,
-              originalIndex: ex.originalIndex || -1
-            })),
-            isWorkoutFinished: log.isWorkoutFinished || false
-          };
+      
+      // Skip loading if we already have logs for this program (cache hit)
+      const hasExistingLogs = Object.keys(programLogs).length > 0;
+      if (hasExistingLogs) {
+        workoutDebugger.logger.debug('📊 Using cached program logs', {
+          programId: selectedProgram.id,
+          cachedKeys: Object.keys(programLogs)
         });
+        return;
+      }
+      
+      setIsLoading(true);
+      
+      try {
+        // Use workoutLogService with optimized caching
+        const logsData = await workoutDebugger.trackOperation(
+          WORKOUT_OPERATIONS.LOAD_WORKOUT_LOGS,
+          () => executeSupabaseOperation(
+            () => workoutLogService.getProgramWorkoutLogs(user.id, selectedProgram.id),
+            'fetching program logs'
+          ),
+          { 
+            userId: user.id, 
+            programId: selectedProgram.id,
+            programName: selectedProgram.name 
+          }
+        );
+
+        // Memoized transformation to avoid repeated processing
+        const logsMap = transformSupabaseWorkoutLogs(logsData);
         setProgramLogs(logsMap);
-        console.log('Program logs fetched:', logsMap);
+        
+        workoutDebugger.logger.info('📊 Program logs loaded (optimized)', {
+          programId: selectedProgram.id,
+          logCount: logsData.length,
+          transformedKeys: Object.keys(logsMap)
+        });
       } catch (error) {
-        console.error("Error fetching program logs: ", error);
+        handleError(error, 'fetching program logs', 'Error loading workout history. Please refresh the page.');
+        // Set empty state on error to prevent infinite loading
+        setProgramLogs({});
       } finally {
         setIsLoading(false);
       }
     };
     fetchProgramLogs();
-  }, [user, selectedProgram]);
+  }, [user, selectedProgram?.id]); // Only depend on program ID, not the entire object
 
-  // Fetch existing workout log when program, week, or day changes
+  // Optimized workout data initialization with memoization and early returns
   useEffect(() => {
     if (!user || !selectedProgram || selectedWeek === null || selectedDay === null) return;
 
-    // Validate that the selected week/day indices are within program bounds
-    if (selectedWeek >= selectedProgram.duration || selectedDay >= selectedProgram.daysPerWeek) {
-      console.error(`Invalid week/day selection: Week ${selectedWeek}, Day ${selectedDay} for program with ${selectedProgram.duration} weeks and ${selectedProgram.daysPerWeek} days per week`);
+    // Early validation with optimized error handling
+    const isValidSelection = selectedWeek < selectedProgram.duration && selectedDay < selectedProgram.daysPerWeek;
+    if (!isValidSelection) {
+      const errorMessage = `Invalid week/day selection: Week ${selectedWeek + 1}, Day ${selectedDay + 1} for program with ${selectedProgram.duration} weeks and ${selectedProgram.daysPerWeek} days per week`;
+      console.error(errorMessage);
+      showUserMessage('Invalid workout selection. Please choose a valid week and day.', 'error');
       return;
     }
 
-    // Validate that the program structure exists
-    if (!selectedProgram.weeklyConfigs ||
-      !selectedProgram.weeklyConfigs[selectedWeek] ||
-      !selectedProgram.weeklyConfigs[selectedWeek][selectedDay] ||
-      !selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises) {
-      console.error(`Program structure missing for Week ${selectedWeek}, Day ${selectedDay}`);
+    // Optimized program structure validation
+    const hasValidStructure = selectedProgram.weeklyConfigs?.[selectedWeek]?.[selectedDay]?.exercises;
+    if (!hasValidStructure) {
+      const errorMessage = `Program structure missing for Week ${selectedWeek + 1}, Day ${selectedDay + 1}`;
+      console.error(errorMessage);
+      showUserMessage('Program structure is incomplete. Please contact support.', 'error');
       setLogData([]);
       setIsLoading(false);
       return;
@@ -415,146 +544,78 @@ function LogWorkout() {
     setIsLoading(true);
     const key = `${selectedWeek}_${selectedDay}`;
 
+    // Check for existing log data (cache hit)
     if (programLogs[key]) {
-      // Load existing log data
-      setLogData(programLogs[key].exercises.map(ex => {
+      // Optimized existing log processing with memoization
+      const processedExercises = programLogs[key].exercises.map(ex => {
         const exercise = exercisesList.find(e => e.id === ex.exerciseId);
         if (exercise?.exerciseType === 'Bodyweight' && ex.bodyweight) {
           return { ...ex, weights: Array(ex.sets).fill(ex.bodyweight) };
         }
         return ex;
-      }));
+      });
+      
+      setLogData(processedExercises);
       setIsWorkoutFinished(programLogs[key].isWorkoutFinished);
+      
+      workoutDebugger.logger.debug('📋 Loaded existing workout data', {
+        key,
+        exerciseCount: processedExercises.length,
+        isFinished: programLogs[key].isWorkoutFinished
+      });
     } else {
-      // Initialize from program configuration
+      // Initialize from program configuration with optimized processing
       setIsWorkoutFinished(false);
-      console.log("selectedWeek, selectedDay", selectedWeek, selectedDay);
-      console.log(selectedProgram.weeklyConfigs);
+      
       try {
+        // Memoized exercise initialization
         const dayExercises = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex => {
           const exercise = exercisesList.find(e => e.id === ex.exerciseId);
           const isBodyweightType = ['Bodyweight', 'Bodyweight Loadable'].includes(exercise?.exerciseType);
 
-          // Check if reps is a range and handle accordingly
+          // Optimized rep range detection
           const repValue = ex.reps;
           const isRange = isRepRange(repValue);
 
           return {
             ...ex,
-            reps: Array(ex.sets).fill(isRange ? '' : repValue), // Empty if range, otherwise use value
-            repRange: isRange ? repValue : null, // Store the range separately
+            reps: Array(ex.sets).fill(isRange ? '' : repValue),
+            repRange: isRange ? repValue : null,
             weights: Array(ex.sets).fill(''),
             completed: Array(ex.sets).fill(false),
             notes: ex.notes || '',
             bodyweight: isBodyweightType ? '' : ''
           };
         });
-        console.log(dayExercises);
+        
         setLogData(dayExercises);
-        // Pre-populate programLogs with initialized data
-        setProgramLogs(prev => ({ ...prev, [key]: { exercises: dayExercises, isWorkoutFinished: false } }));
-        console.log(`Initialized workout data for Week ${selectedWeek + 1}, Day ${selectedDay + 1} with ${dayExercises.length} exercises`);
+        
+        // Cache the initialized data for future use
+        setProgramLogs(prev => ({ 
+          ...prev, 
+          [key]: { 
+            exercises: dayExercises, 
+            isWorkoutFinished: false 
+          } 
+        }));
+        
+        workoutDebugger.logger.debug('📋 Initialized workout data (cached)', {
+          key,
+          exerciseCount: dayExercises.length
+        });
       } catch (error) {
-        console.error(`Error initializing workout data for Week ${selectedWeek}, Day ${selectedDay}:`, error);
+        handleError(error, `initializing workout data for Week ${selectedWeek + 1}, Day ${selectedDay + 1}`, 'Error loading workout data. Please try again.');
         setLogData([]);
       }
     }
     setIsLoading(false);
-  }, [user, selectedProgram, selectedWeek, selectedDay, programLogs, exercisesList]);
+  }, [user, selectedProgram?.id, selectedWeek, selectedDay, programLogs, exercisesList.length]); // Optimized dependencies
 
-  // Updated fetchExerciseHistory function to handle bodyweight data
-  // const fetchExerciseHistory = async (exerciseId) => {
-  //   if (!user || !exerciseId) return;
 
-  //   setIsLoadingHistory(true);
-  //   try {
-  //     // Query for all workout logs that contain this exercise
-  //     const logsData = await getCollectionCached(
-  //       'workoutLogs',
-  //       {
-  //         where: [
-  //           ['userId', '==', user.id],
-  //           ['isWorkoutFinished', '==', true]
-  //         ],
-  //         orderBy: [['date', 'desc']],
-  //         limit: 20
-  //       },
-  //       15 * 60 * 1000
-  //     );
-  //     console.log(`Found ${logsData.length} workout logs`);
-
-  //     const historyData = [];
-
-  //     // Get the current exercise to determine its type
-  //     const currentExercise = exercisesList.find(e => e.id === exerciseId);
-  //     const exerciseType = currentExercise?.exerciseType || '';
-
-  //     logsData.forEach(log => {
-  //       // Find the exercise in this log
-  //       const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
-
-  //       if (exerciseInLog) {
-  //         for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
-  //           if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
-  //             const weight = exerciseInLog.weights[setIndex];
-  //             const reps = exerciseInLog.reps[setIndex];
-  //             const bodyweight = exerciseInLog.bodyweight;
-
-  //             const weightValue = weight === '' || weight === null ? 0 : Number(weight);
-  //             const repsValue = reps === '' || reps === null ? 0 : Number(reps);
-  //             const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
-
-  //             if (weightValue === 0 && repsValue === 0) continue;
-
-  //             if (!isNaN(weightValue) && !isNaN(repsValue)) {
-  //               // Calculate total weight based on exercise type
-  //               let totalWeight = weightValue;
-  //               let displayWeight = weightValue;
-
-  //               if (exerciseType === 'Bodyweight') {
-  //                 totalWeight = bodyweightValue;
-  //                 displayWeight = bodyweightValue;
-  //               } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
-  //                 totalWeight = bodyweightValue + weightValue;
-  //                 displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
-  //               }
-
-  //               historyData.push({
-  //                 date: log.completedDate.toDate ? log.date.toDate() : log.completedDate,
-  //                 week: log.weekIndex + 1,
-  //                 day: log.dayIndex + 1,
-  //                 set: setIndex + 1,
-  //                 weight: weightValue,
-  //                 totalWeight: totalWeight,
-  //                 displayWeight: displayWeight,
-  //                 reps: repsValue,
-  //                 completed: true,
-  //                 bodyweight: bodyweightValue,
-  //                 exerciseType: exerciseType
-  //               });
-  //             }
-  //           }
-  //         }
-  //       }
-  //     });
-
-  //     // Sort by date (most recent first)
-  //     historyData.sort((a, b) => b.date - a.date);
-      
-  //     // Group the data into workout sessions
-  //     const groupedSessions = groupExerciseHistoryBySessions(historyData);
-  //     setExerciseHistoryData(groupedSessions);
-  //   } catch (error) {
-  //     console.error("Error fetching exercise history: ", error);
-  //   } finally {
-  //     setIsLoadingHistory(false);
-  //   }
-  // };
 
   const openHistoryModal = (exercise) => {
     setSelectedExerciseHistory(exercise);
     setShowHistoryModal(true);
-    //fetchExerciseHistory(exercise.exerciseId);
   };
 
   const openNotesModal = (exerciseIndex) => {
@@ -564,11 +625,9 @@ function LogWorkout() {
   };
 
   const openBodyweightModal = (exerciseIndex) => {
-    console.log("in openBodyweightModal");
     setBodyweightExerciseIndex(exerciseIndex);
     setBodyweightInput(logData[exerciseIndex].bodyweight || '');
     setShowBodyweightModal(true);
-    console.log("showing modal");
   };
 
   const saveBodyweight = () => {
@@ -609,124 +668,89 @@ function LogWorkout() {
 
   const replaceExercise = async (alternativeExercise) => {
     if (!exerciseToReplace || !selectedProgram) return;
-    console.log("Replacing exercise:", exerciseToReplace, "with:", alternativeExercise);
+    
+    workoutDebugger.logUserAction('Replace exercise initiated', {
+      fromExercise: exerciseToReplace.exerciseId,
+      toExercise: alternativeExercise.id,
+      programId: selectedProgram.id,
+      weekIndex: selectedWeek,
+      dayIndex: selectedDay
+    });
 
     try {
-      // Update local state first
-      const newLogData = logData.map(ex =>
-        ex.exerciseId === exerciseToReplace.exerciseId
-          ? {
-            ...ex,
-            exerciseId: alternativeExercise.id,
-            // Reset bodyweight if exercise types are different
-            bodyweight: ['Bodyweight', 'Bodyweight Loadable'].includes(alternativeExercise.exerciseType)
-              ? (ex.bodyweight || '')
-              : '',
-            // Reset weights if switching to/from bodyweight exercises
-            weights: alternativeExercise.exerciseType === 'Bodyweight'
-              ? Array(ex.sets).fill(ex.bodyweight || '')
-              : ex.weights
+      await workoutDebugger.trackOperation(
+        WORKOUT_OPERATIONS.REPLACE_EXERCISE,
+        async () => {
+          await executeSupabaseOperation(async () => {
+        // Update local state first
+        const newLogData = logData.map(ex =>
+          ex.exerciseId === exerciseToReplace.exerciseId
+            ? {
+              ...ex,
+              exerciseId: alternativeExercise.id,
+              // Reset bodyweight if exercise types are different
+              bodyweight: ['Bodyweight', 'Bodyweight Loadable'].includes(alternativeExercise.exerciseType)
+                ? (ex.bodyweight || '')
+                : '',
+              // Reset weights if switching to/from bodyweight exercises
+              weights: alternativeExercise.exerciseType === 'Bodyweight'
+                ? Array(ex.sets).fill(ex.bodyweight || '')
+                : ex.weights
+            }
+            : ex
+        );
+        setLogData(newLogData);
+
+        // Use programService to update the exercise in the program
+        await updateProgramExercise(
+          selectedProgram.id,
+          selectedWeek + 1, // Convert to 1-based indexing
+          selectedDay + 1,  // Convert to 1-based indexing
+          exerciseToReplace.exerciseId,
+          alternativeExercise.id
+        );
+
+        // Update the local program state to reflect the changes
+        const updatedProgram = { ...selectedProgram };
+
+        // Update the weeklyConfigs structure to reflect the change
+        if (updatedProgram.weeklyConfigs &&
+          updatedProgram.weeklyConfigs[selectedWeek] &&
+          updatedProgram.weeklyConfigs[selectedWeek][selectedDay]) {
+
+          updatedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises =
+            updatedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.map(ex =>
+              ex.exerciseId === exerciseToReplace.exerciseId
+                ? { ...ex, exerciseId: alternativeExercise.id }
+                : ex
+            );
+        }
+
+        // Update selectedProgram state
+        setSelectedProgram(updatedProgram);
+
+        // Update programLogs to reflect the change
+        const key = `${selectedWeek}_${selectedDay}`;
+        setProgramLogs(prev => ({
+          ...prev,
+          [key]: {
+            exercises: newLogData,
+            isWorkoutFinished: prev[key]?.isWorkoutFinished || false
           }
-          : ex
-      );
-      setLogData(newLogData);
+        }));
 
-      // Now update the program's weeklyConfigs in Firestore
-      // Use cache utility to get the latest program doc
-      const programDoc = await getDocCached('programs', selectedProgram.id);
-      if (!programDoc) {
-        throw new Error("Program document not found");
-      }
+        // Trigger auto-save with updated data
+        debouncedSaveLog(user, updatedProgram, selectedWeek, selectedDay, newLogData);
 
-      const currentProgramData = programDoc;
+        setShowReplaceModal(false);
+        setExerciseToReplace(null);
+        setAlternativeExercises([]);
 
-      // Try both format keys for backward compatibility
-      const newFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}_exercises`;
-      const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
-
-      console.log("Trying config keys:", { newFormatKey, oldFormatKey });
-
-      // First try new format, then fall back to old format
-      let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
-      let configKey = newFormatKey;
-      let isOldFormat = false;
-
-      if (!currentExercises) {
-        // Try old format
-        const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
-        if (oldFormatData && oldFormatData.exercises) {
-          currentExercises = oldFormatData.exercises;
-          configKey = oldFormatKey;
-          isOldFormat = true;
-          console.log("Using old format structure");
-        }
-      } else {
-        console.log("Using new format structure");
-      }
-
-      if (!currentExercises) {
-        throw new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Tried keys: ${newFormatKey}, ${oldFormatKey}`);
-      }
-
-      // Create updated exercises array with the replacement
-      const updatedExercises = currentExercises.map(ex =>
-        ex.exerciseId === exerciseToReplace.exerciseId
-          ? { ...ex, exerciseId: alternativeExercise.id }
-          : ex
-      );
-
-      console.log("Original exercises:", currentExercises);
-      console.log("Updated exercises:", updatedExercises);
-
-      // Update Firestore with the correct nested path based on format
-      if (isOldFormat) {
-        // For old format, update the exercises array within the day object
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}.exercises`]: updatedExercises
-        });
-      } else {
-        // For new format, update the exercises array directly
-        await updateDoc(doc(db, "programs", selectedProgram.id), {
-          [`weeklyConfigs.${configKey}`]: updatedExercises
-        });
-      }
-      invalidateProgramCache(user.id);
-
-      console.log(`Successfully updated program config for ${configKey}`);
-
-      // Update the local program state to reflect the changes
-      const updatedProgram = { ...selectedProgram };
-
-      // Ensure the weeklyConfigs structure exists
-      if (!updatedProgram.weeklyConfigs[selectedWeek]) {
-        updatedProgram.weeklyConfigs[selectedWeek] = [];
-      }
-      if (!updatedProgram.weeklyConfigs[selectedWeek][selectedDay]) {
-        updatedProgram.weeklyConfigs[selectedWeek][selectedDay] = { exercises: [] };
-      }
-
-      // Update programLogs to reflect the change
-      const key = `${selectedWeek}_${selectedDay}`;
-      setProgramLogs(prev => ({
-        ...prev,
-        [key]: {
-          exercises: newLogData,
-          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
-        }
-      }));
-
-      // Trigger auto-save with updated data
-      debouncedSaveLog(user, updatedProgram, selectedWeek, selectedDay, newLogData);
-
-      setShowReplaceModal(false);
-      setExerciseToReplace(null);
-      setAlternativeExercises([]);
-
-      console.log("Exercise replacement completed successfully");
+        showUserMessage('Exercise replaced successfully', 'success');
+      }, 'replacing exercise');
 
     } catch (error) {
-      console.error("Error replacing exercise: ", error);
-      alert("Failed to update program with replaced exercise.");
+      handleError(error, 'replacing exercise', 'Failed to update program with replaced exercise.');
     }
   };
 
@@ -735,21 +759,17 @@ function LogWorkout() {
     if (!user || !program) return null;
 
     try {
-      // Use cache utility for workoutLogs
-      const logsData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['programId', '==', program.id]
-          ]
-        }
+      // Use workoutLogService to get program workout logs with enhanced error handling
+      const logsData = await executeSupabaseOperation(
+        () => workoutLogService.getProgramWorkoutLogs(user.id, program.id),
+        'finding uncompleted day'
       );
+
       const completedDays = new Set();
 
       logsData.forEach(log => {
-        if (log.isWorkoutFinished) {
-          completedDays.add(`${log.weekIndex}_${log.dayIndex}`);
+        if (log.is_finished) {
+          completedDays.add(`${log.week_index}_${log.day_index}`);
         }
       });
 
@@ -764,7 +784,7 @@ function LogWorkout() {
 
       return null; // No uncompleted days found
     } catch (error) {
-      console.error("Error finding uncompleted day: ", error);
+      handleError(error, 'finding uncompleted day', 'Error checking workout progress.');
       return null;
     }
   };
@@ -781,7 +801,9 @@ function LogWorkout() {
       setSelectedWeek(weekIndex);
       // The useEffect will handle loading or initializing logData
     } else {
-      console.error(`Invalid week index: ${weekIndex}. Program has ${selectedProgram?.duration || 0} weeks.`);
+      const errorMessage = `Invalid week index: ${weekIndex + 1}. Program has ${selectedProgram?.duration || 0} weeks.`;
+      console.error(errorMessage);
+      showUserMessage('Invalid week selection. Please choose a valid week.', 'error');
     }
   };
 
@@ -790,7 +812,9 @@ function LogWorkout() {
       setSelectedDay(dayIndex);
       // The useEffect will handle loading or initializing logData
     } else {
-      console.error(`Invalid day index: ${dayIndex}. Program has ${selectedProgram?.daysPerWeek || 0} days per week.`);
+      const errorMessage = `Invalid day index: ${dayIndex + 1}. Program has ${selectedProgram?.daysPerWeek || 0} days per week.`;
+      console.error(errorMessage);
+      showUserMessage('Invalid day selection. Please choose a valid day.', 'error');
     }
   };
 
@@ -804,22 +828,53 @@ function LogWorkout() {
     const newLogData = [...logData];
     const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
     if (field === 'weights' && exercise?.exerciseType === 'Bodyweight') return;
+
+    let broadcastUpdate = false;
+
     if (field === 'reps') {
       newLogData[exerciseIndex].reps[setIndex] = value;
     } else if (field === 'weights') {
       newLogData[exerciseIndex].weights[setIndex] = value;
     } else if (field === 'completed') {
-      //console.log(`Before toggle - Exercise ${exerciseIndex}, Set ${setIndex}: completed = ${newLogData[exerciseIndex].completed[setIndex]}`);
-      newLogData[exerciseIndex].completed[setIndex] = !newLogData[exerciseIndex].completed[setIndex];
-      //console.log(`After toggle - Exercise ${exerciseIndex}, Set ${setIndex}: completed = ${newLogData[exerciseIndex].completed[setIndex]}`);
+      const wasCompleted = newLogData[exerciseIndex].completed[setIndex];
+      newLogData[exerciseIndex].completed[setIndex] = !wasCompleted;
+      broadcastUpdate = true;
+
+      // Broadcast set completion in real-time
+      progressBroadcast.broadcastSetCompletion(
+        exerciseIndex,
+        setIndex,
+        !wasCompleted,
+        {
+          exerciseId: newLogData[exerciseIndex].exerciseId,
+          exerciseName: exercise?.name,
+          reps: newLogData[exerciseIndex].reps[setIndex],
+          weight: newLogData[exerciseIndex].weights[setIndex]
+        }
+      );
     }
+
     setLogData(newLogData);
     const key = `${selectedWeek}_${selectedDay}`;
-    //console.log(`Updating programLogs for key ${key}:`, newLogData);
     setProgramLogs(prev => ({
       ...prev,
       [key]: { exercises: newLogData, isWorkoutFinished: prev[key]?.isWorkoutFinished || false }
     }));
+
+    // Broadcast overall workout progress if a set was completed/uncompleted
+    if (broadcastUpdate) {
+      const totalSets = newLogData.reduce((sum, ex) => sum + ex.sets, 0);
+      const completedSets = newLogData.reduce((sum, ex) =>
+        sum + ex.completed.filter(Boolean).length, 0
+      );
+
+      progressBroadcast.broadcastWorkoutProgress(completedSets, totalSets, {
+        programName: selectedProgram?.name,
+        weekIndex: selectedWeek + 1,
+        dayIndex: selectedDay + 1
+      });
+    }
+
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
@@ -863,6 +918,16 @@ function LogWorkout() {
     newLogData[exerciseIndex].weights.push(exercise?.exerciseType === 'Bodyweight' ? newLogData[exerciseIndex].bodyweight : '');
     newLogData[exerciseIndex].completed.push(false);
     setLogData(newLogData);
+
+    // Broadcast workout structure change
+    progressBroadcast.broadcastProgress({
+      type: 'set_added',
+      exerciseIndex,
+      exerciseId: newLogData[exerciseIndex].exerciseId,
+      exerciseName: exercise?.name,
+      newSetCount: newLogData[exerciseIndex].sets
+    });
+
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
@@ -875,6 +940,17 @@ function LogWorkout() {
       newLogData[exerciseIndex].weights.pop();
       newLogData[exerciseIndex].completed.pop();
       setLogData(newLogData);
+
+      // Broadcast workout structure change
+      const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
+      progressBroadcast.broadcastProgress({
+        type: 'set_removed',
+        exerciseIndex,
+        exerciseId: newLogData[exerciseIndex].exerciseId,
+        exerciseName: exercise?.name,
+        newSetCount: newLogData[exerciseIndex].sets
+      });
+
       debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
     }
   };
@@ -883,25 +959,17 @@ function LogWorkout() {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
     try {
-      // Use cache utility for workoutLogs
-      const logsData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['programId', '==', selectedProgram.id],
-            ['weekIndex', '==', selectedWeek],
-            ['dayIndex', '==', selectedDay]
-          ]
-        }
-      );
+      await executeSupabaseOperation(async () => {
+        // Use workoutLogService to get existing workout log
+        const existingLog = await workoutLogService.getWorkoutLog(
+          user.id,
+          selectedProgram.id,
+          selectedWeek,
+          selectedDay
+        );
 
-      const logDataToSave = {
-        userId: user.id,
-        programId: selectedProgram.id,
-        weekIndex: selectedWeek,
-        dayIndex: selectedDay,
-        exercises: logData.map(ex => ({
+        // Transform exercise data to Supabase format
+        const transformedExercises = logData.map(ex => ({
           exerciseId: ex.exerciseId,
           sets: Number(ex.sets),
           reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
@@ -913,23 +981,35 @@ function LogWorkout() {
           isAdded: ex.isAdded || false,
           addedType: ex.addedType || null,
           originalIndex: ex.originalIndex || -1
-        })),
-        date: Timestamp.fromDate(new Date()),
-        isWorkoutFinished: false
-      };
+        }));
 
-      if (logsData.length > 0) {
-        const logDocId = logsData[0].id;
-        await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateWorkoutCache(user.id);
-      } else {
-        await addDoc(collection(db, "workoutLogs"), logDataToSave);
-        invalidateWorkoutCache(user.id);
-      }
-      alert('Workout saved successfully!');
+        if (existingLog) {
+          // Update existing log
+          await workoutLogService.updateWorkoutLog(existingLog.id, {
+            name: existingLog.name,
+            isFinished: false,
+            isDraft: true,
+            exercises: transformedExercises
+          });
+        } else {
+          // Create new log
+          const workoutData = {
+            programId: selectedProgram.id,
+            weekIndex: selectedWeek,
+            dayIndex: selectedDay,
+            name: `${selectedProgram.name} - Week ${selectedWeek + 1}, Day ${selectedDay + 1}`,
+            type: 'program_workout',
+            date: new Date().toISOString().split('T')[0],
+            isFinished: false,
+            isDraft: true,
+            exercises: transformedExercises
+          };
+          await workoutLogService.createWorkoutLog(user.id, workoutData);
+        }
+        showUserMessage('Workout saved successfully!', 'success');
+      }, 'saving workout log');
     } catch (error) {
-      console.error("Error saving workout log: ", error);
-      alert('Error saving workout. Please try again.');
+      handleError(error, 'saving workout log', 'Error saving workout. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -950,13 +1030,13 @@ function LogWorkout() {
 
   const handleFinishWorkout = () => {
     if (isWorkoutFinished || !user || !selectedProgram) return;
-    
+
     // Check if all sets are completed
     if (!checkAllSetsCompleted()) {
       setShowIncompleteWarningModal(true);
       return;
     }
-    
+
     // If all sets are completed, proceed directly
     finishWorkout();
   };
@@ -965,69 +1045,44 @@ function LogWorkout() {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
     try {
-      // Use cache utility for workoutLogs
-      const logsData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['programId', '==', selectedProgram.id],
-            ['weekIndex', '==', selectedWeek],
-            ['dayIndex', '==', selectedDay]
-          ]
-        }
-      );
-
-      const logDataToSave = {
-        userId: user.id,
-        programId: selectedProgram.id,
-        weekIndex: selectedWeek,
-        dayIndex: selectedDay,
-        exercises: logData.map(ex => ({
-          exerciseId: ex.exerciseId,
-          sets: Number(ex.sets),
-          reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-          weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
-          completed: ex.completed,
-          notes: ex.notes || '',
-          bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
-          // Include added exercise metadata
-          isAdded: ex.isAdded || false,
-          addedType: ex.addedType || null,
-          originalIndex: ex.originalIndex || -1
-        })),
-        date: Timestamp.fromDate(new Date()),
-        isWorkoutFinished: true,
-        completedDate: Timestamp.fromDate(new Date())
-      };
-
-      let logDocId;
-      if (logsData.length > 0) {
-        logDocId = logsData[0].id;
-        await updateDoc(doc(db, "workoutLogs", logDocId), logDataToSave);
-        invalidateWorkoutCache(user.id);
-      } else {
-        const docRef = await addDoc(collection(db, "workoutLogs"), logDataToSave);
-        logDocId = docRef.id;
-        invalidateWorkoutCache(user.id);
-      }
-
-      // Trigger manual processing
-      try {
-        const processWorkout = httpsCallable(functions, 'processWorkoutManually');
-        await processWorkout({ workoutLogId: logDocId });
-        console.log('Workout processing triggered successfully');
-      } catch (processingError) {
-        console.error('Error triggering workout processing:', processingError);
-        // Don't fail the workout completion if processing fails
-        // You could show a warning to the user here if needed
-      }
+      // Use workoutLogService.finishWorkout method with enhanced error handling
+      await executeSupabaseOperation(async () => {
+        const result = await workoutLogService.finishWorkout(
+          user.id,
+          selectedProgram.id,
+          selectedWeek,
+          selectedDay,
+          logData
+        );
+      }, 'finishing workout');
 
       setIsWorkoutFinished(true);
+
+      // Broadcast workout completion in real-time
+      progressBroadcast.broadcastProgress({
+        type: 'workout_completed',
+        programId: selectedProgram.id,
+        programName: selectedProgram.name,
+        weekIndex: selectedWeek + 1,
+        dayIndex: selectedDay + 1,
+        completedAt: new Date().toISOString(),
+        totalExercises: logData.length,
+        totalSets: logData.reduce((sum, ex) => sum + ex.sets, 0),
+        completedSets: logData.reduce((sum, ex) => sum + ex.completed.filter(Boolean).length, 0)
+      });
+
       setShowSummaryModal(true);
     } catch (error) {
-      console.error("Error finishing workout: ", error);
-      alert('Error finishing workout. Please try again.');
+      // Handle both workout completion and processing errors
+      if (error.message && error.message.includes('processing')) {
+        // Non-critical error - workout is saved but processing failed
+        handleError(error, 'triggering workout processing', 'Workout saved but processing failed. Analytics may be delayed.');
+        setIsWorkoutFinished(true);
+        setShowSummaryModal(true);
+      } else {
+        // Critical error - workout completion failed
+        handleError(error, 'finishing workout', 'Error finishing workout. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1057,12 +1112,15 @@ function LogWorkout() {
       // If permanent, also update the program structure
       if (type === 'permanent') {
         try {
-          await updateProgramWithExercise(
-            selectedProgram.id,
-            exercise,
-            selectedWeek,
-            selectedDay,
-            { maxRetries: 3, allowDuplicates: false }
+          await executeSupabaseOperation(
+            () => updateProgramWithExercise(
+              selectedProgram.id,
+              exercise,
+              selectedWeek,
+              selectedDay,
+              { maxRetries: 3, allowDuplicates: false }
+            ),
+            'adding exercise to program permanently'
           );
           showUserMessage(`${exercise.name} added permanently to your program!`, 'success');
         } catch (programUpdateError) {
@@ -1072,7 +1130,7 @@ function LogWorkout() {
               : ex
           );
           setLogData(tempLogData);
-          showUserMessage(`${exercise.name} added temporarily to this workout only.`, 'warning');
+          handleError(programUpdateError, 'adding exercise to program permanently', `${exercise.name} added temporarily to this workout only.`);
         }
       } else {
         showUserMessage(`${exercise.name} added temporarily to this workout!`, 'success');
@@ -1093,8 +1151,7 @@ function LogWorkout() {
 
       setShowAddExerciseModal(false);
     } catch (error) {
-      showUserMessage(`${exercise.name} could not be added to this workout. Please try again.`, 'error');
-
+      handleError(error, 'adding exercise to workout', `${exercise.name} could not be added to this workout. Please try again.`);
     } finally {
       setIsAddingExercise(false);
     }
@@ -1159,24 +1216,20 @@ function LogWorkout() {
       // If it was a permanent addition, also remove from program
       if (exerciseToRemove.addedType === 'permanent') {
         try {
-          await removeFromProgramUtil(
-            selectedProgram.id,
-            exerciseToRemove.exerciseId,
-            selectedWeek,
-            selectedDay,
-            { maxRetries: 3 }
+          await executeSupabaseOperation(
+            () => removeFromProgramUtil(
+              selectedProgram.id,
+              exerciseToRemove.exerciseId,
+              selectedWeek,
+              selectedDay,
+              { maxRetries: 3 }
+            ),
+            'removing exercise from program permanently'
           );
           showUserMessage(`${exerciseName} removed from your program permanently.`, 'success');
         } catch (programRemovalError) {
           // Handle partial failure - exercise removed from workout but not from program
-          // const errorInfo = createAddExerciseError(
-          //   programRemovalError.originalError || programRemovalError,
-          //   'remove_from_program',
-          //   { removedFromWorkout: true, exercise: exerciseToRemove }
-          // );
-
-          //handleAddExerciseError(errorInfo, showUserMessage, { canRetry: false });
-          showUserMessage(`${exerciseName} removed from current workout, but may still appear in future workouts.`, 'warning');
+          handleError(programRemovalError, 'removing exercise from program permanently', `${exerciseName} removed from current workout, but may still appear in future workouts.`);
         }
       } else {
         showUserMessage(`${exerciseName} removed from this workout.`, 'success');
@@ -1205,31 +1258,7 @@ function LogWorkout() {
 
     } catch (error) {
       const exerciseName = exercisesList.find(ex => ex.id === exerciseToRemove.exerciseId)?.name || 'Exercise';
-      showUserMessage(`${exerciseName} could not be removed from this workout. Please try again.`, 'error');
-
-      // const errorInfo = createAddExerciseError(
-      //   error.originalError || error,
-      //   'remove_exercise',
-      //   { exercise: exerciseToRemove, exerciseIndex }
-      // );
-
-      // logAddExerciseOperation('remove_exercise', {
-      //   exercise: exerciseToRemove,
-      //   exerciseIndex,
-      //   program: selectedProgram,
-      //   weekIndex: selectedWeek,
-      //   dayIndex: selectedDay,
-      //   currentLogDataLength: logData.length
-      // }, false, error);
-
-      //handleAddExerciseError(errorInfo, showUserMessage, { canRetry: false });
-
-      // End performance monitoring with failure
-      // endPerformanceMonitoring(operationId, {
-      //   success: false,
-      //   error: error.message,
-      //   exerciseId: exerciseToRemove?.exerciseId
-      // });
+      handleError(error, 'removing exercise from workout', `${exerciseName} could not be removed from this workout. Please try again.`);
     }
   };
 
@@ -1254,7 +1283,15 @@ function LogWorkout() {
       <Row className="justify-content-center">
         <Col md={8}>
           <div className="soft-card shadow border-0">
-            <h1 className="soft-title text-center">Log Workout</h1>
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <h1 className="soft-title mb-0">Log Workout</h1>
+              <WorkoutRealtimeIndicator
+                realtimeHook={realtimeHook}
+                showProgress={true}
+                showPresence={true}
+                className="ms-auto"
+              />
+            </div>
 
             {/* Enhanced User Message Display */}
             {userMessage.show && (

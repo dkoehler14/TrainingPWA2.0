@@ -1,10 +1,17 @@
 import { supabase } from '../config/supabase'
 import { handleSupabaseError, executeSupabaseOperation } from '../utils/supabaseErrorHandler'
+import { supabaseCache } from '../api/supabaseCache'
 
 /**
  * Exercise Service for Supabase exercise operations
  * Handles CRUD operations for exercises with proper filtering and search
+ * Enhanced with caching for improved performance
  */
+
+// Cache TTL constants
+const EXERCISE_CACHE_TTL = 60 * 60 * 1000 // 1 hour (exercises change infrequently)
+const EXERCISE_SEARCH_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+const MUSCLE_GROUPS_CACHE_TTL = 2 * 60 * 60 * 1000 // 2 hours
 
 /**
  * Get all exercises with optional filtering
@@ -171,33 +178,43 @@ export const getUserExercises = async (userId) => {
 }
 
 /**
- * Get available exercises for user (global + user-created)
+ * Get available exercises for user (global + user-created) with caching
  */
 export const getAvailableExercises = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
-    let query = supabase
-      .from('exercises')
-      .select('*')
-      .or(`is_global.eq.true,created_by.eq.${userId}`)
-      .order('name')
+    // Create cache key based on user ID and filters
+    const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
+    const cacheKey = `available_exercises_${userId}_${filterKey}`
+    
+    return supabaseCache.getWithCache(
+      cacheKey,
+      async () => {
+        let query = supabase
+          .from('exercises')
+          .select('*')
+          .or(`is_global.eq.true,created_by.eq.${userId}`)
+          .order('name')
 
-    // Apply filters
-    if (filters.muscleGroup) {
-      query = query.eq('primary_muscle_group', filters.muscleGroup)
-    }
+        // Apply filters
+        if (filters.muscleGroup) {
+          query = query.eq('primary_muscle_group', filters.muscleGroup)
+        }
 
-    if (filters.exerciseType) {
-      query = query.eq('exercise_type', filters.exerciseType)
-    }
+        if (filters.exerciseType) {
+          query = query.eq('exercise_type', filters.exerciseType)
+        }
 
-    if (filters.search) {
-      query = query.ilike('name', `%${filters.search}%`)
-    }
+        if (filters.search) {
+          query = query.ilike('name', `%${filters.search}%`)
+        }
 
-    const { data, error } = await query
+        const { data, error } = await query
 
-    if (error) throw error
-    return data || []
+        if (error) throw error
+        return data || []
+      },
+      { ttl: EXERCISE_CACHE_TTL }
+    )
   }, 'getAvailableExercises')
 }
 
@@ -331,21 +348,29 @@ export const getExercisesWithUsage = async (userId, filters = {}) => {
 }
 
 /**
- * Get distinct muscle groups
+ * Get distinct muscle groups (with caching)
  */
 export const getMuscleGroups = async () => {
   return executeSupabaseOperation(async () => {
-    const { data, error } = await supabase
-      .from('exercises')
-      .select('primary_muscle_group')
-      .eq('is_global', true)
-      .order('primary_muscle_group')
+    const cacheKey = 'muscle_groups_global'
+    
+    return supabaseCache.getWithCache(
+      cacheKey,
+      async () => {
+        const { data, error } = await supabase
+          .from('exercises')
+          .select('primary_muscle_group')
+          .eq('is_global', true)
+          .order('primary_muscle_group')
 
-    if (error) throw error
+        if (error) throw error
 
-    // Extract unique muscle groups
-    const uniqueMuscleGroups = [...new Set(data.map(item => item.primary_muscle_group))]
-    return uniqueMuscleGroups
+        // Extract unique muscle groups
+        const uniqueMuscleGroups = [...new Set(data.map(item => item.primary_muscle_group))]
+        return uniqueMuscleGroups
+      },
+      { ttl: MUSCLE_GROUPS_CACHE_TTL }
+    )
   }, 'getMuscleGroups')
 }
 

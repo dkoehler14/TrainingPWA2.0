@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback, useContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Container, Row, Col, Form, Button, Table, Spinner, Modal, Card } from 'react-bootstrap';
 import { Plus, X, BarChart, Pencil } from 'react-bootstrap-icons';
-import { AuthContext } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import '../styles/LogWorkout.css';
 import '../styles/QuickWorkoutDraft.css';
 import { debounce } from 'lodash';
-import { getAllExercisesMetadata, getDocCached, invalidateWorkoutCache } from '../api/enhancedFirestoreCache';
+import { getAvailableExercises } from '../services/exerciseService';
+import workoutLogService from '../services/workoutLogService';
 import ExerciseGrid from '../components/ExerciseGrid';
-import { db } from '../firebase';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 import quickWorkoutDraftService from '../services/quickWorkoutDraftService';
 import performanceMonitor from '../utils/performanceMonitor';
@@ -41,7 +40,7 @@ function QuickWorkout() {
     const [lastSaved, setLastSaved] = useState(null);
     const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
 
-    const { user, isAuthenticated } = useContext(AuthContext);
+    const { user, isAuthenticated } = useAuth();
 
     // Refs for number inputs
     const repsInputRef = useRef(null);
@@ -194,57 +193,34 @@ function QuickWorkout() {
                         return null;
                     });
 
-                    // Phase 1 Optimization: Parallel data loading with optimized TTL
-                    const [globalExercises, userMetadata, draft] = await Promise.all([
-                        // Global exercises - 2 hours TTL (very stable data)
-                        getAllExercisesMetadata(2 * 60 * 60 * 1000).then(data => {
-                            performanceMonitor.recordCacheHit('global_exercises');
-                            performanceMonitor.recordDatabaseRead('exercises', 'cached');
+                    // Fetch exercises and draft data using Supabase
+                    const [exercisesData, draft] = await Promise.all([
+                        // Fetch available exercises using Supabase
+                        getAvailableExercises(user.id).then(data => {
+                            performanceMonitor.recordCacheHit('exercises');
+                            performanceMonitor.recordDatabaseRead('exercises', 'supabase');
                             return data;
                         }).catch(error => {
-                            performanceMonitor.recordCacheMiss('global_exercises');
-                            performanceMonitor.recordDatabaseRead('exercises', 'fallback');
+                            performanceMonitor.recordCacheMiss('exercises');
+                            performanceMonitor.recordDatabaseRead('exercises', 'error');
                             throw error;
                         }),
-                        // User exercises - 1 hour TTL (occasional changes)
-                        getDocCached('exercises_metadata', user.id, 60 * 60 * 1000).then(data => {
-                            if (data) performanceMonitor.recordCacheHit('user_exercises');
-                            return data;
-                        }).catch(() => {
-                            performanceMonitor.recordCacheMiss('user_exercises');
-                            return null;
-                        }),
-                        // Draft data - 5 minutes TTL (frequent updates)
+                        // Draft data
                         fetchSingleDraft().then(data => {
                             if (data) performanceMonitor.recordCacheHit('workout_draft');
                             return data;
-                        }),
-                        // Ensure cache warming completes
-                        warmingPromise
+                        })
                     ]);
 
-                    // Process global exercises
-                    const enhancedGlobalExercises = globalExercises.map(ex => ({
+                    // Process exercises for UI
+                    const enhancedExercises = exercisesData.map(ex => ({
                         ...ex,
-                        isGlobal: true,
-                        source: 'global',
-                        createdBy: null
+                        isGlobal: ex.is_global,
+                        source: ex.is_global ? 'global' : 'user',
+                        createdBy: ex.created_by
                     }));
 
-                    // Process user-specific exercises
-                    let userExercises = [];
-                    if (userMetadata && userMetadata.exercises) {
-                        userExercises = Object.entries(userMetadata.exercises).map(([id, ex]) => ({
-                            id,
-                            ...ex,
-                            isGlobal: false,
-                            source: 'custom',
-                            createdBy: user.id
-                        }));
-                    }
-
-                    const allExercises = [...enhancedGlobalExercises, ...userExercises];
-                    setExercisesList(allExercises);
+                    setExercisesList(enhancedExercises);
 
                     // Background cleanup of old drafts (non-blocking)
                     cleanupOldDrafts().catch(error => {
