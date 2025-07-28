@@ -28,7 +28,7 @@ function QuickWorkout() {
     const [workoutName, setWorkoutName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
-    
+
     // Exercise history state
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [selectedHistoryExercise, setSelectedHistoryExercise] = useState(null);
@@ -70,15 +70,15 @@ function QuickWorkout() {
 
         try {
             const result = await workoutLogService.saveDraft(
-                user.id, 
-                exercises, 
-                name, 
+                user.id,
+                exercises,
+                name,
                 currentDraft?.id
             );
-            
+
             setCurrentDraft(result);
             setLastSaved(new Date());
-            
+
             if (!isAutoSave) {
                 showUserMessage('Draft saved successfully!', 'success');
             }
@@ -93,7 +93,7 @@ function QuickWorkout() {
     const loadDraft = (draft) => {
         setCurrentDraft(draft);
         setWorkoutName(draft.name || '');
-        
+
         // Transform Supabase draft data to component format
         const exercises = draft.workout_log_exercises || draft.exercises || [];
         setSelectedExercises(exercises.map(ex => ({
@@ -105,7 +105,7 @@ function QuickWorkout() {
             notes: ex.notes || '',
             bodyweight: ex.bodyweight || ''
         })));
-        
+
         setShowResumeModal(false);
         showUserMessage('Draft loaded successfully!', 'success');
     };
@@ -119,14 +119,14 @@ function QuickWorkout() {
             if (existingDraft) {
                 await workoutLogService.deleteDraft(user.id, existingDraft.id);
             }
-            
+
             // Clear current state
             setCurrentDraft(null);
             setSelectedExercises([]);
             setWorkoutName('');
             setAvailableDrafts([]);
             setShowResumeModal(false);
-            
+
             showUserMessage('Starting fresh workout!', 'success');
         } catch (error) {
             console.error("Error starting fresh:", error);
@@ -179,11 +179,11 @@ function QuickWorkout() {
         const initializeComponent = async () => {
             if (user) {
                 const startTime = Date.now();
-                
+
                 try {
                     // Phase 1 Optimization: Performance monitoring
                     performanceMonitor.recordParallelLoading(4); // 4 parallel operations
-                    
+
                     // Phase 1 Optimization: Start smart cache warming immediately
                     const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
                     const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
@@ -240,12 +240,12 @@ function QuickWorkout() {
                     // Phase 1: Record performance metrics
                     const loadTime = Date.now() - startTime;
                     performanceMonitor.recordLoadTime('QuickWorkout', loadTime);
-                    
+
                     console.log(`✅ Quick Workout initialized: ${enhancedExercises.length} exercises loaded in ${loadTime}ms`);
                 } catch (error) {
                     console.error('Error initializing component:', error);
                     showUserMessage('Failed to load exercises', 'error');
-                    
+
                     // Record failed load time
                     const loadTime = Date.now() - startTime;
                     performanceMonitor.recordLoadTime('QuickWorkout_Error', loadTime);
@@ -264,19 +264,19 @@ function QuickWorkout() {
                 const templateData = sessionStorage.getItem('quickWorkoutTemplate');
                 if (templateData) {
                     const parsedTemplate = JSON.parse(templateData);
-                    
+
                     // Set workout name
                     if (parsedTemplate.name) {
                         setWorkoutName(parsedTemplate.name);
                     }
-                    
+
                     // Set exercises with cleared reps, weights, and completion status
                     // but preserve exercise selection, set counts, and notes
                     if (parsedTemplate.exercises && Array.isArray(parsedTemplate.exercises)) {
                         setSelectedExercises(parsedTemplate.exercises);
                         showUserMessage('Workout template loaded successfully!', 'success');
                     }
-                    
+
                     // Clear the template data from sessionStorage after loading
                     sessionStorage.removeItem('quickWorkoutTemplate');
                 }
@@ -308,7 +308,7 @@ function QuickWorkout() {
         const newExercises = [...selectedExercises, newExercise];
         setSelectedExercises(newExercises);
         setShowExerciseGrid(false);
-        
+
         // Trigger auto-save
         if (user && newExercises.length > 0) {
             debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -318,7 +318,7 @@ function QuickWorkout() {
     const removeExercise = (index) => {
         const newExercises = selectedExercises.filter((_, i) => i !== index);
         setSelectedExercises(newExercises);
-        
+
         // Trigger auto-save
         if (user && newExercises.length > 0) {
             debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -350,7 +350,7 @@ function QuickWorkout() {
             newExercises[exerciseIndex][field][setIndex] = value;
         }
         setSelectedExercises(newExercises);
-        
+
         // Trigger auto-save
         if (user && newExercises.length > 0) {
             debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -366,7 +366,7 @@ function QuickWorkout() {
             newExercises[exerciseIndex].completed.splice(setIndex, 1);
             newExercises[exerciseIndex].sets -= 1;
             setSelectedExercises(newExercises);
-            
+
             // Trigger auto-save
             if (user && newExercises.length > 0) {
                 debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -418,7 +418,7 @@ function QuickWorkout() {
         newExercises[currentExerciseIndex].notes = exerciseNotes;
         setSelectedExercises(newExercises);
         setShowNotesModal(false);
-        
+
         // Trigger auto-save
         if (user && newExercises.length > 0) {
             debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -442,7 +442,7 @@ function QuickWorkout() {
         }
         setSelectedExercises(newExercises);
         setShowBodyweightModal(false);
-        
+
         // Trigger auto-save
         if (user && newExercises.length > 0) {
             debouncedSaveDraft(user, newExercises, workoutName, true);
@@ -651,7 +651,7 @@ function QuickWorkout() {
                                             </Button>
                                         </div>
                                     </Card.Header>
-                                    
+
                                     {/* Display notes preview if there is a note */}
                                     {exercise.notes && (
                                         <div className="note-preview mb-2 p-2 bg-light border-top">
@@ -660,7 +660,7 @@ function QuickWorkout() {
                                             </small>
                                         </div>
                                     )}
-                                    
+
                                     <Card.Body>
                                         <Table responsive className="workout-log-table">
                                             <thead>
@@ -732,7 +732,7 @@ function QuickWorkout() {
                                                 ))}
                                             </tbody>
                                         </Table>
-                                        
+
                                         <div className="d-flex justify-content-center mt-3 mb-2">
                                             <Button
                                                 variant="outline-secondary"
@@ -892,7 +892,7 @@ function QuickWorkout() {
                                             <h6 className="mb-1">{availableDrafts[0].name}</h6>
                                             <small className="text-muted">
                                                 {(availableDrafts[0].workout_log_exercises || availableDrafts[0].exercises || []).length} exercises •
-                                                Last modified: {availableDrafts[0].updated_at ? 
+                                                Last modified: {availableDrafts[0].updated_at ?
                                                     new Date(availableDrafts[0].updated_at).toLocaleDateString() :
                                                     availableDrafts[0].lastModified?.toDate ?
                                                         availableDrafts[0].lastModified.toDate().toLocaleDateString() :
