@@ -11,7 +11,7 @@ import {
   Broadcast, 
   CheckCircleFill, 
   PlusCircleFill, 
-  TrendingUp,
+  GraphUp,
   ExclamationTriangle
 } from 'react-bootstrap-icons';
 import { useRealtimeChannelManager } from '../utils/realtimeChannelManager';
@@ -93,7 +93,7 @@ const WorkoutRealtimeIndicator = ({
     if (showToasts) {
       let toastMessage = '';
       let toastVariant = 'info';
-      let toastIcon = <TrendingUp />;
+      let toastIcon = <GraphUp />;
 
       switch (updateData.table) {
         case 'workout_logs':
@@ -117,7 +117,7 @@ const WorkoutRealtimeIndicator = ({
         case 'user_analytics':
           toastMessage = 'Analytics updated';
           toastVariant = 'info';
-          toastIcon = <TrendingUp />;
+          toastIcon = <GraphUp />;
           break;
       }
 
@@ -154,7 +154,7 @@ const WorkoutRealtimeIndicator = ({
         case 'workout_progress':
           toastMessage = `Workout ${payload.percentage}% complete`;
           toastVariant = 'info';
-          toastIcon = <TrendingUp />;
+          toastIcon = <GraphUp />;
           break;
       }
 

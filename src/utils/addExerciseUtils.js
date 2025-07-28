@@ -4,7 +4,8 @@
  */
 
 import { supabase } from '../config/supabase';
-import { getProgramById, updateProgram } from '../services/programService';
+import { invalidateProgramCache } from '../api/supabaseCache';
+import { getProgramById } from '../services/programService';
 
 /**
  * Creates a new exercise object with default values
@@ -48,7 +49,7 @@ export const createNewExerciseObject = (exercise, type, originalIndex) => {
  * @returns {Promise<void>}
  */
 export const updateProgramWithExercise = async (programId, exercise, selectedWeek, selectedDay, options = {}) => {
-  const operationId = `update_program_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const operationId = `update_program_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   const operationContext = {
     programId,
     exercise,
@@ -60,7 +61,7 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
 
   // Enhanced validation with logging
   const validationErrors = [];
-  
+
   if (!programId) {
     validationErrors.push('Program ID is required');
   }
@@ -81,10 +82,10 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     let programDoc;
     let retryCount = 0;
     const maxRetries = options.maxRetries || 3;
-    
+
     while (retryCount < maxRetries) {
       try {
-        programDoc = await getDocCached('programs', programId);
+        programDoc = await getProgramById(programId);
         break;
       } catch (fetchError) {
         retryCount++;
@@ -108,13 +109,13 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
 
     // First try new format, then fall back to old format
-    let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
+    let currentExercises = currentProgramData.weekly_configs?.[newFormatKey];
     let configKey = newFormatKey;
     let isOldFormat = false;
 
     if (!currentExercises) {
       // Try old format
-      const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
+      const oldFormatData = currentProgramData.weekly_configs?.[oldFormatKey];
       if (oldFormatData && oldFormatData.exercises) {
         currentExercises = oldFormatData.exercises;
         configKey = oldFormatKey;
@@ -123,7 +124,7 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     }
 
     if (!currentExercises) {
-      const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weeklyConfigs || {}).join(', ')}`);
+      const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weekly_configs || {}).join(', ')}`);
       throw error; // Throw simple error for compatibility
     }
 
@@ -145,26 +146,36 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
     // Add the exercise to the existing exercises array
     const updatedExercises = [...currentExercises, newProgramExercise];
 
-    // Update Firestore with the correct nested path based on format
-    const updateData = {};
+    // Update Supabase with the correct nested path based on format
+    const updatedWeeklyConfigs = { ...currentProgramData.weekly_configs };
     if (isOldFormat) {
       // For old format, update the exercises array within the day object
-      updateData[`weeklyConfigs.${configKey}.exercises`] = updatedExercises;
+      updatedWeeklyConfigs[configKey] = {
+        ...updatedWeeklyConfigs[configKey],
+        exercises: updatedExercises
+      };
     } else {
       // For new format, update the exercises array directly
-      updateData[`weeklyConfigs.${configKey}`] = updatedExercises;
+      updatedWeeklyConfigs[configKey] = updatedExercises;
     }
 
-    await updateDoc(doc(db, "programs", programId), updateData);
+    const { error: updateError } = await supabase
+      .from('programs')
+      .update({ weekly_configs: updatedWeeklyConfigs })
+      .eq('id', programId);
+
+    if (updateError) {
+      throw new Error(`Failed to update program: ${updateError.message}`);
+    }
 
     // Invalidate program cache
-    const userId = currentProgramData.userId;
+    const userId = currentProgramData.user_id;
     if (userId) {
       invalidateProgramCache(userId);
     }
-    
+
     console.log('Successfully added exercise to program structure');
-  } catch (error) {    
+  } catch (error) {
     throw error; // Throw original error for compatibility
   }
 };
@@ -179,7 +190,7 @@ export const updateProgramWithExercise = async (programId, exercise, selectedWee
  * @returns {Promise<void>}
  */
 export const removeExerciseFromProgram = async (programId, exerciseId, selectedWeek, selectedDay, options = {}) => {
-  const operationId = `remove_program_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const operationId = `remove_program_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   const operationContext = {
     programId,
     exerciseId,
@@ -191,7 +202,7 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
 
   // Enhanced validation with logging
   const validationErrors = [];
-  
+
   if (!programId) {
     validationErrors.push('Program ID is required');
   }
@@ -213,10 +224,10 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     let programDoc;
     let retryCount = 0;
     const maxRetries = options.maxRetries || 3;
-    
+
     while (retryCount < maxRetries) {
       try {
-        programDoc = await getDocCached('programs', programId);
+        programDoc = await getProgramById(programId);
         break;
       } catch (fetchError) {
         retryCount++;
@@ -240,13 +251,13 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     const oldFormatKey = `week${selectedWeek + 1}_day${selectedDay + 1}`;
 
     // First try new format, then fall back to old format
-    let currentExercises = currentProgramData.weeklyConfigs?.[newFormatKey];
+    let currentExercises = currentProgramData.weekly_configs?.[newFormatKey];
     let configKey = newFormatKey;
     let isOldFormat = false;
 
     if (!currentExercises) {
       // Try old format
-      const oldFormatData = currentProgramData.weeklyConfigs?.[oldFormatKey];
+      const oldFormatData = currentProgramData.weekly_configs?.[oldFormatKey];
       if (oldFormatData && oldFormatData.exercises) {
         currentExercises = oldFormatData.exercises;
         configKey = oldFormatKey;
@@ -255,7 +266,7 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
     }
 
     if (!currentExercises) {
-      const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weeklyConfigs || {}).join(', ')}`);
+      const error = new Error(`No exercises found for week ${selectedWeek + 1}, day ${selectedDay + 1}. Available keys: ${Object.keys(currentProgramData.weekly_configs || {}).join(', ')}`);
       throw error; // Throw simple error for compatibility
     }
 
@@ -275,24 +286,34 @@ export const removeExerciseFromProgram = async (programId, exerciseId, selectedW
       throw error; // Throw simple error for compatibility
     }
 
-    // Update Firestore with the correct nested path based on format
-    const updateData = {};
+    // Update Supabase with the correct nested path based on format
+    const updatedWeeklyConfigs = { ...currentProgramData.weekly_configs };
     if (isOldFormat) {
       // For old format, update the exercises array within the day object
-      updateData[`weeklyConfigs.${configKey}.exercises`] = updatedExercises;
+      updatedWeeklyConfigs[configKey] = {
+        ...updatedWeeklyConfigs[configKey],
+        exercises: updatedExercises
+      };
     } else {
       // For new format, update the exercises array directly
-      updateData[`weeklyConfigs.${configKey}`] = updatedExercises;
+      updatedWeeklyConfigs[configKey] = updatedExercises;
     }
 
-    await updateDoc(doc(db, "programs", programId), updateData);
+    const { error: updateError } = await supabase
+      .from('programs')
+      .update({ weekly_configs: updatedWeeklyConfigs })
+      .eq('id', programId);
+
+    if (updateError) {
+      throw new Error(`Failed to update program: ${updateError.message}`);
+    }
 
     // Invalidate program cache
-    const userId = currentProgramData.userId;
+    const userId = currentProgramData.user_id;
     if (userId) {
       invalidateProgramCache(userId);
     }
-    
+
     console.log('Successfully removed exercise from program structure');
   } catch (error) {
     throw error; // Throw original error for compatibility

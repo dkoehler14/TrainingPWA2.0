@@ -3,7 +3,7 @@ import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Al
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
-import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil, Broadcast, TrendingUp } from 'react-bootstrap-icons';
+import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil, Broadcast, GraphUp } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 import { getUserPrograms, getProgramById, setCurrentProgram, deleteProgram, copyProgram, getProgramStatistics } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
@@ -1580,7 +1580,7 @@ function Programs({ userRole }) {
             {newExercises.length > 0 && (
               <Alert variant="info" className="mb-3" dismissible onClose={clearNewExercises}>
                 <div className="d-flex align-items-center">
-                  <TrendingUp className="me-2" />
+                  <GraphUp className="me-2" />
                   <span>
                     {newExercises.length} new exercise{newExercises.length !== 1 ? 's' : ''} added: {' '}
                     {newExercises.slice(0, 2).map(ex => ex.name).join(', ')}

@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '../config/supabase'
+import { getCollectionCached } from './supabaseCacheMigration'
 
 // Cache storage and configuration
 const cache = new Map()
@@ -25,7 +26,7 @@ let cacheStats = {
   invalidations: 0,
   totalQueries: 0,
   averageQueryTime: 0,
-  
+
   // Database read tracking
   supabaseReads: 0,           // Actual database reads
   cacheServedQueries: 0,      // Queries served from cache
@@ -35,23 +36,23 @@ let cacheStats = {
   readsByTable: {},           // Reads per table
   readsByTimeOfDay: {},       // Read patterns by hour
   readsByUser: {},            // Read patterns by user
-  
+
   // Performance metrics
   avgDatabaseQueryTime: 0,    // Average database query time
   avgCacheQueryTime: 0,       // Average cache query time
   performanceImprovement: 0,  // Speed improvement percentage
   bandwidthUsed: 0,           // Data transferred from database (bytes)
   bandwidthSaved: 0,          // Data transfer saved through cache (bytes)
-  
+
   // Session metrics
   sessionStartTime: Date.now(),
   readsThisSession: 0,
   cacheHitsThisSession: 0,
-  
+
   // Detailed tracking
   queryHistory: [],           // Recent query history (last 100)
   maxHistorySize: 100,
-  
+
   // Real-time subscriptions
   activeSubscriptions: 0,
   subscriptionsByTable: {}
@@ -102,7 +103,7 @@ function getCacheKey(table, operation, params = {}) {
       range: params.range
     }
   }
-  
+
   return JSON.stringify(keyObj)
 }
 
@@ -119,7 +120,7 @@ function isExpired(entry) {
 function trackSupabaseRead(table, queryType, documentCount, dataSize, queryTime, userId = null) {
   cacheStats.supabaseReads++
   cacheStats.readsThisSession++
-  
+
   // Track by table
   if (!cacheStats.readsByTable[table]) {
     cacheStats.readsByTable[table] = { reads: 0, totalTime: 0, avgTime: 0 }
@@ -128,14 +129,14 @@ function trackSupabaseRead(table, queryType, documentCount, dataSize, queryTime,
   cacheStats.readsByTable[table].totalTime += queryTime
   cacheStats.readsByTable[table].avgTime =
     cacheStats.readsByTable[table].totalTime / cacheStats.readsByTable[table].reads
-  
+
   // Track by time of day
   const hour = new Date().getHours()
   if (!cacheStats.readsByTimeOfDay[hour]) {
     cacheStats.readsByTimeOfDay[hour] = 0
   }
   cacheStats.readsByTimeOfDay[hour]++
-  
+
   // Track by user if provided
   if (userId) {
     if (!cacheStats.readsByUser[userId]) {
@@ -147,27 +148,27 @@ function trackSupabaseRead(table, queryType, documentCount, dataSize, queryTime,
         estimatedCost: 0
       }
     }
-    
+
     const userStats = cacheStats.readsByUser[userId]
     userStats.totalReads++
     userStats.lastActivity = Date.now()
     userStats.estimatedCost = (userStats.totalReads / 100000) * SUPABASE_READ_COST_PER_100K
-    
+
     if (!userStats.tables[table]) {
       userStats.tables[table] = 0
     }
     userStats.tables[table]++
   }
-  
+
   // Update bandwidth tracking
   cacheStats.bandwidthUsed += dataSize
-  
+
   // Calculate estimated cost
   cacheStats.estimatedCost = (cacheStats.supabaseReads / 100000) * SUPABASE_READ_COST_PER_100K
-  
+
   // Update average database query time
   cacheStats.avgDatabaseQueryTime = cacheStats.avgDatabaseQueryTime * 0.9 + queryTime * 0.1
-  
+
   // Add to query history
   const historyEntry = {
     timestamp: Date.now(),
@@ -179,12 +180,12 @@ function trackSupabaseRead(table, queryType, documentCount, dataSize, queryTime,
     queryTime,
     userId
   }
-  
+
   cacheStats.queryHistory.push(historyEntry)
   if (cacheStats.queryHistory.length > cacheStats.maxHistorySize) {
     cacheStats.queryHistory.shift()
   }
-  
+
   console.log(`🗄️ Supabase read: ${table} (${documentCount} rows, ${formatBytes(dataSize)}, ${queryTime.toFixed(2)}ms)`)
 }/**
  
@@ -193,7 +194,7 @@ function trackSupabaseRead(table, queryType, documentCount, dataSize, queryTime,
 function trackCacheHit(table, dataSize, queryTime, userId = null) {
   cacheStats.cacheServedQueries++
   cacheStats.cacheHitsThisSession++
-  
+
   // Track by user if provided
   if (userId) {
     if (!cacheStats.readsByUser[userId]) {
@@ -205,33 +206,33 @@ function trackCacheHit(table, dataSize, queryTime, userId = null) {
         estimatedSavings: 0
       }
     }
-    
+
     const userStats = cacheStats.readsByUser[userId]
     userStats.cacheHits++
     userStats.lastActivity = Date.now()
     userStats.estimatedSavings = (userStats.cacheHits / 100000) * SUPABASE_READ_COST_PER_100K
   }
-  
+
   // Calculate bandwidth saved
   cacheStats.bandwidthSaved += dataSize
-  
+
   // Calculate cost savings
   cacheStats.estimatedSavings = (cacheStats.cacheServedQueries / 100000) * SUPABASE_READ_COST_PER_100K
-  
+
   // Update read reduction rate
   const totalQueries = cacheStats.supabaseReads + cacheStats.cacheServedQueries
   cacheStats.readReductionRate = totalQueries > 0 ?
     (cacheStats.cacheServedQueries / totalQueries * 100) : 0
-  
+
   // Update average cache query time
   cacheStats.avgCacheQueryTime = cacheStats.avgCacheQueryTime * 0.9 + queryTime * 0.1
-  
+
   // Calculate performance improvement
   if (cacheStats.avgDatabaseQueryTime > 0 && cacheStats.avgCacheQueryTime > 0) {
     cacheStats.performanceImprovement =
       ((cacheStats.avgDatabaseQueryTime - cacheStats.avgCacheQueryTime) / cacheStats.avgDatabaseQueryTime) * 100
   }
-  
+
   // Add to query history
   const historyEntry = {
     timestamp: Date.now(),
@@ -241,12 +242,12 @@ function trackCacheHit(table, dataSize, queryTime, userId = null) {
     queryTime,
     userId
   }
-  
+
   cacheStats.queryHistory.push(historyEntry)
   if (cacheStats.queryHistory.length > cacheStats.maxHistorySize) {
     cacheStats.queryHistory.shift()
   }
-  
+
   console.log(`⚡ Cache hit: ${table} (${formatBytes(dataSize)}, ${queryTime.toFixed(2)}ms)`)
 }
 
@@ -260,7 +261,7 @@ function updateCacheStats(isHit, queryTime = 0) {
   } else {
     cacheStats.misses++
   }
-  
+
   // Update average query time (exponential moving average)
   if (queryTime > 0) {
     cacheStats.averageQueryTime = cacheStats.averageQueryTime * 0.9 + queryTime * 0.1
@@ -291,7 +292,7 @@ function formatDuration(ms) {
   const seconds = Math.floor(ms / 1000)
   const minutes = Math.floor(seconds / 60)
   const hours = Math.floor(minutes / 60)
-  
+
   if (hours > 0) return `${hours}h ${minutes % 60}m`
   if (minutes > 0) return `${minutes}m ${seconds % 60}s`
   return `${seconds}s`
@@ -304,7 +305,7 @@ export class SupabaseCache {
     this.defaultTTL = options.defaultTTL || DEFAULT_TTL
     this.maxCacheSize = options.maxCacheSize || MAX_CACHE_SIZE
     this.cleanupInterval = options.cleanupInterval || CLEANUP_INTERVAL
-    
+
     // Start automatic cleanup
     this.startCleanupInterval()
   }
@@ -320,7 +321,7 @@ export class SupabaseCache {
       bypassCache = false,
       table = 'unknown'
     } = options
-    
+
     // Check cache first (unless bypassed)
     if (!bypassCache) {
       const cached = cache.get(cacheKey)
@@ -330,30 +331,30 @@ export class SupabaseCache {
         cached.lastAccessed = Date.now()
         const queryTime = performance.now() - startTime
         const dataSize = JSON.stringify(cached.data).length
-        
+
         trackCacheHit(table, dataSize, queryTime, userId)
         updateCacheStats(true, queryTime)
         return cached.data
       }
     }
-    
+
     // Execute database query
     const startTime = performance.now()
     const result = await queryFn()
     const queryTime = performance.now() - startTime
-    
+
     if (result.error) {
       console.error(`❌ Supabase query failed for ${table}:`, result.error)
       updateCacheStats(false, queryTime)
       throw result.error
     }
-    
+
     // Track database read
     const dataSize = JSON.stringify(result.data).length
     const documentCount = Array.isArray(result.data) ? result.data.length : 1
     trackSupabaseRead(table, 'select', documentCount, dataSize, queryTime, userId)
     updateCacheStats(false, queryTime)
-    
+
     // Cache the result
     const entry = createCacheEntry(result.data, ttl, {
       table,
@@ -361,9 +362,9 @@ export class SupabaseCache {
       userId,
       queryTime
     })
-    
+
     this.setCacheEntry(cacheKey, entry)
-    
+
     return result.data
   }
 
@@ -375,7 +376,7 @@ export class SupabaseCache {
     if (cache.size >= this.maxCacheSize) {
       this.evictLeastRecentlyUsed()
     }
-    
+
     cache.set(key, entry)
   }
 
@@ -385,14 +386,14 @@ export class SupabaseCache {
   evictLeastRecentlyUsed() {
     let oldestKey = null
     let oldestTime = Date.now()
-    
+
     for (const [key, entry] of cache) {
       if (entry.lastAccessed < oldestTime) {
         oldestTime = entry.lastAccessed
         oldestKey = key
       }
     }
-    
+
     if (oldestKey) {
       cache.delete(oldestKey)
       console.log(`🗑️ Evicted LRU cache entry: ${oldestKey}`)
@@ -410,16 +411,16 @@ export class SupabaseCache {
       tags = [],
       reason = 'manual'
     } = options
-    
+
     let invalidatedCount = 0
     const keysToDelete = []
-    
+
     // Convert single pattern to array
     const patternArray = Array.isArray(patterns) ? patterns : [patterns]
-    
+
     for (const [key, entry] of cache) {
       let shouldInvalidate = false
-      
+
       // Check pattern matching
       for (const pattern of patternArray) {
         if (exact) {
@@ -434,7 +435,7 @@ export class SupabaseCache {
           }
         }
       }
-      
+
       // Additional filtering by tags
       if (shouldInvalidate && tags.length > 0) {
         const hasMatchingTag = entry.tags?.some(tag => tags.includes(tag))
@@ -442,34 +443,34 @@ export class SupabaseCache {
           shouldInvalidate = false
         }
       }
-      
+
       // Additional filtering by tables
       if (shouldInvalidate && tables.length > 0) {
         if (!tables.includes(entry.queryInfo?.table)) {
           shouldInvalidate = false
         }
       }
-      
+
       // Additional filtering by userId
       if (shouldInvalidate && userId) {
         if (entry.queryInfo?.userId !== userId) {
           shouldInvalidate = false
         }
       }
-      
+
       if (shouldInvalidate) {
         keysToDelete.push(key)
       }
     }
-    
+
     // Delete matched keys
     keysToDelete.forEach(key => {
       cache.delete(key)
       invalidatedCount++
     })
-    
+
     cacheStats.invalidations += invalidatedCount
-    
+
     console.log(`🗑️ Cache invalidation: ${invalidatedCount} entries removed (reason: ${reason})`)
     return invalidatedCount
   }
@@ -480,18 +481,18 @@ export class SupabaseCache {
   cleanup() {
     let cleanedCount = 0
     const keysToDelete = []
-    
+
     for (const [key, entry] of cache) {
       if (isExpired(entry)) {
         keysToDelete.push(key)
       }
     }
-    
+
     keysToDelete.forEach(key => {
       cache.delete(key)
       cleanedCount++
     })
-    
+
     console.log(`🧹 Cache cleanup: ${cleanedCount} expired entries removed`)
     return cleanedCount
   }
@@ -510,11 +511,11 @@ export class SupabaseCache {
   getStats() {
     const hitRate = cacheStats.totalQueries > 0 ?
       (cacheStats.hits / cacheStats.totalQueries * 100).toFixed(2) : 0
-    
+
     const cacheSize = cache.size
     const totalMemoryUsage = Array.from(cache.values())
       .reduce((total, entry) => total + entry.size, 0)
-    
+
     return {
       ...cacheStats,
       hitRate: `${hitRate}%`,
@@ -538,7 +539,7 @@ export class SupabaseCache {
   getEnhancedStats() {
     const totalQueries = cacheStats.supabaseReads + cacheStats.cacheServedQueries
     const sessionDuration = Date.now() - cacheStats.sessionStartTime
-    
+
     return {
       // Database Read Tracking
       databaseReads: {
@@ -557,7 +558,7 @@ export class SupabaseCache {
           ])
         )
       },
-      
+
       // Cache Performance
       cachePerformance: {
         totalQueries,
@@ -568,7 +569,7 @@ export class SupabaseCache {
         avgDatabaseQueryTime: `${cacheStats.avgDatabaseQueryTime.toFixed(2)}ms`,
         avgCacheQueryTime: `${cacheStats.avgCacheQueryTime.toFixed(2)}ms`
       },
-      
+
       // Cost Analysis
       costAnalysis: {
         estimatedCost: `$${cacheStats.estimatedCost.toFixed(4)}`,
@@ -577,7 +578,7 @@ export class SupabaseCache {
         projectedMonthlyCost: `$${(cacheStats.supabaseReads * 30 * (SUPABASE_READ_COST_PER_100K / 100000)).toFixed(2)}`,
         projectedMonthlySavings: `$${(cacheStats.cacheServedQueries * 30 * (SUPABASE_READ_COST_PER_100K / 100000)).toFixed(2)}`
       },
-      
+
       // Bandwidth Tracking
       bandwidth: {
         databaseBandwidth: formatBytes(cacheStats.bandwidthUsed),
@@ -586,7 +587,7 @@ export class SupabaseCache {
         bandwidthReductionRate: cacheStats.bandwidthUsed > 0 ?
           `${((cacheStats.bandwidthSaved / (cacheStats.bandwidthUsed + cacheStats.bandwidthSaved)) * 100).toFixed(2)}%` : '0%'
       },
-      
+
       // Session Information
       session: {
         startTime: new Date(cacheStats.sessionStartTime).toLocaleString(),
@@ -596,12 +597,12 @@ export class SupabaseCache {
         cacheHitsPerMinute: sessionDuration > 0 ?
           ((cacheStats.cacheServedQueries / (sessionDuration / 60000)).toFixed(2)) : '0'
       },
-      
+
       // Recent Activity
       recentActivity: {
         queryHistory: cacheStats.queryHistory.slice(-10), // Last 10 queries
         topTables: Object.entries(cacheStats.readsByTable)
-          .sort(([,a], [,b]) => b.reads - a.reads)
+          .sort(([, a], [, b]) => b.reads - a.reads)
           .slice(0, 5)
           .map(([table, stats]) => ({
             table,
@@ -609,7 +610,7 @@ export class SupabaseCache {
             avgTime: `${stats.avgTime.toFixed(2)}ms`
           }))
       },
-      
+
       // Cache Health
       cacheHealth: {
         size: cache.size,
@@ -627,7 +628,7 @@ export class SupabaseCache {
    */
   debug(pattern = null) {
     const entries = []
-    
+
     for (const [key, entry] of cache) {
       if (!pattern || key.includes(pattern)) {
         entries.push({
@@ -641,7 +642,7 @@ export class SupabaseCache {
         })
       }
     }
-    
+
     return entries.sort((a, b) => b.accessCount - a.accessCount)
   }
 
@@ -660,23 +661,23 @@ export const supabaseCache = new SupabaseCache()
 
 // Specialized cache invalidation functions
 export function invalidateUserCache(userId) {
-  return supabaseCache.invalidate(['workout_logs', 'programs', 'user_analytics'], { 
-    userId, 
-    reason: 'user-specific' 
+  return supabaseCache.invalidate(['workout_logs', 'programs', 'user_analytics'], {
+    userId,
+    reason: 'user-specific'
   })
 }
 
 export function invalidateWorkoutCache(userId) {
-  return supabaseCache.invalidate(['workout_logs'], { 
-    userId, 
-    reason: 'workout-update' 
+  return supabaseCache.invalidate(['workout_logs'], {
+    userId,
+    reason: 'workout-update'
   })
 }
 
 export function invalidateProgramCache(userId) {
-  return supabaseCache.invalidate(['programs'], { 
-    userId, 
-    reason: 'program-update' 
+  return supabaseCache.invalidate(['programs'], {
+    userId,
+    reason: 'program-update'
   })
 }
 
@@ -689,9 +690,9 @@ export function invalidateExerciseCache() {
 // Cache warming strategies for Supabase
 export async function warmUserCache(userId, priority = 'normal') {
   console.log(`🔥 Warming cache for user: ${userId} (priority: ${priority})`)
-  
+
   const warmingPromises = []
-  
+
   try {
     // High priority: Essential data
     if (priority === 'high' || priority === 'normal') {
@@ -703,7 +704,7 @@ export async function warmUserCache(userId, priority = 'normal') {
           { ttl: 60 * 60 * 1000, table: 'exercises', tags: ['exercises', 'global'] }
         )
       )
-      
+
       // User programs
       warmingPromises.push(
         supabaseCache.getWithCache(
@@ -712,7 +713,7 @@ export async function warmUserCache(userId, priority = 'normal') {
           { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user'], userId }
         )
       )
-      
+
       // Recent workout logs
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       warmingPromises.push(
@@ -729,14 +730,14 @@ export async function warmUserCache(userId, priority = 'normal') {
         )
       )
     }
-    
+
     // Execute warming promises
     const results = await Promise.allSettled(warmingPromises)
     const successful = results.filter(r => r.status === 'fulfilled').length
     const failed = results.filter(r => r.status === 'rejected').length
-    
+
     console.log(`✅ Cache warming completed: ${successful} successful, ${failed} failed`)
-    
+
     return { successful, failed, total: warmingPromises.length }
   } catch (error) {
     console.error('❌ Cache warming failed:', error)
@@ -747,7 +748,7 @@ export async function warmUserCache(userId, priority = 'normal') {
 // Progressive cache warming on app startup
 export async function warmAppCache() {
   console.log('🚀 Starting app cache warming...')
-  
+
   try {
     // Warm global exercises first
     await supabaseCache.getWithCache(
@@ -755,7 +756,7 @@ export async function warmAppCache() {
       () => supabase.from('exercises').select('*').eq('is_global', true),
       { ttl: 60 * 60 * 1000, table: 'exercises', tags: ['exercises', 'global'] }
     )
-    
+
     console.log('✅ App cache warming completed')
   } catch (error) {
     console.error('❌ App cache warming failed:', error)
@@ -818,25 +819,25 @@ export class CacheCleanupManager {
   async performCleanup(targetReduction = 0.3) {
     const initialSize = this.getCurrentMemoryUsage()
     const targetSize = initialSize * (1 - targetReduction)
-    
+
     console.log(`🧹 Starting intelligent cache cleanup (target: ${formatBytes(targetSize)})`)
-    
+
     let currentSize = initialSize
     let strategyIndex = 0
-    
+
     while (currentSize > targetSize && strategyIndex < this.cleanupStrategies.length) {
       const strategy = this.cleanupStrategies[strategyIndex]
       const removedCount = await strategy()
-      
+
       currentSize = this.getCurrentMemoryUsage()
       console.log(`Strategy ${strategyIndex + 1}: Removed ${removedCount} entries, current size: ${formatBytes(currentSize)}`)
-      
+
       strategyIndex++
     }
-    
+
     const finalReduction = ((initialSize - currentSize) / initialSize) * 100
     console.log(`✅ Cache cleanup completed: ${finalReduction.toFixed(1)}% reduction`)
-    
+
     return {
       initialSize: formatBytes(initialSize),
       finalSize: formatBytes(currentSize),
@@ -850,18 +851,18 @@ export class CacheCleanupManager {
   removeExpiredEntries() {
     let removedCount = 0
     const keysToDelete = []
-    
+
     for (const [key, entry] of cache) {
       if (isExpired(entry)) {
         keysToDelete.push(key)
       }
     }
-    
+
     keysToDelete.forEach(key => {
       cache.delete(key)
       removedCount++
     })
-    
+
     return removedCount
   }
 
@@ -870,11 +871,11 @@ export class CacheCleanupManager {
    */
   removeLeastRecentlyUsed(maxToRemove = 100) {
     const entries = Array.from(cache.entries())
-      .sort(([,a], [,b]) => a.lastAccessed - b.lastAccessed)
+      .sort(([, a], [, b]) => a.lastAccessed - b.lastAccessed)
       .slice(0, maxToRemove)
-    
+
     entries.forEach(([key]) => cache.delete(key))
-    
+
     return entries.length
   }
 
@@ -883,11 +884,11 @@ export class CacheCleanupManager {
    */
   removeOldestEntries(maxToRemove = 100) {
     const entries = Array.from(cache.entries())
-      .sort(([,a], [,b]) => a.createdAt - b.createdAt)
+      .sort(([, a], [, b]) => a.createdAt - b.createdAt)
       .slice(0, maxToRemove)
-    
+
     entries.forEach(([key]) => cache.delete(key))
-    
+
     return entries.length
   }
 
@@ -896,11 +897,11 @@ export class CacheCleanupManager {
    */
   removeLargestEntries(maxToRemove = 50) {
     const entries = Array.from(cache.entries())
-      .sort(([,a], [,b]) => b.size - a.size)
+      .sort(([, a], [, b]) => b.size - a.size)
       .slice(0, maxToRemove)
-    
+
     entries.forEach(([key]) => cache.delete(key))
-    
+
     return entries.length
   }
 
@@ -940,11 +941,11 @@ class MemoryMonitor {
 
   start() {
     if (this.monitoringInterval) return
-    
+
     this.monitoringInterval = setInterval(() => {
       this.checkMemoryUsage()
     }, this.checkInterval)
-    
+
     console.log('🔍 Memory monitoring started')
   }
 
@@ -958,7 +959,7 @@ class MemoryMonitor {
 
   async checkMemoryUsage() {
     const status = cacheCleanupManager.isCleanupNeeded()
-    
+
     if (status.emergency) {
       console.warn('🚨 Emergency cache cleanup needed!', status)
       await cacheCleanupManager.performCleanup(0.5) // Remove 50%
@@ -998,13 +999,13 @@ export class CacheWarmingManager {
       priority: task.priority || 'normal',
       timestamp: Date.now()
     })
-    
+
     // Sort by priority
     this.warmingQueue.sort((a, b) => {
       const priorityOrder = { high: 3, normal: 2, low: 1 }
       return priorityOrder[b.priority] - priorityOrder[a.priority]
     })
-    
+
     this.processQueue()
   }
 
@@ -1013,12 +1014,12 @@ export class CacheWarmingManager {
    */
   async processQueue() {
     if (this.isWarming || this.warmingQueue.length === 0) return
-    
+
     this.isWarming = true
-    
+
     while (this.warmingQueue.length > 0) {
       const task = this.warmingQueue.shift()
-      
+
       try {
         console.log(`🔥 Processing cache warming task: ${task.name} (${task.priority})`)
         await task.execute()
@@ -1026,7 +1027,7 @@ export class CacheWarmingManager {
         console.error(`❌ Cache warming task failed: ${task.name}`, error)
       }
     }
-    
+
     this.isWarming = false
   }
 
@@ -1035,7 +1036,7 @@ export class CacheWarmingManager {
    */
   async warmUserCacheIntelligent(userId, userActivity = {}) {
     const tasks = []
-    
+
     // High priority: Recently accessed data
     if (userActivity.recentWorkouts) {
       tasks.push({
@@ -1048,7 +1049,7 @@ export class CacheWarmingManager {
         }, 30 * 60 * 1000)
       })
     }
-    
+
     // Normal priority: User programs
     tasks.push({
       name: `programs-${userId}`,
@@ -1057,7 +1058,7 @@ export class CacheWarmingManager {
         where: [['user_id', '==', userId]]
       }, 30 * 60 * 1000)
     })
-    
+
     // Low priority: Analytics data
     tasks.push({
       name: `analytics-${userId}`,
@@ -1066,7 +1067,7 @@ export class CacheWarmingManager {
         where: [['user_id', '==', userId]]
       }, 15 * 60 * 1000)
     })
-    
+
     // Queue all tasks
     tasks.forEach(task => this.queueWarming(task))
   }

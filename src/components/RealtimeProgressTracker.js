@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Badge, Alert, ProgressBar, ListGroup } from 'react-bootstrap';
 import { 
-  TrendingUp, 
+  GraphUp, 
   Trophy, 
   Activity, 
   Broadcast,
@@ -128,7 +128,7 @@ const RealtimeProgressTracker = ({
 
         {analyticsChanges.length > 0 && (
           <Badge bg="info" className="d-flex align-items-center">
-            <TrendingUp className="me-1" size={12} />
+            <GraphUp className="me-1" size={12} />
             {analyticsChanges.length} update{analyticsChanges.length !== 1 ? 's' : ''}
           </Badge>
         )}
@@ -197,7 +197,7 @@ const RealtimeProgressTracker = ({
         {showAnalyticsUpdates && analyticsChanges.length > 0 && (
           <div>
             <div className="d-flex align-items-center mb-2">
-              <TrendingUp className="me-2 text-info" />
+              <GraphUp className="me-2 text-info" />
               <small className="text-muted">Recent Analytics Updates</small>
             </div>
             <ListGroup variant="flush">

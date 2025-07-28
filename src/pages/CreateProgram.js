@@ -2,15 +2,49 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, Card } from 'react-bootstrap';
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createCompleteProgram, getProgramById, updateProgram } from '../services/programService';
+import { createProgram, createCompleteProgram, getProgramById, updateProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { invalidateProgramCache } from '../api/supabaseCache';
+
+// Helper function to convert Supabase program structure to weeks state
+const convertSupabaseProgramToWeeks = (program) => {
+  const weeks = Array.from({ length: program.duration }, (_, weekIdx) => ({
+    days: Array.from({ length: program.days_per_week }, (_, dayIdx) => ({
+      name: `Day ${dayIdx + 1}`,
+      exercises: []
+    }))
+  }));
+
+  if (program.program_workouts && Array.isArray(program.program_workouts)) {
+    program.program_workouts.forEach(workout => {
+      const weekIndex = workout.week_number - 1;
+      const dayIndex = workout.day_number - 1;
+      
+      if (weekIndex >= 0 && weekIndex < program.duration &&
+          dayIndex >= 0 && dayIndex < program.days_per_week) {
+        
+        weeks[weekIndex].days[dayIndex].name = workout.name || `Day ${dayIndex + 1}`;
+        
+        if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
+          weeks[weekIndex].days[dayIndex].exercises = workout.program_exercises.map(ex => ({
+            exerciseId: ex.exercise_id || '',
+            sets: ex.sets || 3,
+            reps: ex.reps || 8,
+            notes: ex.notes || ''
+          }));
+        }
+      }
+    });
+  }
+
+  return weeks;
+};
 
 // New Exercise Selection Modal Component using ExerciseGrid
 const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
@@ -51,7 +85,7 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
   );
 };
 
-function CreateProgram({ mode = 'create' }) {
+function CreateProgram({ mode = 'create', userRole }) {
   const { programId } = useParams();
   const navigate = useNavigate();
   const [programName, setProgramName] = useState('');
@@ -156,16 +190,15 @@ function CreateProgram({ mode = 'create' }) {
             const validationErrors = [];
             
             if (!programData.duration) validationErrors.push('Missing duration');
-            if (!programData.daysPerWeek) validationErrors.push('Missing daysPerWeek');
-            if (!programData.weeklyConfigs) validationErrors.push('Missing weeklyConfigs');
+            if (!programData.days_per_week) validationErrors.push('Missing days_per_week');
             
             if (validationErrors.length > 0) {
               console.error('❌ Program validation failed:', {
                 errors: validationErrors,
                 duration: programData.duration,
-                daysPerWeek: programData.daysPerWeek,
-                hasWeeklyConfigs: !!programData.weeklyConfigs,
-                weeklyConfigsType: typeof programData.weeklyConfigs,
+                daysPerWeek: programData.days_per_week,
+                hasWorkouts: !!programData.program_workouts,
+                workoutsCount: programData.program_workouts?.length || 0,
                 fullProgramData: programData
               });
               throw new Error(`Invalid program data structure: ${validationErrors.join(', ')}`);
@@ -174,12 +207,12 @@ function CreateProgram({ mode = 'create' }) {
             console.log('✅ Program structure validation passed');
 
             setProgramName(programData.name || '');
-            setWeightUnit(programData.weightUnit || 'LB');
+            setWeightUnit(programData.weight_unit || 'LB');
             
-            // Create the correct structure for weeks
-            console.log('🏗️ Creating weeks structure...');
+            // Create the correct structure for weeks from Supabase data
+            console.log('🏗️ Creating weeks structure from Supabase data...');
             const weeklyConfigs = Array.from({ length: programData.duration }, (_, weekIdx) => ({
-              days: Array.from({ length: programData.daysPerWeek }, (_, dayIdx) => ({
+              days: Array.from({ length: programData.days_per_week }, (_, dayIdx) => ({
                 name: `Day ${dayIdx + 1}`, // Default name
                 exercises: []
               }))
@@ -188,114 +221,67 @@ function CreateProgram({ mode = 'create' }) {
             console.log('📋 Created empty weeklyConfigs structure:', {
               weeksLength: weeklyConfigs.length,
               firstWeekDaysLength: weeklyConfigs[0]?.days?.length,
-              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length,
-              structurePreview: {
-                week0: {
-                  daysCount: weeklyConfigs[0]?.days?.length,
-                  day0ExercisesCount: weeklyConfigs[0]?.days?.[0]?.exercises?.length
-                }
-              }
+              firstDayExercisesLength: weeklyConfigs[0]?.days?.[0]?.exercises?.length
             });
 
-            // Process weeklyConfigs object
-            console.log('🔄 Processing weeklyConfigs object...');
-            if (typeof programData.weeklyConfigs === 'object' && programData.weeklyConfigs !== null) {
-              const configKeys = Object.keys(programData.weeklyConfigs);
-              console.log('📊 WeeklyConfigs analysis:', {
-                configKeys,
-                configCount: configKeys.length,
-                configValues: Object.values(programData.weeklyConfigs).map(item => ({
-                  type: typeof item,
-                  isArray: Array.isArray(item),
-                  length: Array.isArray(item) ? item.length : 'N/A',
-                  hasName: item && typeof item === 'object' && 'name' in item,
-                  hasExercises: item && typeof item === 'object' && 'exercises' in item
-                }))
+            // Process program_workouts from Supabase
+            console.log('🔄 Processing program_workouts from Supabase...');
+            if (programData.program_workouts && Array.isArray(programData.program_workouts)) {
+              console.log('📊 Program workouts analysis:', {
+                workoutsCount: programData.program_workouts.length,
+                firstWorkout: programData.program_workouts[0]
               });
 
-              for (let key in programData.weeklyConfigs) {
-                console.log(`🔑 Processing key: ${key}`);
+              programData.program_workouts.forEach((workout, workoutIdx) => {
+                const weekIndex = workout.week_number - 1;
+                const dayIndex = workout.day_number - 1;
                 
-                // Handle both old format (week1_day1_exercises) and new format (week1_day1)
-                let match = key.match(/week(\d+)_day(\d+)_exercises/);
-                if (!match) {
-                  match = key.match(/week(\d+)_day(\d+)$/);
-                }
+                console.log('📝 Processing workout:', {
+                  workoutIdx,
+                  weekNumber: workout.week_number,
+                  dayNumber: workout.day_number,
+                  weekIndex,
+                  dayIndex,
+                  workoutName: workout.name,
+                  exercisesCount: workout.program_exercises?.length || 0
+                });
                 
-                if (match) {
-                  const weekIndex = parseInt(match[1], 10) - 1;
-                  const dayIndex = parseInt(match[2], 10) - 1;
-                  const configData = programData.weeklyConfigs[key];
+                // Validate indices are within bounds
+                if (weekIndex >= 0 && weekIndex < programData.duration &&
+                    dayIndex >= 0 && dayIndex < programData.days_per_week) {
                   
-                  console.log('📝 Processing config key:', {
-                    key,
-                    weekIndex,
-                    dayIndex,
-                    configDataType: typeof configData,
-                    isArray: Array.isArray(configData),
-                    configData: configData,
-                    exercisesCount: Array.isArray(configData) ? configData.length :
-                                   (configData && configData.exercises ? configData.exercises.length : 'N/A')
-                  });
+                  // Set workout name
+                  weeklyConfigs[weekIndex].days[dayIndex].name = workout.name || `Day ${dayIndex + 1}`;
                   
-                  // Validate indices are within bounds
-                  if (weekIndex >= 0 && weekIndex < programData.duration &&
-                      dayIndex >= 0 && dayIndex < programData.daysPerWeek) {
-                    
-                    let exercisesToProcess = [];
-                    let dayName = `Day ${dayIndex + 1}`; // Default name
-                    
-                    // Handle different data formats
-                    if (Array.isArray(configData)) {
-                      // Old format: direct exercises array
-                      exercisesToProcess = configData;
-                    } else if (configData && typeof configData === 'object') {
-                      // New format: object with name and exercises
-                      if (configData.exercises && Array.isArray(configData.exercises)) {
-                        exercisesToProcess = configData.exercises;
-                      }
-                      if (configData.name) {
-                        dayName = configData.name;
-                      }
-                    }
-                    
-                    // Ensure each exercise has required fields
-                    const processedExercises = exercisesToProcess.map(ex => ({
-                      exerciseId: ex.exerciseId || '',
+                  // Process exercises for this workout
+                  if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
+                    const processedExercises = workout.program_exercises.map(ex => ({
+                      exerciseId: ex.exercise_id || '',
                       sets: ex.sets || 3,
                       reps: ex.reps || 8,
-                      notes: ex.notes || '' // Ensure notes field exists
+                      notes: ex.notes || ''
                     }));
                     
-                    console.log('✅ Setting exercises for week/day:', {
-                      weekIndex,
-                      dayIndex,
-                      dayName,
-                      exercisesCount: processedExercises.length,
-                      firstExercise: processedExercises[0],
-                      allExercises: processedExercises
-                    });
-                    
-                    // Update the structure
-                    weeklyConfigs[weekIndex].days[dayIndex].name = dayName;
                     weeklyConfigs[weekIndex].days[dayIndex].exercises = processedExercises;
-                  } else {
-                    console.warn('⚠️ Invalid indices - skipping:', {
-                      key,
+                    
+                    console.log('✅ Set exercises for week/day:', {
                       weekIndex,
                       dayIndex,
-                      duration: programData.duration,
-                      daysPerWeek: programData.daysPerWeek,
-                      boundsCheck: {
-                        weekValid: weekIndex >= 0 && weekIndex < programData.duration,
-                        dayValid: dayIndex >= 0 && dayIndex < programData.daysPerWeek
-                      }
+                      exercisesCount: processedExercises.length,
+                      firstExercise: processedExercises[0]
                     });
                   }
                 } else {
-                  console.warn('⚠️ Key does not match expected pattern:', key);
+                  console.warn('⚠️ Invalid workout indices - skipping:', {
+                    weekNumber: workout.week_number,
+                    dayNumber: workout.day_number,
+                    weekIndex,
+                    dayIndex,
+                    duration: programData.duration,
+                    daysPerWeek: programData.days_per_week
+                  });
                 }
-              }
+              });
             }
 
             // Log final structure before setting state
@@ -372,13 +358,13 @@ function CreateProgram({ mode = 'create' }) {
   // Fetch templates or previous programs as needed
   useEffect(() => {
     if (step === 2 && creationSource === 'template') {
-      getCollectionCached('programs', { where: [['isTemplate', '==', true]] }, 30 * 60 * 1000)
+      getProgramTemplates()
         .then(setTemplatePrograms)
         .catch(console.error);
     }
     if (step === 2 && creationSource === 'previous') {
       if (user) {
-        getCollectionCached('programs', { where: [['userId', '==', user.id], ['isTemplate', '==', false]] }, 30 * 60 * 1000)
+        getUserPrograms(user.id, { isTemplate: false })
           .then(setUserPrograms)
           .catch(console.error);
       }
@@ -390,25 +376,17 @@ function CreateProgram({ mode = 'create' }) {
     if (step === 3) {
       if (creationSource === 'template' && selectedTemplate) {
         setProgramName((selectedTemplate.name || '') + ' (Copy)');
-        setWeightUnit(selectedTemplate.weightUnit || 'LB');
-        // Convert template's weeklyConfigs to weeks state
-        if (selectedTemplate.weeklyConfigs && selectedTemplate.duration && selectedTemplate.daysPerWeek) {
-          const weeksArr = parseWeeklyConfigs(selectedTemplate.weeklyConfigs, selectedTemplate.duration, selectedTemplate.daysPerWeek);
-          // Convert parseWeeklyConfigs output to expected format
-          const convertedWeeks = weeksArr.map((weekDays, weekIndex) => ({
-            days: Array.isArray(weekDays) ? weekDays : []
-          }));
+        setWeightUnit(selectedTemplate.weight_unit || 'LB');
+        // Convert template's program_workouts to weeks state
+        if (selectedTemplate.program_workouts && selectedTemplate.duration && selectedTemplate.days_per_week) {
+          const convertedWeeks = convertSupabaseProgramToWeeks(selectedTemplate);
           setWeeks(convertedWeeks);
         }
       } else if (creationSource === 'previous' && selectedPreviousProgram) {
         setProgramName((selectedPreviousProgram.name || '') + ' (Copy)');
-        setWeightUnit(selectedPreviousProgram.weightUnit || 'LB');
-        if (selectedPreviousProgram.weeklyConfigs && selectedPreviousProgram.duration && selectedPreviousProgram.daysPerWeek) {
-          const weeksArr = parseWeeklyConfigs(selectedPreviousProgram.weeklyConfigs, selectedPreviousProgram.duration, selectedPreviousProgram.daysPerWeek);
-          // Convert parseWeeklyConfigs output to expected format
-          const convertedWeeks = weeksArr.map((weekDays, weekIndex) => ({
-            days: Array.isArray(weekDays) ? weekDays : []
-          }));
+        setWeightUnit(selectedPreviousProgram.weight_unit || 'LB');
+        if (selectedPreviousProgram.program_workouts && selectedPreviousProgram.duration && selectedPreviousProgram.days_per_week) {
+          const convertedWeeks = convertSupabaseProgramToWeeks(selectedPreviousProgram);
           setWeeks(convertedWeeks);
         }
       } else if (creationSource === 'scratch') {
@@ -607,42 +585,55 @@ function CreateProgram({ mode = 'create' }) {
 
     setIsSubmitting(true);
     try {
-      const flattenedConfigs = {};
+      // Convert weeks structure to Supabase format
+      const programData = {
+        name: programName,
+        weight_unit: weightUnit,
+        duration: weeks.length,
+        days_per_week: weeks[0].days.length,
+        user_id: user.id,
+        is_template: userRole === 'admin' && isTemplate,
+        is_active: true
+      };
+
+      // Create workouts data for Supabase
+      const workoutsData = [];
       weeks.forEach((week, weekIndex) => {
         week.days.forEach((day, dayIndex) => {
-          flattenedConfigs[`week${weekIndex + 1}_day${dayIndex + 1}`] = {
+          const workout = {
+            week_number: weekIndex + 1,
+            day_number: dayIndex + 1,
             name: day.name || `Day ${dayIndex + 1}`,
-            exercises: day.exercises.map(ex => ({
-              exerciseId: ex.exerciseId,
-              sets: isNaN(Number(ex.sets)) ? String(ex.sets) : Number(ex.sets),
-              reps: isNaN(Number(ex.reps)) ? String(ex.reps) : Number(ex.reps),
-              notes: ex.notes || '',
-            }))
+            exercises: day.exercises
+              .filter(ex => ex.exerciseId) // Only include exercises with selected exercise
+              .map(ex => ({
+                exercise_id: ex.exerciseId,
+                sets: isNaN(Number(ex.sets)) ? 3 : Number(ex.sets),
+                reps: isNaN(Number(ex.reps)) ? 8 : Number(ex.reps),
+                notes: ex.notes || '',
+              }))
           };
+          workoutsData.push(workout);
         });
       });
 
-      const programData = {
-        name: programName,
-        weightUnit: weightUnit,
-        duration: weeks.length,
-        daysPerWeek: weeks[0].days.length,
-        weeklyConfigs: flattenedConfigs,
-      };
-
       if (mode === 'edit') {
-        await updateDoc(doc(db, "programs", programId), programData);
+        // For edit mode, we'll use the simpler updateProgram function
+        // Note: This might need to be enhanced to handle the full workout structure
+        const updateData = {
+          name: programName,
+          weight_unit: weightUnit,
+          duration: weeks.length,
+          days_per_week: weeks[0].days.length,
+          is_template: userRole === 'admin' && isTemplate
+        };
+        await updateProgram(programId, updateData);
         invalidateProgramCache(user.id);
         alert('Program updated successfully!');
         navigate('/programs');
       } else {
-        await addDoc(collection(db, "programs"), {
-          ...programData,
-          ...(userRole === 'admin' && isTemplate
-            ? { isTemplate: true, userId: user.id, createdAt: new Date() }
-            : { userId: user.id, isTemplate: false, createdAt: new Date() }
-          )
-        });
+        // For create mode, use createCompleteProgram with workouts
+        await createCompleteProgram(programData, workoutsData);
         invalidateProgramCache(user.id);
         alert('Program created successfully!');
         // Reset form for new program
@@ -998,7 +989,7 @@ function CreateProgram({ mode = 'create' }) {
                 >
                   <Card.Body>
                     <Card.Title>{template.name}</Card.Title>
-                    <Card.Text>{template.duration} weeks, {template.daysPerWeek} days/week</Card.Text>
+                    <Card.Text>{template.duration} weeks, {template.days_per_week} days/week</Card.Text>
                   </Card.Body>
                 </Card>
               ))
@@ -1056,7 +1047,7 @@ function CreateProgram({ mode = 'create' }) {
                     </div>
                     <div className="mb-2" style={{fontSize: 15, color: '#495057'}}>
                       <span className="me-3"><strong>{program.duration}</strong> weeks</span>
-                      <span><strong>{program.daysPerWeek}</strong> days/week</span>
+                      <span><strong>{program.days_per_week}</strong> days/week</span>
                     </div>
                     <div style={{fontSize: 13, color: '#6c757d'}}>
                       Last edited: {program.updatedAt ? new Date(program.updatedAt.seconds * 1000).toLocaleDateString() : (program.createdAt ? new Date(program.createdAt.seconds * 1000).toLocaleDateString() : '—')}
@@ -1355,25 +1346,24 @@ function CreateProgram({ mode = 'create' }) {
             <div>
               <h5>{previewProgram.name}</h5>
               <div className="mb-2 text-muted">
-                {previewProgram.duration} weeks, {previewProgram.daysPerWeek} days/week
+                {previewProgram.duration} weeks, {previewProgram.days_per_week} days/week
               </div>
               <div style={{maxHeight: 350, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#f8f9fa'}}>
                 {(() => {
-                  // Convert flattened weeklyConfigs to array if needed
+                  // Convert Supabase program structure to weeks array for preview
                   let weeksArr = [];
                   try {
-                    if (previewProgram.weeklyConfigs && previewProgram.duration && previewProgram.daysPerWeek) {
+                    if (previewProgram.program_workouts && previewProgram.duration && previewProgram.days_per_week) {
+                      weeksArr = convertSupabaseProgramToWeeks(previewProgram);
+                    } else if (previewProgram.weeklyConfigs && previewProgram.duration && previewProgram.daysPerWeek) {
+                      // Fallback for old format
                       const parsedWeeks = parseWeeklyConfigs(previewProgram.weeklyConfigs, previewProgram.duration, previewProgram.daysPerWeek);
-                      
-                      // Convert parseWeeklyConfigs output to expected format
-                      // parseWeeklyConfigs returns: [week][day] = { name, exercises }
-                      // We need: [week] = { days: [{ name, exercises }] }
                       weeksArr = parsedWeeks.map((weekDays, weekIndex) => ({
                         days: Array.isArray(weekDays) ? weekDays : []
                       }));
                     }
                   } catch (error) {
-                    console.error('Error parsing weekly configs for preview:', error);
+                    console.error('Error parsing program structure for preview:', error);
                     weeksArr = [];
                   }
                   

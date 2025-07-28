@@ -11,7 +11,7 @@ import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
-import quickWorkoutDraftService from '../services/quickWorkoutDraftService';
+
 import performanceMonitor from '../utils/performanceMonitor';
 
 function QuickWorkout() {
@@ -69,7 +69,7 @@ function QuickWorkout() {
         if (!user || exercises.length === 0) return;
 
         try {
-            const result = await quickWorkoutDraftService.saveDraft(
+            const result = await workoutLogService.saveDraft(
                 user.id, 
                 exercises, 
                 name, 
@@ -93,14 +93,19 @@ function QuickWorkout() {
     const loadDraft = (draft) => {
         setCurrentDraft(draft);
         setWorkoutName(draft.name || '');
-        setSelectedExercises(draft.exercises.map(ex => ({
-            ...ex,
-            reps: ex.reps || Array(ex.sets).fill(''),
-            weights: ex.weights || Array(ex.sets).fill(''),
-            completed: ex.completed || Array(ex.sets).fill(false),
+        
+        // Transform Supabase draft data to component format
+        const exercises = draft.workout_log_exercises || draft.exercises || [];
+        setSelectedExercises(exercises.map(ex => ({
+            exerciseId: ex.exercise_id || ex.exerciseId,
+            sets: ex.sets || 3,
+            reps: ex.reps || Array(ex.sets || 3).fill(''),
+            weights: ex.weights || Array(ex.sets || 3).fill(''),
+            completed: ex.completed || Array(ex.sets || 3).fill(false),
             notes: ex.notes || '',
             bodyweight: ex.bodyweight || ''
         })));
+        
         setShowResumeModal(false);
         showUserMessage('Draft loaded successfully!', 'success');
     };
@@ -110,9 +115,9 @@ function QuickWorkout() {
 
         try {
             // Delete any existing draft
-            const existingDraft = await quickWorkoutDraftService.getSingleDraft(user.id);
+            const existingDraft = await workoutLogService.getSingleDraft(user.id);
             if (existingDraft) {
-                await quickWorkoutDraftService.deleteDraft(user.id, existingDraft.id);
+                await workoutLogService.deleteDraft(user.id, existingDraft.id);
             }
             
             // Clear current state
@@ -133,7 +138,7 @@ function QuickWorkout() {
         if (!user) return null;
 
         try {
-            const draftData = await quickWorkoutDraftService.getSingleDraft(user.id);
+            const draftData = await workoutLogService.getSingleDraft(user.id);
             setAvailableDrafts(draftData ? [draftData] : []);
             return draftData;
         } catch (error) {
@@ -161,7 +166,7 @@ function QuickWorkout() {
         if (!user) return;
 
         try {
-            const cleanedCount = await quickWorkoutDraftService.cleanupOldDrafts(user.id);
+            const cleanedCount = await workoutLogService.cleanupOldDrafts(user.id);
             if (cleanedCount > 0) {
                 console.log(`Cleaned up ${cleanedCount} old drafts`);
             }
@@ -236,7 +241,7 @@ function QuickWorkout() {
                     const loadTime = Date.now() - startTime;
                     performanceMonitor.recordLoadTime('QuickWorkout', loadTime);
                     
-                    console.log(`✅ Quick Workout initialized: ${allExercises.length} exercises loaded in ${loadTime}ms`);
+                    console.log(`✅ Quick Workout initialized: ${enhancedExercises.length} exercises loaded in ${loadTime}ms`);
                 } catch (error) {
                     console.error('Error initializing component:', error);
                     showUserMessage('Failed to load exercises', 'error');
@@ -488,19 +493,22 @@ function QuickWorkout() {
         setIsSaving(true);
         try {
             if (currentDraft) {
-                // Complete existing draft
-                await quickWorkoutDraftService.completeDraft(
+                // Complete existing draft using workoutLogService
+                await workoutLogService.completeDraft(
                     user.id,
                     currentDraft.id,
                     selectedExercises,
                     workoutName
                 );
             } else {
-                // Create new completed workout directly
+                // Create new completed workout directly using workoutLogService
                 const workoutData = {
-                    userId: user.id,
                     name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
                     type: 'quick_workout',
+                    date: new Date().toISOString().split('T')[0],
+                    isFinished: true,
+                    isDraft: false,
+                    weightUnit: 'LB',
                     exercises: selectedExercises.map(ex => ({
                         exerciseId: ex.exerciseId,
                         sets: Number(ex.sets),
@@ -509,16 +517,10 @@ function QuickWorkout() {
                         completed: ex.completed,
                         notes: ex.notes || '',
                         bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null
-                    })),
-                    completedDate: Timestamp.fromDate(new Date()),
-                    date: Timestamp.fromDate(new Date()),
-                    isDraft: false,
-                    isWorkoutFinished: true,
-                    lastModified: Timestamp.fromDate(new Date())
+                    }))
                 };
 
-                await addDoc(collection(db, "workoutLogs"), workoutData);
-                invalidateWorkoutCache(user.id);
+                await workoutLogService.createWorkoutLog(user.id, workoutData);
             }
 
             showUserMessage('Quick workout finished successfully!', 'success');
@@ -889,23 +891,26 @@ function QuickWorkout() {
                                         <div>
                                             <h6 className="mb-1">{availableDrafts[0].name}</h6>
                                             <small className="text-muted">
-                                                {availableDrafts[0].exercises?.length || 0} exercises •
-                                                Last modified: {availableDrafts[0].lastModified?.toDate ?
-                                                    availableDrafts[0].lastModified.toDate().toLocaleDateString() :
-                                                    new Date(availableDrafts[0].lastModified).toLocaleDateString()}
+                                                {(availableDrafts[0].workout_log_exercises || availableDrafts[0].exercises || []).length} exercises •
+                                                Last modified: {availableDrafts[0].updated_at ? 
+                                                    new Date(availableDrafts[0].updated_at).toLocaleDateString() :
+                                                    availableDrafts[0].lastModified?.toDate ?
+                                                        availableDrafts[0].lastModified.toDate().toLocaleDateString() :
+                                                        new Date(availableDrafts[0].lastModified).toLocaleDateString()}
                                             </small>
                                             <div className="draft-exercise-badges">
-                                                {availableDrafts[0].exercises?.slice(0, 3).map((ex, idx) => {
-                                                    const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+                                                {(availableDrafts[0].workout_log_exercises || availableDrafts[0].exercises || []).slice(0, 3).map((ex, idx) => {
+                                                    const exerciseId = ex.exercise_id || ex.exerciseId;
+                                                    const exercise = exercisesList.find(e => e.id === exerciseId);
                                                     return (
                                                         <span key={idx} className="draft-exercise-badge">
                                                             {exercise?.name || 'Unknown'}
                                                         </span>
                                                     );
                                                 })}
-                                                {availableDrafts[0].exercises?.length > 3 && (
+                                                {(availableDrafts[0].workout_log_exercises || availableDrafts[0].exercises || []).length > 3 && (
                                                     <span className="draft-exercise-badge">
-                                                        +{availableDrafts[0].exercises.length - 3} more
+                                                        +{(availableDrafts[0].workout_log_exercises || availableDrafts[0].exercises || []).length - 3} more
                                                     </span>
                                                 )}
                                             </div>

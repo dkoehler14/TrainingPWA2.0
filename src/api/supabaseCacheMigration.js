@@ -13,7 +13,7 @@ import { supabaseCache, getWithCache, invalidateCache as invalidateSupabaseCache
  * Migration wrapper for getCollectionCached
  * Converts Firestore query parameters to Supabase query
  */
-export async function getCollectionCached(tableName, queryParams = {}, ttl = 5 * 60 * 1000) {
+async function getCollectionCached(tableName, queryParams = {}, ttl = 5 * 60 * 1000) {
   const cacheKey = generateCacheKey('collection', tableName, queryParams)
   
   const queryFn = async () => {
@@ -93,7 +93,7 @@ export async function getCollectionCached(tableName, queryParams = {}, ttl = 5 *
  * Migration wrapper for getDocCached
  * Gets a single document by ID
  */
-export async function getDocCached(tableName, docId, ttl = 5 * 60 * 1000) {
+async function getDocCached(tableName, docId, ttl = 5 * 60 * 1000) {
   const cacheKey = generateCacheKey('doc', `${tableName}/${docId}`)
   
   const queryFn = async () => {
@@ -115,7 +115,7 @@ export async function getDocCached(tableName, docId, ttl = 5 * 60 * 1000) {
  * Migration wrapper for getSubcollectionCached
  * In PostgreSQL, this becomes a filtered query on a related table
  */
-export async function getSubcollectionCached(parentPath, subcollectionName, queryParams = {}, ttl = 5 * 60 * 1000) {
+async function getSubcollectionCached(parentPath, subcollectionName, queryParams = {}, ttl = 5 * 60 * 1000) {
   // Extract parent ID from path (e.g., "userAnalytics/userId" -> "userId")
   const pathParts = parentPath.split('/')
   const parentId = pathParts[pathParts.length - 1]
@@ -195,7 +195,7 @@ export async function getSubcollectionCached(parentPath, subcollectionName, quer
  * Migration wrapper for getCollectionGroupCached
  * In PostgreSQL, this becomes a query across all related tables
  */
-export async function getCollectionGroupCached(collectionName, queryParams = {}, ttl = 5 * 60 * 1000) {
+async function getCollectionGroupCached(collectionName, queryParams = {}, ttl = 5 * 60 * 1000) {
   // Collection groups in Firestore are like querying all subcollections with the same name
   // In PostgreSQL, this is typically just a regular table query
   return await getCollectionCached(collectionName, queryParams, ttl)
@@ -205,7 +205,7 @@ export async function getCollectionGroupCached(collectionName, queryParams = {},
  * Migration wrapper for getAllExercisesMetadata
  * Fetches all global exercises from the exercises table
  */
-export async function getAllExercisesMetadata(ttl = 5 * 60 * 1000) {
+async function getAllExercisesMetadata(ttl = 5 * 60 * 1000) {
   const cacheKey = 'exercises_metadata_all'
   
   const queryFn = async () => {
@@ -225,32 +225,32 @@ export async function getAllExercisesMetadata(ttl = 5 * 60 * 1000) {
 /**
  * Cache invalidation functions - migrated to use Supabase cache
  */
-export function invalidateCache(patterns) {
+function invalidateCache(patterns) {
   return invalidateSupabaseCache(patterns)
 }
 
-export function invalidateUserCache(userId) {
+function invalidateUserCache(userId) {
   return invalidateSupabaseCache(['workout_logs', 'programs', 'user_analytics'], { 
     userId, 
     reason: 'user-specific' 
   })
 }
 
-export function invalidateWorkoutCache(userId) {
+function invalidateWorkoutCache(userId) {
   return invalidateSupabaseCache(['workout_logs'], { 
     userId, 
     reason: 'workout-update' 
   })
 }
 
-export function invalidateProgramCache(userId) {
+function invalidateProgramCache(userId) {
   return invalidateSupabaseCache(['programs'], { 
     userId, 
     reason: 'program-update' 
   })
 }
 
-export function invalidateExerciseCache() {
+function invalidateExerciseCache() {
   return invalidateSupabaseCache(['exercises'], {
     reason: 'exercise-update'
   })
@@ -259,7 +259,7 @@ export function invalidateExerciseCache() {
 /**
  * Cache warming functions - migrated to use Supabase cache
  */
-export async function warmUserCache(userId, priority = 'normal') {
+async function warmUserCache(userId, priority = 'normal') {
   console.log(`🔥 Warming Supabase cache for user: ${userId} (priority: ${priority})`)
   
   const warmingPromises = []
@@ -308,11 +308,11 @@ export async function warmUserCache(userId, priority = 'normal') {
 /**
  * Cache statistics functions - migrated to use Supabase cache
  */
-export function getCacheStats() {
+function getCacheStats() {
   return supabaseCache.getStats()
 }
 
-export function getEnhancedCacheStats() {
+function getEnhancedCacheStats() {
   return supabaseCache.getEnhancedStats()
 }
 

@@ -8,7 +8,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Badge, Table, Alert } from 'react-bootstrap';
-import { BarChart, Calendar, Clock, CheckCircleFill, ExclamationTriangle, Broadcast, TrendingUp } from 'react-bootstrap-icons';
+import { BarChart, Calendar, Clock, CheckCircleFill, ExclamationTriangle, Broadcast, GraphUp } from 'react-bootstrap-icons';
 import { getWorkoutStatistics } from '../utils/workoutStatsUtils';
 import { useRealtimeAnalytics } from '../hooks/useRealtimeWorkouts';
 import '../styles/QuickWorkoutHistory.css';
@@ -157,7 +157,7 @@ const WorkoutStatsCard = ({ workouts = [], exercises = [], enableRealtime = true
             </Badge>
             {lastStatsUpdate && (
               <small className="text-success d-flex align-items-center">
-                <TrendingUp className="me-1" size={12} />
+                <GraphUp className="me-1" size={12} />
                 Updated {Math.floor((Date.now() - lastStatsUpdate) / 1000)}s ago
               </small>
             )}
@@ -169,7 +169,7 @@ const WorkoutStatsCard = ({ workouts = [], exercises = [], enableRealtime = true
         {enableRealtime && analyticsUpdates.length > 0 && (
           <Alert variant="info" className="mb-3 py-2">
             <div className="d-flex align-items-center">
-              <TrendingUp className="me-2" />
+              <GraphUp className="me-2" />
               <small>
                 Analytics updated for: {analyticsUpdates.slice(0, 2).map(u => u.exerciseName).join(', ')}
                 {analyticsUpdates.length > 2 && ` and ${analyticsUpdates.length - 2} more`}
