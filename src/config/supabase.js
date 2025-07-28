@@ -14,6 +14,7 @@ import { isDevelopment } from './environment'
 // Environment detection
 const useSupabase = process.env.REACT_APP_USE_SUPABASE === 'true'
 const isLocalDevelopment = isDevelopment && process.env.REACT_APP_SUPABASE_LOCAL_URL
+const isProduction = process.env.NODE_ENV === 'production'
 
 // Configuration based on environment
 const getSupabaseConfig = () => {
@@ -35,39 +36,50 @@ const getSupabaseConfig = () => {
 const config = getSupabaseConfig()
 
 // Enhanced client options with retry logic and error handling
-const clientOptions = {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    storageKey: 'supabase.auth.token',
-    debug: isDevelopment
-  },
-  realtime: {
-    params: {
-      eventsPerSecond: 10
+const getClientOptions = () => {
+  if (isProduction) {
+    // Import production configuration
+    const { productionClientOptions } = require('./production')
+    return productionClientOptions
+  }
+  
+  // Development configuration
+  return {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      storageKey: 'supabase.auth.token',
+      debug: isDevelopment
     },
-    heartbeatIntervalMs: 30000,
-    reconnectAfterMs: (tries) => Math.min(tries * 1000, 30000)
-  },
-  db: {
-    schema: 'public'
-  },
-  global: {
-    headers: {
-      'X-Client-Info': 'exercise-tracker-web'
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      },
+      heartbeatIntervalMs: 30000,
+      reconnectAfterMs: (tries) => Math.min(tries * 1000, 30000)
+    },
+    db: {
+      schema: 'public'
+    },
+    global: {
+      headers: {
+        'X-Client-Info': `exercise-tracker-web-${isDevelopment ? 'dev' : 'prod'}`
+      }
+    },
+    // Connection retry configuration
+    fetch: (url, options = {}) => {
+      return fetchWithRetry(url, {
+        ...options,
+        timeout: isDevelopment ? 10000 : 30000 // Longer timeout in production
+      })
     }
-  },
-  // Connection retry configuration
-  fetch: (url, options = {}) => {
-    return fetchWithRetry(url, {
-      ...options,
-      timeout: 10000 // 10 second timeout
-    })
   }
 }
+
+const clientOptions = getClientOptions()
 
 /**
  * Enhanced fetch function with retry logic and error handling
@@ -155,11 +167,18 @@ let supabase = null
 
 try {
   if (config.url && config.anonKey) {
-    supabase = createClient(config.url, config.anonKey, clientOptions)
-    
-    // Set up connection monitoring in development
-    if (isDevelopment) {
-      setupConnectionMonitoring(supabase)
+    if (isProduction) {
+      // Use production client creation
+      const { createProductionSupabaseClient } = require('./production')
+      supabase = createProductionSupabaseClient()
+    } else {
+      // Use development client creation
+      supabase = createClient(config.url, config.anonKey, clientOptions)
+      
+      // Set up connection monitoring in development
+      if (isDevelopment) {
+        setupConnectionMonitoring(supabase)
+      }
     }
   } else if (useSupabase) {
     throw new SupabaseConfigurationError(

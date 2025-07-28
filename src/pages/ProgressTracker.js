@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Container, Row, Col, Form, Table, Card, Nav, Badge, Spinner, Button, Alert } from 'react-bootstrap';
+import { Broadcast } from 'react-bootstrap-icons';
 import { useNavigate } from'react-router-dom';
 import { Line, Bar } from 'react-chartjs-2';
 import { useAuth } from '../hooks/useAuth';
@@ -679,10 +680,11 @@ function ProgressTracker() {
 					{/* Real-time connection indicator */}
 					<Badge 
 						bg={isRealtimeConnected ? 'success' : 'secondary'} 
-						className="me-2"
+						className="me-2 d-flex align-items-center"
 						title={isRealtimeConnected ? 'Real-time updates active' : 'Real-time updates inactive'}
 					>
-						{isRealtimeConnected ? '🟢 Live' : '⚫ Offline'}
+						<Broadcast className="me-1" size={12} />
+						{isRealtimeConnected ? 'Live Updates' : 'Offline'}
 					</Badge>
 					{lastUpdate && (
 						<small className="text-muted">

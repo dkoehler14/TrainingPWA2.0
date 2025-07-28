@@ -12,12 +12,16 @@ import {
   developmentLogger
 } from '../utils/developmentDebugger';
 import { getStoredErrors, clearStoredErrors } from '../utils/developmentErrorHandler';
+import PerformanceDashboard from './PerformanceDashboard';
+import { getPerformanceDashboard } from '../utils/performanceMonitor';
 
 const DevelopmentDebugPanel = () => {
   const [debugStatus, setDebugStatus] = useState(null);
   const [showPanel, setShowPanel] = useState(false);
   const [activeTab, setActiveTab] = useState('status');
   const [storedErrors, setStoredErrors] = useState([]);
+  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
+  const [performanceData, setPerformanceData] = useState(null);
 
   const refreshDebugInfo = useCallback(() => {
     try {
@@ -26,6 +30,10 @@ const DevelopmentDebugPanel = () => {
       
       const errors = getStoredErrors();
       setStoredErrors(errors);
+      
+      // Get performance data
+      const perfData = getPerformanceDashboard();
+      setPerformanceData(perfData);
     } catch (error) {
       console.error('Failed to refresh debug info:', error);
     }
@@ -289,6 +297,103 @@ const DevelopmentDebugPanel = () => {
     </div>
   );
 
+  const renderPerformanceTab = () => (
+    <div>
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h6>Performance Monitoring</h6>
+        <Button 
+          size="sm" 
+          variant="outline-primary" 
+          onClick={() => setShowPerformanceDashboard(true)}
+        >
+          📊 Full Dashboard
+        </Button>
+      </div>
+      
+      {performanceData ? (
+        <div>
+          <h6>Overview</h6>
+          <Table size="sm" striped>
+            <tbody>
+              <tr>
+                <td>App Uptime</td>
+                <td>{performanceData.overview?.appUptime || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>DB Operations</td>
+                <td>{performanceData.overview?.totalDatabaseOperations?.toLocaleString() || '0'}</td>
+              </tr>
+              <tr>
+                <td>Avg Query Time</td>
+                <td>{performanceData.overview?.averageDatabaseTime || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>Cache Hit Rate</td>
+                <td>
+                  <Badge bg={parseFloat(performanceData.overview?.cacheHitRate || '0') > 80 ? 'success' : 'warning'}>
+                    {performanceData.overview?.cacheHitRate || '0%'}
+                  </Badge>
+                </td>
+              </tr>
+              <tr>
+                <td>Active Alerts</td>
+                <td>
+                  <Badge bg={performanceData.overview?.activeAlerts > 0 ? 'danger' : 'success'}>
+                    {performanceData.overview?.activeAlerts || 0}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </Table>
+
+          <h6 className="mt-3">Real-time (Last 5 min)</h6>
+          <Table size="sm" striped>
+            <tbody>
+              <tr>
+                <td>Queries/min</td>
+                <td>{performanceData.realtime?.queriesPerMinute || '0'}</td>
+              </tr>
+              <tr>
+                <td>Cache Hits/min</td>
+                <td>{performanceData.realtime?.cacheHitsPerMinute || '0'}</td>
+              </tr>
+              <tr>
+                <td>Errors/min</td>
+                <td>
+                  <Badge bg={parseFloat(performanceData.realtime?.errorsPerMinute || '0') > 0 ? 'warning' : 'success'}>
+                    {performanceData.realtime?.errorsPerMinute || '0'}
+                  </Badge>
+                </td>
+              </tr>
+              <tr>
+                <td>Avg Response</td>
+                <td>{performanceData.realtime?.averageResponseTime || '0'}ms</td>
+              </tr>
+            </tbody>
+          </Table>
+
+          {performanceData.recommendations && performanceData.recommendations.length > 0 && (
+            <>
+              <h6 className="mt-3">Top Recommendations</h6>
+              <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                {performanceData.recommendations.slice(0, 3).map((rec, index) => (
+                  <Alert key={index} variant={rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'info'} className="mb-2 p-2">
+                    <div style={{ fontSize: '0.85em' }}>
+                      <strong>{rec.title}</strong>
+                      <div className="mt-1">{rec.description}</div>
+                    </div>
+                  </Alert>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <Alert variant="info">Performance data not available</Alert>
+      )}
+    </div>
+  );
+
   if (!debugStatus) {
     return (
       <div style={{ position: 'fixed', top: '10px', right: '10px', zIndex: 9999 }}>
@@ -348,8 +453,16 @@ const DevelopmentDebugPanel = () => {
                 size="sm" 
                 variant={activeTab === 'capabilities' ? 'primary' : 'outline-primary'}
                 onClick={() => setActiveTab('capabilities')}
+                className="me-1"
               >
                 Capabilities
+              </Button>
+              <Button 
+                size="sm" 
+                variant={activeTab === 'performance' ? 'primary' : 'outline-primary'}
+                onClick={() => setActiveTab('performance')}
+              >
+                Performance
               </Button>
             </div>
           </Card.Header>
@@ -357,12 +470,19 @@ const DevelopmentDebugPanel = () => {
             {activeTab === 'status' && renderStatusTab()}
             {activeTab === 'errors' && renderErrorsTab()}
             {activeTab === 'capabilities' && renderCapabilitiesTab()}
+            {activeTab === 'performance' && renderPerformanceTab()}
           </Card.Body>
           <Card.Footer className="text-muted" style={{ fontSize: '0.8em' }}>
             Last updated: {formatTimestamp(debugStatus.timestamp)}
           </Card.Footer>
         </Card>
       </Collapse>
+      
+      {/* Performance Dashboard Modal */}
+      <PerformanceDashboard 
+        isVisible={showPerformanceDashboard}
+        onClose={() => setShowPerformanceDashboard(false)}
+      />
     </div>
   );
 };

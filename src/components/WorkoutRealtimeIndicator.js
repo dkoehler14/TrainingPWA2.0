@@ -1,271 +1,243 @@
 /**
- * Workout Real-time Indicator Component
+ * WorkoutRealtimeIndicator Component
  * 
- * Displays real-time connection status and live progress updates
- * during workout logging sessions.
+ * Displays real-time connection status and recent updates for workout logging.
+ * Shows live progress updates, set completions, and exercise additions.
  */
 
-import React, { useState, useEffect } from 'react'
-import { Badge, Spinner, Alert, Tooltip, OverlayTrigger } from 'react-bootstrap'
+import React, { useState, useEffect } from 'react';
+import { Badge, Alert, Toast, ToastContainer } from 'react-bootstrap';
 import { 
-  WifiOff, 
-  Wifi, 
-  Activity, 
-  People, 
-  Clock,
+  Broadcast, 
+  CheckCircleFill, 
+  PlusCircleFill, 
+  TrendingUp,
   ExclamationTriangle
-} from 'react-bootstrap-icons'
+} from 'react-bootstrap-icons';
+import { useRealtimeChannelManager } from '../utils/realtimeChannelManager';
 
 const WorkoutRealtimeIndicator = ({ 
-  realtimeHook, 
-  showProgress = true, 
-  showPresence = true,
-  className = '' 
+  userId, 
+  programId, 
+  weekIndex, 
+  dayIndex,
+  isActive = true,
+  showToasts = true,
+  className = ''
 }) => {
-  const [lastUpdateTime, setLastUpdateTime] = useState(null)
-  const [progressAnimation, setProgressAnimation] = useState(false)
+  const [isConnected, setIsConnected] = useState(false);
+  const [recentUpdates, setRecentUpdates] = useState([]);
+  const [toasts, setToasts] = useState([]);
+  const channelManager = useRealtimeChannelManager();
 
-  const {
-    isConnected,
-    connectionError,
-    lastUpdate,
-    getPresence,
-    reconnect,
-    channelName,
-    reconnectAttempts
-  } = realtimeHook || {}
-
-  // Update last update time when new updates arrive
   useEffect(() => {
-    if (lastUpdate) {
-      setLastUpdateTime(new Date())
-      
-      // Trigger progress animation
-      setProgressAnimation(true)
-      const timer = setTimeout(() => setProgressAnimation(false), 1000)
-      return () => clearTimeout(timer)
+    if (!isActive || !userId || !programId || weekIndex === null || dayIndex === null) {
+      return;
     }
-  }, [lastUpdate])
 
-  // Get presence information
-  const presence = getPresence ? getPresence() : {}
-  const activeUsers = Object.keys(presence).length
-
-  if (!realtimeHook) {
-    return null
-  }
-
-  const getConnectionStatus = () => {
-    if (connectionError) {
-      const errorType = connectionError.type || 'UNKNOWN'
-      const errorMessages = {
-        'NETWORK_ERROR': 'Network connection lost',
-        'AUTH_ERROR': 'Authentication failed',
-        'SERVER_ERROR': 'Server unavailable',
-        'RATE_LIMIT_ERROR': 'Rate limit exceeded',
-        'SUBSCRIPTION_ERROR': 'Subscription failed',
-        'TIMEOUT_ERROR': 'Connection timeout',
-        'UNKNOWN': 'Connection error'
+    // Create workout-specific real-time channel
+    const channelName = `workout_${userId}_${programId}_${weekIndex}_${dayIndex}`;
+    
+    const channel = channelManager.createWorkoutChannel(
+      userId, 
+      programId, 
+      weekIndex, 
+      dayIndex,
+      {
+        onUpdate: (updateData) => {
+          console.log('🔄 Real-time workout update:', updateData);
+          handleRealtimeUpdate(updateData);
+        },
+        onBroadcast: (broadcastData) => {
+          console.log('📡 Real-time broadcast:', broadcastData);
+          handleRealtimeBroadcast(broadcastData);
+        },
+        onPresenceChange: (presenceData) => {
+          console.log('👥 Presence change:', presenceData);
+          // Could show other users working out
+        }
       }
-      
-      return {
-        variant: 'danger',
-        icon: <ExclamationTriangle size={12} />,
-        text: errorMessages[errorType] || 'Connection Error',
-        tooltip: `${errorMessages[errorType]}: ${connectionError.message}${reconnectAttempts > 0 ? ` (Attempt ${reconnectAttempts}/5)` : ''}`
+    );
+
+    // Subscribe to the channel
+    channelManager.subscribeChannel(channelName, {
+      onStatusChange: (status) => {
+        setIsConnected(status === 'SUBSCRIBED');
+      },
+      onError: (error) => {
+        console.error('Real-time connection error:', error);
+        setIsConnected(false);
+      }
+    }).catch(error => {
+      console.error('Failed to subscribe to real-time channel:', error);
+      setIsConnected(false);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      channelManager.removeChannel(channelName);
+    };
+  }, [userId, programId, weekIndex, dayIndex, isActive, channelManager]);
+
+  const handleRealtimeUpdate = (updateData) => {
+    const update = {
+      id: Date.now(),
+      type: updateData.table,
+      timestamp: updateData.timestamp,
+      data: updateData
+    };
+
+    setRecentUpdates(prev => [update, ...prev.slice(0, 4)]); // Keep last 5 updates
+
+    // Show toast notification
+    if (showToasts) {
+      let toastMessage = '';
+      let toastVariant = 'info';
+      let toastIcon = <TrendingUp />;
+
+      switch (updateData.table) {
+        case 'workout_logs':
+          if (updateData.eventType === 'UPDATE') {
+            toastMessage = 'Workout progress saved';
+            toastVariant = 'success';
+            toastIcon = <CheckCircleFill />;
+          }
+          break;
+        case 'workout_log_exercises':
+          if (updateData.eventType === 'INSERT') {
+            toastMessage = 'Exercise added to workout';
+            toastVariant = 'info';
+            toastIcon = <PlusCircleFill />;
+          } else if (updateData.eventType === 'UPDATE') {
+            toastMessage = 'Exercise progress updated';
+            toastVariant = 'success';
+            toastIcon = <CheckCircleFill />;
+          }
+          break;
+        case 'user_analytics':
+          toastMessage = 'Analytics updated';
+          toastVariant = 'info';
+          toastIcon = <TrendingUp />;
+          break;
+      }
+
+      if (toastMessage) {
+        addToast(toastMessage, toastVariant, toastIcon);
       }
     }
-    
-    if (!isConnected) {
-      return {
-        variant: 'warning',
-        icon: <WifiOff size={12} />,
-        text: reconnectAttempts > 0 ? 'Reconnecting...' : 'Disconnected',
-        tooltip: reconnectAttempts > 0 
-          ? `Reconnection attempt ${reconnectAttempts}/5`
-          : 'Real-time updates are not available'
+
+    // Clear old updates after 30 seconds
+    setTimeout(() => {
+      setRecentUpdates(prev => prev.filter(u => u.id !== update.id));
+    }, 30000);
+  };
+
+  const handleRealtimeBroadcast = (broadcastData) => {
+    const { type, payload } = broadcastData;
+
+    if (showToasts) {
+      let toastMessage = '';
+      let toastVariant = 'info';
+      let toastIcon = <Broadcast />;
+
+      switch (type) {
+        case 'set_completion':
+          toastMessage = `Set ${payload.setIndex + 1} completed`;
+          toastVariant = 'success';
+          toastIcon = <CheckCircleFill />;
+          break;
+        case 'exercise_completion':
+          toastMessage = `${payload.exerciseName} completed`;
+          toastVariant = 'success';
+          toastIcon = <CheckCircleFill />;
+          break;
+        case 'workout_progress':
+          toastMessage = `Workout ${payload.percentage}% complete`;
+          toastVariant = 'info';
+          toastIcon = <TrendingUp />;
+          break;
+      }
+
+      if (toastMessage) {
+        addToast(toastMessage, toastVariant, toastIcon);
       }
     }
-    
-    return {
-      variant: 'success',
-      icon: <Wifi size={12} />,
-      text: 'Connected',
-      tooltip: `Real-time updates active on channel: ${channelName || 'unknown'}`
-    }
+  };
+
+  const addToast = (message, variant, icon) => {
+    const toast = {
+      id: Date.now(),
+      message,
+      variant,
+      icon,
+      timestamp: new Date()
+    };
+
+    setToasts(prev => [toast, ...prev.slice(0, 2)]); // Keep max 3 toasts
+
+    // Auto-remove toast after 3 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== toast.id));
+    }, 3000);
+  };
+
+  const removeToast = (toastId) => {
+    setToasts(prev => prev.filter(t => t.id !== toastId));
+  };
+
+  if (!isActive) {
+    return null;
   }
-
-  const status = getConnectionStatus()
-
-  const formatLastUpdateTime = () => {
-    if (!lastUpdateTime) return 'No updates'
-    
-    const now = new Date()
-    const diff = Math.floor((now - lastUpdateTime) / 1000)
-    
-    if (diff < 60) return `${diff}s ago`
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    return `${Math.floor(diff / 3600)}h ago`
-  }
-
-  const getUpdateTypeDisplay = () => {
-    if (!lastUpdate) return null
-    
-    switch (lastUpdate.type) {
-      case 'INSERT':
-        return { icon: <Activity size={12} />, text: 'New data', color: 'success' }
-      case 'UPDATE':
-        return { icon: <Activity size={12} />, text: 'Updated', color: 'info' }
-      case 'DELETE':
-        return { icon: <Activity size={12} />, text: 'Deleted', color: 'warning' }
-      case 'BROADCAST':
-        return { icon: <Activity size={12} />, text: 'Live update', color: 'primary' }
-      default:
-        return { icon: <Activity size={12} />, text: 'Activity', color: 'secondary' }
-    }
-  }
-
-  const updateDisplay = getUpdateTypeDisplay()
 
   return (
-    <div className={`d-flex align-items-center gap-2 ${className}`}>
-      {/* Connection Status */}
-      <OverlayTrigger
-        placement="top"
-        overlay={<Tooltip>{status.tooltip}</Tooltip>}
-      >
+    <>
+      <div className={`d-flex align-items-center ${className}`}>
         <Badge 
-          bg={status.variant} 
-          className="d-flex align-items-center gap-1"
-          style={{ cursor: connectionError ? 'pointer' : 'default' }}
-          onClick={connectionError ? reconnect : undefined}
+          bg={isConnected ? 'success' : 'secondary'} 
+          className="d-flex align-items-center me-2"
+          title={isConnected ? 'Real-time updates active' : 'Real-time updates inactive'}
         >
-          {!isConnected && reconnectAttempts > 0 ? (
-            <Spinner size="sm" animation="border" style={{ width: '12px', height: '12px' }} />
-          ) : (
-            status.icon
-          )}
-          <span style={{ fontSize: '0.75rem' }}>{status.text}</span>
+          <Broadcast className="me-1" size={12} />
+          {isConnected ? 'Live' : 'Offline'}
         </Badge>
-      </OverlayTrigger>
+        
+        {recentUpdates.length > 0 && (
+          <small className="text-success">
+            {recentUpdates.length} recent update{recentUpdates.length !== 1 ? 's' : ''}
+          </small>
+        )}
+      </div>
 
-      {/* Progress Updates */}
-      {showProgress && lastUpdate && (
-        <OverlayTrigger
-          placement="top"
-          overlay={<Tooltip>Last update: {formatLastUpdateTime()}</Tooltip>}
-        >
-          <Badge 
-            bg={updateDisplay.color}
-            className={`d-flex align-items-center gap-1 ${progressAnimation ? 'animate-pulse' : ''}`}
-          >
-            {updateDisplay.icon}
-            <span style={{ fontSize: '0.75rem' }}>{updateDisplay.text}</span>
-          </Badge>
-        </OverlayTrigger>
-      )}
-
-      {/* Active Users Presence */}
-      {showPresence && activeUsers > 1 && (
-        <OverlayTrigger
-          placement="top"
-          overlay={<Tooltip>{activeUsers} users active on this workout</Tooltip>}
-        >
-          <Badge bg="info" className="d-flex align-items-center gap-1">
-            <People size={12} />
-            <span style={{ fontSize: '0.75rem' }}>{activeUsers}</span>
-          </Badge>
-        </OverlayTrigger>
-      )}
-
-      {/* Connection Error Alert */}
-      {connectionError && (
-        <Alert 
-          variant="danger" 
-          className="py-1 px-2 mb-0 small"
-          dismissible
-          onClose={() => window.location.reload()}
-        >
-          <div className="d-flex align-items-center gap-2">
-            <ExclamationTriangle size={14} />
-            <span>Real-time connection lost</span>
-            <button 
-              className="btn btn-sm btn-outline-danger"
-              onClick={reconnect}
-            >
-              Retry
-            </button>
-          </div>
+      {/* Connection error alert */}
+      {!isConnected && isActive && (
+        <Alert variant="warning" className="mt-2 py-2">
+          <ExclamationTriangle className="me-2" />
+          <small>Real-time updates temporarily unavailable. Your progress is still being saved.</small>
         </Alert>
       )}
-    </div>
-  )
-}
 
-/**
- * Compact version for mobile or space-constrained layouts
- */
-export const CompactWorkoutRealtimeIndicator = ({ realtimeHook }) => {
-  const { isConnected, connectionError, reconnect } = realtimeHook || {}
+      {/* Toast notifications */}
+      {showToasts && (
+        <ToastContainer position="top-end" className="p-3">
+          {toasts.map(toast => (
+            <Toast
+              key={toast.id}
+              onClose={() => removeToast(toast.id)}
+              show={true}
+              delay={3000}
+              autohide
+              bg={toast.variant}
+            >
+              <Toast.Body className="d-flex align-items-center text-white">
+                {toast.icon && <span className="me-2">{toast.icon}</span>}
+                {toast.message}
+              </Toast.Body>
+            </Toast>
+          ))}
+        </ToastContainer>
+      )}
+    </>
+  );
+};
 
-  if (!realtimeHook) return null
-
-  const getStatusColor = () => {
-    if (connectionError) return 'danger'
-    if (!isConnected) return 'warning'
-    return 'success'
-  }
-
-  const getStatusIcon = () => {
-    if (connectionError) return <ExclamationTriangle size={14} />
-    if (!isConnected) return <WifiOff size={14} />
-    return <Wifi size={14} />
-  }
-
-  return (
-    <OverlayTrigger
-      placement="top"
-      overlay={
-        <Tooltip>
-          {connectionError 
-            ? `Connection error: ${connectionError.message}` 
-            : isConnected 
-              ? 'Real-time updates active'
-              : 'Real-time updates disconnected'
-          }
-        </Tooltip>
-      }
-    >
-      <div 
-        className={`text-${getStatusColor()} cursor-pointer`}
-        onClick={connectionError ? reconnect : undefined}
-        style={{ cursor: connectionError ? 'pointer' : 'default' }}
-      >
-        {getStatusIcon()}
-      </div>
-    </OverlayTrigger>
-  )
-}
-
-// CSS for animations (add to your CSS file)
-const styles = `
-.animate-pulse {
-  animation: pulse 1s ease-in-out;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.05); }
-  100% { opacity: 1; transform: scale(1); }
-}
-`
-
-// Inject styles if not already present
-if (typeof document !== 'undefined' && !document.getElementById('workout-realtime-styles')) {
-  const styleSheet = document.createElement('style')
-  styleSheet.id = 'workout-realtime-styles'
-  styleSheet.textContent = styles
-  document.head.appendChild(styleSheet)
-}
-
-export default WorkoutRealtimeIndicator
+export default WorkoutRealtimeIndicator;

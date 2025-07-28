@@ -3,15 +3,28 @@
  * 
  * Displays workout statistics including total count, frequent exercises,
  * and recent activity summary for quick workout history with enhanced error handling.
+ * Now includes real-time analytics updates.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Badge, Table, Alert } from 'react-bootstrap';
-import { BarChart, Calendar, Clock, CheckCircleFill, ExclamationTriangle } from 'react-bootstrap-icons';
+import { BarChart, Calendar, Clock, CheckCircleFill, ExclamationTriangle, Broadcast, TrendingUp } from 'react-bootstrap-icons';
 import { getWorkoutStatistics } from '../utils/workoutStatsUtils';
+import { useRealtimeAnalytics } from '../hooks/useRealtimeWorkouts';
 import '../styles/QuickWorkoutHistory.css';
 
-const WorkoutStatsCard = ({ workouts = [], exercises = [] }) => {
+const WorkoutStatsCard = ({ workouts = [], exercises = [], enableRealtime = true }) => {
+  // Real-time analytics
+  const {
+    analytics: realtimeAnalytics,
+    isConnected: isRealtimeConnected,
+    error: realtimeError
+  } = useRealtimeAnalytics();
+
+  // State for tracking analytics changes
+  const [analyticsUpdates, setAnalyticsUpdates] = useState([]);
+  const [lastStatsUpdate, setLastStatsUpdate] = useState(null);
+
   // Calculate comprehensive statistics with error handling
   let stats;
   let hasError = false;
@@ -23,6 +36,35 @@ const WorkoutStatsCard = ({ workouts = [], exercises = [] }) => {
     hasError = true;
     stats = { hasData: false };
   }
+
+  // Track real-time analytics updates
+  useEffect(() => {
+    if (enableRealtime && realtimeAnalytics.length > 0) {
+      setAnalyticsUpdates(prev => {
+        const newUpdates = realtimeAnalytics
+          .filter(analytic => !prev.find(p => p.id === analytic.id))
+          .map(analytic => ({
+            id: analytic.id,
+            exerciseId: analytic.exercise_id,
+            exerciseName: analytic.exercises?.name || 'Unknown Exercise',
+            type: 'analytics_update',
+            timestamp: Date.now()
+          }));
+
+        if (newUpdates.length > 0) {
+          setLastStatsUpdate(Date.now());
+          // Clear old updates after 10 seconds
+          setTimeout(() => {
+            setAnalyticsUpdates(current => 
+              current.filter(u => Date.now() - u.timestamp < 10000)
+            );
+          }, 10000);
+        }
+
+        return [...newUpdates, ...prev.slice(0, 4)]; // Keep last 5 updates
+      });
+    }
+  }, [realtimeAnalytics, enableRealtime]);
 
   // Handle calculation errors
   if (hasError) {
@@ -99,11 +141,51 @@ const WorkoutStatsCard = ({ workouts = [], exercises = [] }) => {
 
   return (
     <Card className="soft-card stats-card mb-4">
-      <Card.Header className="stats-header d-flex align-items-center">
-        <BarChart className="me-2" />
-        <h5 className="mb-0">Workout Statistics</h5>
+      <Card.Header className="stats-header d-flex align-items-center justify-content-between">
+        <div className="d-flex align-items-center">
+          <BarChart className="me-2" />
+          <h5 className="mb-0">Workout Statistics</h5>
+        </div>
+        {enableRealtime && (
+          <div className="d-flex align-items-center">
+            <Badge 
+              bg={isRealtimeConnected ? 'success' : 'secondary'} 
+              className="d-flex align-items-center me-2"
+            >
+              <Broadcast className="me-1" size={12} />
+              {isRealtimeConnected ? 'Live' : 'Offline'}
+            </Badge>
+            {lastStatsUpdate && (
+              <small className="text-success d-flex align-items-center">
+                <TrendingUp className="me-1" size={12} />
+                Updated {Math.floor((Date.now() - lastStatsUpdate) / 1000)}s ago
+              </small>
+            )}
+          </div>
+        )}
       </Card.Header>
       <Card.Body className="stats-body">
+        {/* Real-time analytics updates notification */}
+        {enableRealtime && analyticsUpdates.length > 0 && (
+          <Alert variant="info" className="mb-3 py-2">
+            <div className="d-flex align-items-center">
+              <TrendingUp className="me-2" />
+              <small>
+                Analytics updated for: {analyticsUpdates.slice(0, 2).map(u => u.exerciseName).join(', ')}
+                {analyticsUpdates.length > 2 && ` and ${analyticsUpdates.length - 2} more`}
+              </small>
+            </div>
+          </Alert>
+        )}
+
+        {/* Real-time error alert */}
+        {enableRealtime && realtimeError && (
+          <Alert variant="warning" className="mb-3 py-2">
+            <ExclamationTriangle className="me-2" />
+            <small>Real-time analytics temporarily unavailable</small>
+          </Alert>
+        )}
+
         {/* Overview Stats */}
         <div className="stats-overview-grid">
           <div className="stats-overview-item">

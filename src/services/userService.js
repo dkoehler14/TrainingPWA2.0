@@ -121,7 +121,7 @@ export const updateUserProfile = async (userId, updates) => {
   try {
     // Create validation object with proper field mapping for updates
     const validationData = {}
-    
+
     // Map database fields to validation fields
     if (updates.email !== undefined) validationData.email = updates.email
     if (updates.name !== undefined) validationData.name = updates.name
@@ -172,7 +172,7 @@ export const updateUserProfileByAuthId = async (authId, updates) => {
   try {
     // Create validation object with proper field mapping for updates
     const validationData = {}
-    
+
     // Map database fields to validation fields
     if (updates.email !== undefined) validationData.email = updates.email
     if (updates.name !== undefined) validationData.name = updates.name
@@ -244,7 +244,7 @@ export const getOrCreateUserProfile = async (authUser, additionalData = {}) => {
   try {
     // First try to get existing profile
     let profile = await getUserProfile(authUser.id)
-    
+
     if (!profile) {
       // If no profile exists, create one
       profile = await createUserProfile(authUser, additionalData)
@@ -264,7 +264,7 @@ export const updateUserPreferences = async (userId, preferences) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .update({ 
+      .update({
         preferences,
         updated_at: new Date().toISOString()
       })
@@ -287,7 +287,7 @@ export const updateUserSettings = async (userId, settings) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .update({ 
+      .update({
         settings,
         updated_at: new Date().toISOString()
       })
@@ -461,7 +461,7 @@ export const updateUserLastLogin = async (userId) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .update({ 
+      .update({
         last_login_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
@@ -484,7 +484,7 @@ export const deactivateUserProfile = async (userId) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .update({ 
+      .update({
         is_active: false,
         deactivated_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -510,7 +510,7 @@ export const reactivateUserProfile = async (userId) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .update({ 
+      .update({
         is_active: true,
         deactivated_at: null,
         updated_at: new Date().toISOString()

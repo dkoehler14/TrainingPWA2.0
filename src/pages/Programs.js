@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Alert } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
-import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil } from 'react-bootstrap-icons';
+import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil, Broadcast, TrendingUp } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 import { getUserPrograms, getProgramById, setCurrentProgram, deleteProgram, copyProgram, getProgramStatistics } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { useRealtimePrograms, useRealtimeExerciseLibrary } from '../hooks/useRealtimePrograms';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -28,6 +29,46 @@ function Programs({ userRole }) {
   const [forceUpdate, setForceUpdate] = useState(false);
   const chartContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+
+  // Real-time program updates
+  const {
+    programs: realtimePrograms,
+    exercises: realtimeExercises,
+    isConnected: isRealtimeConnected,
+    lastUpdate,
+    setPrograms: setRealtimePrograms,
+    setExercises: setRealtimeExercises
+  } = useRealtimePrograms({
+    enabled: true,
+    onProgramUpdate: (updateData) => {
+      console.log('📋 Program updated in real-time:', updateData);
+      // Handle program updates
+      if (updateData.eventType === 'UPDATE' && selectedProgram && selectedProgram.id === updateData.data.id) {
+        setSelectedProgram(prev => ({ ...prev, ...updateData.data }));
+      }
+    },
+    onExerciseUpdate: (updateData) => {
+      console.log('💪 Exercise updated in real-time:', updateData);
+      // Refresh exercise data when exercises are updated
+    },
+    onProgramShared: (shareData) => {
+      console.log('🔗 Program shared:', shareData);
+      // Could show a notification here
+    }
+  });
+
+  // Real-time exercise library updates
+  const {
+    newExercises,
+    updatedExercises,
+    clearNewExercises,
+    clearUpdatedExercises
+  } = useRealtimeExerciseLibrary({
+    enabled: true,
+    onExerciseUpdate: (updateData) => {
+      console.log('💪 Exercise library updated:', updateData);
+    }
+  });
 
   // Function to handle chart resize
   const handleChartResize = () => {
@@ -50,26 +91,31 @@ function Programs({ userRole }) {
         try {
           // Fetch user programs using Supabase
           const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
-          setUserPrograms(userProgramsData.map(program => ({
+          const processedUserPrograms = userProgramsData.map(program => ({
             ...program,
             weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
-          })));
+          }));
+          setUserPrograms(processedUserPrograms);
+          setRealtimePrograms(processedUserPrograms); // Initialize real-time state
 
           // Fetch template programs using Supabase
           const templateProgramsData = await getUserPrograms(user.id, { isTemplate: true });
-          setTemplatePrograms(templateProgramsData.map(program => ({
+          const processedTemplatePrograms = templateProgramsData.map(program => ({
             ...program,
             weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
-          })));
+          }));
+          setTemplatePrograms(processedTemplatePrograms);
 
           // Fetch exercises using Supabase
           const exercisesData = await getAvailableExercises(user.id);
-          setExercises(exercisesData.map(ex => ({
+          const processedExercises = exercisesData.map(ex => ({
             ...ex,
             isGlobal: ex.is_global,
             source: ex.is_global ? 'global' : 'user',
             createdBy: ex.created_by
-          })));
+          }));
+          setExercises(processedExercises);
+          setRealtimeExercises(processedExercises); // Initialize real-time state
 
         } catch (error) {
           console.error("Error fetching data: ", error);
@@ -81,7 +127,7 @@ function Programs({ userRole }) {
       }
     };
     fetchData();
-  }, [user]);
+  }, [user, setRealtimePrograms, setRealtimeExercises]);
 
 
   const getExerciseName = (exerciseId) => {
@@ -1505,7 +1551,21 @@ function Programs({ userRole }) {
         <Col md={10}>
           <div className="soft-card programs-card shadow border-0">
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h1 className="soft-title programs-title mb-0">My Programs</h1>
+              <div className="d-flex align-items-center">
+                <h1 className="soft-title programs-title mb-0 me-3">My Programs</h1>
+                <Badge 
+                  bg={isRealtimeConnected ? 'success' : 'secondary'} 
+                  className="d-flex align-items-center"
+                >
+                  <Broadcast className="me-1" size={12} />
+                  {isRealtimeConnected ? 'Live' : 'Offline'}
+                </Badge>
+                {lastUpdate && (
+                  <small className="text-muted ms-2">
+                    Updated {Math.floor((Date.now() - new Date(lastUpdate.timestamp)) / 1000)}s ago
+                  </small>
+                )}
+              </div>
               <Button
                 variant="primary"
                 onClick={() => navigate('/create-program')}
@@ -1515,6 +1575,33 @@ function Programs({ userRole }) {
                 {isMobile ? 'New' : 'Create New Program'}
               </Button>
             </div>
+
+            {/* Real-time updates notifications */}
+            {newExercises.length > 0 && (
+              <Alert variant="info" className="mb-3" dismissible onClose={clearNewExercises}>
+                <div className="d-flex align-items-center">
+                  <TrendingUp className="me-2" />
+                  <span>
+                    {newExercises.length} new exercise{newExercises.length !== 1 ? 's' : ''} added: {' '}
+                    {newExercises.slice(0, 2).map(ex => ex.name).join(', ')}
+                    {newExercises.length > 2 && ` and ${newExercises.length - 2} more`}
+                  </span>
+                </div>
+              </Alert>
+            )}
+
+            {updatedExercises.length > 0 && (
+              <Alert variant="warning" className="mb-3" dismissible onClose={clearUpdatedExercises}>
+                <div className="d-flex align-items-center">
+                  <Pencil className="me-2" />
+                  <span>
+                    {updatedExercises.length} exercise{updatedExercises.length !== 1 ? 's' : ''} updated: {' '}
+                    {updatedExercises.slice(0, 2).map(ex => ex.name).join(', ')}
+                    {updatedExercises.length > 2 && ` and ${updatedExercises.length - 2} more`}
+                  </span>
+                </div>
+              </Alert>
+            )}
 
             {isLoading ? (
               <div className="text-center py-4">

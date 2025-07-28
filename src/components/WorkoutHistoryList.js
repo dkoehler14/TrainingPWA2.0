@@ -3,9 +3,10 @@
  * 
  * Displays a card-based list of quick workouts with workout details,
  * action buttons, and empty state handling with enhanced error handling.
+ * Now includes real-time updates for workout progress.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, Row, Col, Button, Badge, Alert } from 'react-bootstrap';
 import { 
   Calendar, 
@@ -16,9 +17,11 @@ import {
   XCircleFill,
   Plus,
   Activity,
-  ExclamationTriangle
+  ExclamationTriangle,
+  Broadcast
 } from 'react-bootstrap-icons';
 import { WorkoutHistoryListSkeleton } from './WorkoutHistorySkeleton';
+import { useRealtimeWorkoutHistory } from '../hooks/useRealtimeWorkouts';
 import '../styles/QuickWorkoutHistory.css';
 
 const WorkoutHistoryList = ({
@@ -26,8 +29,42 @@ const WorkoutHistoryList = ({
   onWorkoutSelect,
   onDeleteWorkout,
   onUseAsTemplate,
-  isLoading = false
+  isLoading = false,
+  enableRealtime = true
 }) => {
+  // Real-time workout updates
+  const {
+    workouts: realtimeWorkouts,
+    isConnected: isRealtimeConnected,
+    error: realtimeError
+  } = useRealtimeWorkoutHistory(20);
+
+  // State for real-time indicators
+  const [recentUpdates, setRecentUpdates] = useState([]);
+
+  // Use real-time workouts if available and enabled, otherwise use props
+  const displayWorkouts = enableRealtime && realtimeWorkouts.length > 0 ? realtimeWorkouts : workouts;
+
+  // Track recent updates for visual feedback
+  useEffect(() => {
+    if (enableRealtime && realtimeWorkouts.length > 0) {
+      const newWorkouts = realtimeWorkouts.filter(rw => 
+        !workouts.find(w => w.id === rw.id)
+      );
+      
+      if (newWorkouts.length > 0) {
+        setRecentUpdates(prev => [
+          ...newWorkouts.map(w => ({ id: w.id, type: 'new', timestamp: Date.now() })),
+          ...prev.slice(0, 4) // Keep last 5 updates
+        ]);
+        
+        // Clear update indicators after 5 seconds
+        setTimeout(() => {
+          setRecentUpdates(prev => prev.filter(u => Date.now() - u.timestamp < 5000));
+        }, 5000);
+      }
+    }
+  }, [realtimeWorkouts, workouts, enableRealtime]);
 
   // Format date for display
   const formatWorkoutDate = (date) => {
@@ -131,6 +168,32 @@ const WorkoutHistoryList = ({
 
   return (
     <div>
+      {/* Real-time connection status */}
+      {enableRealtime && (
+        <div className="d-flex justify-content-between align-items-center mb-2">
+          <Badge 
+            bg={isRealtimeConnected ? 'success' : 'secondary'} 
+            className="d-flex align-items-center"
+          >
+            <Broadcast className="me-1" size={12} />
+            {isRealtimeConnected ? 'Live Updates Active' : 'Live Updates Inactive'}
+          </Badge>
+          {recentUpdates.length > 0 && (
+            <small className="text-success">
+              {recentUpdates.length} recent update{recentUpdates.length !== 1 ? 's' : ''}
+            </small>
+          )}
+        </div>
+      )}
+
+      {/* Real-time error alert */}
+      {enableRealtime && realtimeError && (
+        <Alert variant="warning" className="mb-3">
+          <ExclamationTriangle className="me-2" />
+          Real-time updates temporarily unavailable: {realtimeError.message}
+        </Alert>
+      )}
+
       {hasCorruptedData && (
         <Alert variant="warning" className="mb-3">
           <ExclamationTriangle className="me-2" />
@@ -154,8 +217,15 @@ const WorkoutHistoryList = ({
           completionStatus = { completed: 0, total: 0, percentage: 0 };
         }
         
+        // Check if this workout was recently updated
+        const isRecentUpdate = recentUpdates.find(u => u.id === workout.id);
+        
         return (
-          <Card key={workout.id} className="soft-card workout-history-card">
+          <Card 
+            key={workout.id} 
+            className={`soft-card workout-history-card ${isRecentUpdate ? 'border-success' : ''}`}
+            style={isRecentUpdate ? { boxShadow: '0 0 10px rgba(40, 167, 69, 0.3)' } : {}}
+          >
             <Card.Body>
               {hasDataIssues && (
                 <Alert variant="warning" size="sm" className="mb-2">

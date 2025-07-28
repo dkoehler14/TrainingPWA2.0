@@ -392,7 +392,8 @@ function QuickWorkoutHistoryContent() {
       {/* Workout Statistics */}
       <WorkoutStatsCard 
         workouts={workouts || []} 
-        exercises={exercises} 
+        exercises={exercises}
+        enableRealtime={true}
       />
 
       {/* Filters */}
@@ -414,6 +415,7 @@ function QuickWorkoutHistoryContent() {
         onDeleteWorkout={handleDeleteWorkout}
         onUseAsTemplate={handleUseAsTemplate}
         isLoading={false}
+        enableRealtime={true}
       />
 
       {/* Delete Confirmation Modal */}

@@ -1,0 +1,204 @@
+# Production Supabase Configuration
+# This configuration is optimized for production deployment
+# with enhanced security, performance, and monitoring settings.
+
+project_id = "exercise-tracker-prod"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# Reduced max_rows for production security
+max_rows = 500
+
+[api.tls]
+enabled = true
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = true
+port = 54329
+pool_mode = "transaction"
+# Increased pool size for production load
+default_pool_size = 50
+max_client_conn = 200
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+# Disable seeding in production
+enabled = false
+sql_paths = []
+
+[db.network_restrictions]
+enabled = true
+# Restrict to specific IP ranges in production
+allowed_cidrs = ["0.0.0.0/0"]  # Configure with actual allowed IPs
+allowed_cidrs_v6 = ["::/0"]    # Configure with actual allowed IPs
+
+[realtime]
+enabled = true
+# Reduced event rate for production stability
+max_header_length = 2048
+
+[studio]
+# Disable Studio in production for security
+enabled = false
+
+[inbucket]
+# Disable email testing in production
+enabled = false
+
+[storage]
+enabled = true
+file_size_limit = "10MiB"
+
+[storage.image_transformation]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "https://your-production-domain.com"
+additional_redirect_urls = [
+  "https://your-production-domain.com",
+  "https://www.your-production-domain.com"
+]
+# Reduced JWT expiry for better security
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+minimum_password_length = 8
+password_requirements = "lower_upper_letters_digits"
+
+[auth.rate_limit]
+# Production rate limits - more restrictive
+email_sent = 10
+sms_sent = 10
+anonymous_users = 10
+token_refresh = 300
+sign_in_sign_ups = 60
+token_verifications = 60
+web3 = 10
+
+[auth.captcha]
+enabled = true
+provider = "hcaptcha"
+secret = "env(HCAPTCHA_SECRET_KEY)"
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+# Enable email confirmations in production
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "60s"
+otp_length = 6
+otp_expiry = 1800  # 30 minutes
+
+[auth.email.smtp]
+enabled = true
+host = "smtp.sendgrid.net"
+port = 587
+user = "apikey"
+pass = "env(SENDGRID_API_KEY)"
+admin_email = "admin@your-domain.com"
+sender_name = "Exercise Tracker"
+
+[auth.email.template.invite]
+subject = "Welcome to Exercise Tracker!"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Confirm your email address"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+template = "Your Exercise Tracker verification code is {{ .Code }}"
+max_frequency = "60s"
+
+[auth.sessions]
+# Force logout after 24 hours
+timebox = "24h"
+# Force logout after 8 hours of inactivity
+inactivity_timeout = "8h"
+
+[auth.mfa]
+max_enrolled_factors = 5
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.mfa.phone]
+enroll_enabled = false
+verify_enabled = false
+otp_length = 6
+template = "Your Exercise Tracker MFA code is {{ .Code }}"
+max_frequency = "60s"
+
+[auth.external.google]
+enabled = true
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+redirect_uri = ""
+skip_nonce_check = false
+
+[auth.external.apple]
+enabled = false
+
+[auth.web3.solana]
+enabled = false
+
+[auth.third_party.firebase]
+enabled = false
+
+[auth.third_party.auth0]
+enabled = false
+
+[auth.third_party.aws_cognito]
+enabled = false
+
+[auth.third_party.clerk]
+enabled = false
+
+[edge_runtime]
+enabled = true
+# Use per_worker for production performance
+policy = "per_worker"
+inspector_port = 8083
+deno_version = 1
+
+[edge_runtime.secrets]
+# Production secrets should be set via environment variables
+SENDGRID_API_KEY = "env(SENDGRID_API_KEY)"
+GOOGLE_CLIENT_SECRET = "env(GOOGLE_CLIENT_SECRET)"
+HCAPTCHA_SECRET_KEY = "env(HCAPTCHA_SECRET_KEY)"
+
+[analytics]
+enabled = true
+port = 54327
+backend = "postgres"
+
+# Production backup and disaster recovery settings
+[experimental]
+# Configure S3 backup if using OrioleDB
+s3_host = "env(S3_HOST)"
+s3_region = "env(S3_REGION)"
+s3_access_key = "env(S3_ACCESS_KEY)"
+s3_secret_key = "env(S3_SECRET_KEY)"

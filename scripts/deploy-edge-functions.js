@@ -1,183 +1,525 @@
 #!/usr/bin/env node
 
-const { execSync } = require('child_process');
+/**
+ * Edge Functions Deployment Pipeline
+ * 
+ * This script provides automated deployment for Supabase Edge Functions
+ * with support for staging and production environments, verification,
+ * and rollback capabilities.
+ */
+
+const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Configuration
-const FUNCTIONS_DIR = path.join(__dirname, '..', 'supabase', 'functions');
-const REQUIRED_ENV_VARS = [
-  'SUPABASE_URL',
-  'SUPABASE_SERVICE_ROLE_KEY'
-];
+class EdgeFunctionDeployer {
+  constructor() {
+    this.environments = {
+      staging: {
+        projectRef: process.env.SUPABASE_STAGING_PROJECT_REF,
+        url: process.env.SUPABASE_STAGING_URL,
+        anonKey: process.env.SUPABASE_STAGING_ANON_KEY
+      },
+      production: {
+        projectRef: process.env.SUPABASE_PROJECT_REF,
+        url: process.env.REACT_APP_SUPABASE_URL,
+        anonKey: process.env.REACT_APP_SUPABASE_ANON_KEY
+      }
+    };
 
-// Colors for console output
-const colors = {
-  reset: '\x1b[0m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m'
-};
+    this.functions = [
+      'coaching-insights',
+      'data-validation',
+      'process-workout',
+      'workout-triggers'
+    ];
 
-function log(message, color = 'reset') {
-  console.log(`${colors[color]}${message}${colors.reset}`);
-}
-
-function checkPrerequisites() {
-  log('🔍 Checking prerequisites...', 'blue');
-  
-  // Check if Supabase CLI is installed
-  try {
-    execSync('supabase --version', { stdio: 'pipe' });
-    log('✅ Supabase CLI is installed', 'green');
-  } catch (error) {
-    log('❌ Supabase CLI is not installed. Please install it first:', 'red');
-    log('npm install -g supabase', 'yellow');
-    process.exit(1);
+    this.deploymentHistory = [];
   }
 
-  // Check if we're in a Supabase project
-  if (!fs.existsSync(path.join(__dirname, '..', 'supabase', 'config.toml'))) {
-    log('❌ Not in a Supabase project directory', 'red');
-    process.exit(1);
+  log(message, type = 'info') {
+    const colors = {
+      error: '\x1b[31m',
+      warning: '\x1b[33m',
+      success: '\x1b[32m',
+      info: '\x1b[36m',
+      reset: '\x1b[0m'
+    };
+    
+    const color = colors[type] || colors.info;
+    const timestamp = new Date().toISOString();
+    console.log(`${color}[${timestamp}] ${message}${colors.reset}`);
   }
 
-  // Check environment variables
-  const missingVars = REQUIRED_ENV_VARS.filter(varName => !process.env[varName]);
-  if (missingVars.length > 0) {
-    log('❌ Missing required environment variables:', 'red');
-    missingVars.forEach(varName => log(`  - ${varName}`, 'yellow'));
-    log('Please set these variables before deploying', 'yellow');
-    process.exit(1);
+  async validateEnvironment(env) {
+    this.log(`🔍 Validating ${env} environment...`, 'info');
+    
+    const config = this.environments[env];
+    if (!config.projectRef) {
+      throw new Error(`Missing project reference for ${env} environment`);
+    }
+
+    // Test Supabase CLI connectivity
+    try {
+      execSync(`supabase projects list`, { stdio: 'pipe' });
+      this.log('✅ Supabase CLI is authenticated', 'success');
+    } catch (error) {
+      throw new Error('Supabase CLI not authenticated. Run: supabase login');
+    }
+
+    // Verify project exists
+    try {
+      const projects = execSync('supabase projects list --output json', { encoding: 'utf8' });
+      const projectList = JSON.parse(projects);
+      const project = projectList.find(p => p.id === config.projectRef);
+      
+      if (!project) {
+        throw new Error(`Project ${config.projectRef} not found`);
+      }
+      
+      this.log(`✅ Project found: ${project.name}`, 'success');
+    } catch (error) {
+      throw new Error(`Failed to verify project: ${error.message}`);
+    }
+
+    return true;
   }
 
-  log('✅ All prerequisites met', 'green');
-}
+  async validateFunctions() {
+    this.log('🔍 Validating Edge Functions...', 'info');
+    
+    const functionsDir = 'supabase/functions';
+    const errors = [];
 
-function getFunctionDirectories() {
-  const functions = [];
-  const items = fs.readdirSync(FUNCTIONS_DIR);
-  
-  for (const item of items) {
-    const itemPath = path.join(FUNCTIONS_DIR, item);
-    if (fs.statSync(itemPath).isDirectory() && !item.startsWith('_')) {
-      // Check if it has an index.ts file
-      const indexPath = path.join(itemPath, 'index.ts');
-      if (fs.existsSync(indexPath)) {
-        functions.push(item);
+    for (const functionName of this.functions) {
+      const functionPath = path.join(functionsDir, functionName, 'index.ts');
+      
+      if (!fs.existsSync(functionPath)) {
+        errors.push(`Function ${functionName} not found at ${functionPath}`);
+        continue;
+      }
+
+      // Basic TypeScript syntax check
+      try {
+        const content = fs.readFileSync(functionPath, 'utf8');
+        
+        // Check for required imports
+        if (!content.includes('serve')) {
+          errors.push(`Function ${functionName} missing serve import`);
+        }
+        
+        if (!content.includes('corsHeaders')) {
+          errors.push(`Function ${functionName} missing CORS headers`);
+        }
+
+        this.log(`✅ Function ${functionName} validated`, 'success');
+      } catch (error) {
+        errors.push(`Error reading function ${functionName}: ${error.message}`);
       }
     }
-  }
-  
-  return functions;
-}
 
-function deployFunction(functionName) {
-  log(`🚀 Deploying function: ${functionName}`, 'cyan');
-  
-  try {
-    const command = `supabase functions deploy ${functionName}`;
-    execSync(command, { 
-      stdio: 'inherit',
-      cwd: path.join(__dirname, '..')
-    });
-    log(`✅ Successfully deployed: ${functionName}`, 'green');
+    if (errors.length > 0) {
+      throw new Error(`Function validation failed:\n${errors.join('\n')}`);
+    }
+
     return true;
-  } catch (error) {
-    log(`❌ Failed to deploy: ${functionName}`, 'red');
-    log(`Error: ${error.message}`, 'red');
-    return false;
   }
-}
 
-function testFunction(functionName) {
-  log(`🧪 Testing function: ${functionName}`, 'cyan');
-  
-  // Basic health check test
-  try {
-    const testCommand = `curl -X POST "$(supabase status | grep 'Edge Functions' | awk '{print $3}')/${functionName}" \\
-      -H "Authorization: Bearer $(supabase auth get-session --format json | jq -r '.access_token')" \\
-      -H "Content-Type: application/json" \\
-      -d '{"test": true}' \\
-      --max-time 10`;
+  async deployFunction(functionName, environment, options = {}) {
+    const { dryRun = false, verify = true } = options;
+    const config = this.environments[environment];
     
-    // Note: This is a basic test. In practice, you'd want more comprehensive testing
-    log(`Test command: ${testCommand}`, 'yellow');
-    log(`⚠️  Manual testing required for function: ${functionName}`, 'yellow');
-    return true;
-  } catch (error) {
-    log(`❌ Test failed for: ${functionName}`, 'red');
-    return false;
-  }
-}
+    this.log(`🚀 ${dryRun ? 'DRY RUN: ' : ''}Deploying ${functionName} to ${environment}...`, 'info');
 
-function main() {
-  const args = process.argv.slice(2);
-  const specificFunction = args[0];
-  const skipTests = args.includes('--skip-tests');
-  
-  log('🎯 Edge Functions Deployment Script', 'magenta');
-  log('=====================================', 'magenta');
-  
-  checkPrerequisites();
-  
-  const functions = getFunctionDirectories();
-  
-  if (functions.length === 0) {
-    log('❌ No Edge Functions found to deploy', 'red');
-    process.exit(1);
-  }
-  
-  log(`📦 Found ${functions.length} functions:`, 'blue');
-  functions.forEach(fn => log(`  - ${fn}`, 'cyan'));
-  
-  const functionsTodeploy = specificFunction ? [specificFunction] : functions;
-  
-  if (specificFunction && !functions.includes(specificFunction)) {
-    log(`❌ Function '${specificFunction}' not found`, 'red');
-    process.exit(1);
-  }
-  
-  let successCount = 0;
-  let failCount = 0;
-  
-  for (const functionName of functionsTodeploy) {
-    if (deployFunction(functionName)) {
-      successCount++;
+    if (dryRun) {
+      this.log(`Would deploy: supabase functions deploy ${functionName} --project-ref ${config.projectRef}`, 'info');
+      return { success: true, dryRun: true };
+    }
+
+    try {
+      const startTime = Date.now();
       
-      if (!skipTests) {
-        testFunction(functionName);
+      // Deploy the function
+      const deployCommand = `supabase functions deploy ${functionName} --project-ref ${config.projectRef}`;
+      execSync(deployCommand, { stdio: 'inherit' });
+      
+      const deployTime = Date.now() - startTime;
+      this.log(`✅ Function ${functionName} deployed successfully (${deployTime}ms)`, 'success');
+
+      // Record deployment
+      const deployment = {
+        functionName,
+        environment,
+        timestamp: new Date().toISOString(),
+        deployTime,
+        success: true
+      };
+
+      this.deploymentHistory.push(deployment);
+
+      // Verify deployment if requested
+      if (verify) {
+        await this.verifyFunction(functionName, environment);
+      }
+
+      return deployment;
+
+    } catch (error) {
+      const deployment = {
+        functionName,
+        environment,
+        timestamp: new Date().toISOString(),
+        success: false,
+        error: error.message
+      };
+
+      this.deploymentHistory.push(deployment);
+      throw new Error(`Failed to deploy ${functionName}: ${error.message}`);
+    }
+  }
+
+  async deployAllFunctions(environment, options = {}) {
+    const { dryRun = false, parallel = false, verify = true } = options;
+    
+    this.log(`🚀 ${dryRun ? 'DRY RUN: ' : ''}Deploying all functions to ${environment}...`, 'info');
+
+    await this.validateEnvironment(environment);
+    await this.validateFunctions();
+
+    const deployments = [];
+    const errors = [];
+
+    if (parallel && !dryRun) {
+      // Deploy functions in parallel
+      const deployPromises = this.functions.map(functionName => 
+        this.deployFunction(functionName, environment, { dryRun, verify: false })
+          .catch(error => ({ functionName, error: error.message }))
+      );
+
+      const results = await Promise.all(deployPromises);
+      
+      for (const result of results) {
+        if (result.error) {
+          errors.push(`${result.functionName}: ${result.error}`);
+        } else {
+          deployments.push(result);
+        }
+      }
+
+      // Verify all functions after parallel deployment
+      if (verify && errors.length === 0) {
+        for (const functionName of this.functions) {
+          try {
+            await this.verifyFunction(functionName, environment);
+          } catch (error) {
+            errors.push(`Verification failed for ${functionName}: ${error.message}`);
+          }
+        }
+      }
+
+    } else {
+      // Deploy functions sequentially
+      for (const functionName of this.functions) {
+        try {
+          const deployment = await this.deployFunction(functionName, environment, { dryRun, verify });
+          deployments.push(deployment);
+        } catch (error) {
+          errors.push(`${functionName}: ${error.message}`);
+          
+          // Stop on first error in sequential mode unless continuing
+          if (!options.continueOnError) {
+            break;
+          }
+        }
+      }
+    }
+
+    // Generate deployment report
+    const report = {
+      environment,
+      timestamp: new Date().toISOString(),
+      totalFunctions: this.functions.length,
+      successfulDeployments: deployments.length,
+      failedDeployments: errors.length,
+      deployments,
+      errors,
+      dryRun
+    };
+
+    this.saveDeploymentReport(report);
+
+    if (errors.length > 0) {
+      this.log(`❌ Deployment completed with ${errors.length} errors:`, 'error');
+      errors.forEach(error => this.log(`   - ${error}`, 'error'));
+      
+      if (errors.length === this.functions.length) {
+        throw new Error('All function deployments failed');
       }
     } else {
-      failCount++;
+      this.log(`✅ All functions deployed successfully to ${environment}`, 'success');
     }
-    
-    log(''); // Empty line for readability
+
+    return report;
   }
-  
-  // Summary
-  log('📊 Deployment Summary:', 'magenta');
-  log(`✅ Successful: ${successCount}`, 'green');
-  log(`❌ Failed: ${failCount}`, failCount > 0 ? 'red' : 'green');
-  
-  if (failCount > 0) {
-    log('⚠️  Some deployments failed. Check the logs above.', 'yellow');
-    process.exit(1);
-  } else {
-    log('🎉 All functions deployed successfully!', 'green');
+
+  async verifyFunction(functionName, environment) {
+    const config = this.environments[environment];
+    this.log(`🔍 Verifying function ${functionName} in ${environment}...`, 'info');
+
+    try {
+      // Get function URL
+      const functionUrl = `${config.url}/functions/v1/${functionName}`;
+      
+      // Test basic connectivity with OPTIONS request (CORS preflight)
+      const response = await fetch(functionUrl, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'https://localhost:3000',
+          'Access-Control-Request-Method': 'POST'
+        }
+      });
+
+      if (response.ok) {
+        this.log(`✅ Function ${functionName} is responding`, 'success');
+        return true;
+      } else {
+        throw new Error(`Function returned status ${response.status}`);
+      }
+
+    } catch (error) {
+      this.log(`❌ Function ${functionName} verification failed: ${error.message}`, 'error');
+      throw error;
+    }
+  }
+
+  async verifyAllFunctions(environment) {
+    this.log(`🔍 Verifying all functions in ${environment}...`, 'info');
+    
+    const results = [];
+    const errors = [];
+
+    for (const functionName of this.functions) {
+      try {
+        await this.verifyFunction(functionName, environment);
+        results.push({ functionName, status: 'healthy' });
+      } catch (error) {
+        errors.push({ functionName, error: error.message });
+        results.push({ functionName, status: 'unhealthy', error: error.message });
+      }
+    }
+
+    const report = {
+      environment,
+      timestamp: new Date().toISOString(),
+      totalFunctions: this.functions.length,
+      healthyFunctions: results.filter(r => r.status === 'healthy').length,
+      unhealthyFunctions: errors.length,
+      results
+    };
+
+    this.log(`📊 Verification complete: ${report.healthyFunctions}/${report.totalFunctions} functions healthy`, 
+      errors.length === 0 ? 'success' : 'warning');
+
+    return report;
+  }
+
+  async rollbackFunction(functionName, environment, version) {
+    this.log(`🔄 Rolling back ${functionName} in ${environment} to version ${version}...`, 'warning');
+    
+    // Note: Supabase doesn't have built-in rollback, so this would require
+    // maintaining deployment history and redeploying previous versions
+    
+    throw new Error('Rollback functionality requires implementation of version management');
+  }
+
+  async createDeploymentPlan(environment, options = {}) {
+    const { includeVerification = true, parallel = false } = options;
+    
+    const plan = {
+      environment,
+      functions: this.functions,
+      steps: [],
+      estimatedTime: 0
+    };
+
+    // Pre-deployment validation
+    plan.steps.push({
+      name: 'Environment Validation',
+      type: 'validation',
+      estimatedTime: 5000
+    });
+
+    plan.steps.push({
+      name: 'Function Validation',
+      type: 'validation',
+      estimatedTime: 3000
+    });
+
+    // Deployment steps
+    if (parallel) {
+      plan.steps.push({
+        name: 'Deploy All Functions (Parallel)',
+        type: 'deployment',
+        functions: this.functions,
+        estimatedTime: 30000
+      });
+    } else {
+      this.functions.forEach(functionName => {
+        plan.steps.push({
+          name: `Deploy ${functionName}`,
+          type: 'deployment',
+          function: functionName,
+          estimatedTime: 15000
+        });
+      });
+    }
+
+    // Verification steps
+    if (includeVerification) {
+      plan.steps.push({
+        name: 'Verify All Functions',
+        type: 'verification',
+        estimatedTime: 10000
+      });
+    }
+
+    plan.estimatedTime = plan.steps.reduce((total, step) => total + step.estimatedTime, 0);
+
+    return plan;
+  }
+
+  saveDeploymentReport(report) {
+    const reportsDir = 'deployment-reports';
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    const filename = `edge-functions-${report.environment}-${Date.now()}.json`;
+    const filepath = path.join(reportsDir, filename);
+    
+    fs.writeFileSync(filepath, JSON.stringify(report, null, 2));
+    this.log(`📄 Deployment report saved: ${filepath}`, 'info');
+  }
+
+  async runHealthCheck(environment) {
+    this.log(`🏥 Running health check for ${environment}...`, 'info');
+    
+    const healthReport = await this.verifyAllFunctions(environment);
+    
+    // Save health check report
+    const reportsDir = 'deployment-reports';
+    if (!fs.existsSync(reportsDir)) {
+      fs.mkdirSync(reportsDir, { recursive: true });
+    }
+
+    const filename = `health-check-${environment}-${Date.now()}.json`;
+    const filepath = path.join(reportsDir, filename);
+    
+    fs.writeFileSync(filepath, JSON.stringify(healthReport, null, 2));
+    this.log(`📄 Health check report saved: ${filepath}`, 'info');
+
+    return healthReport;
   }
 }
 
-// Handle script execution
+// CLI Interface
+async function main() {
+  const args = process.argv.slice(2);
+  const deployer = new EdgeFunctionDeployer();
+
+  try {
+    const command = args[0];
+    const environment = args[1] || 'staging';
+
+    switch (command) {
+      case 'deploy':
+        const functionName = args[2];
+        const dryRun = args.includes('--dry-run');
+        const parallel = args.includes('--parallel');
+        const continueOnError = args.includes('--continue-on-error');
+
+        if (functionName) {
+          await deployer.deployFunction(functionName, environment, { dryRun });
+        } else {
+          await deployer.deployAllFunctions(environment, { 
+            dryRun, 
+            parallel, 
+            continueOnError 
+          });
+        }
+        break;
+
+      case 'verify':
+        const verifyFunction = args[2];
+        if (verifyFunction) {
+          await deployer.verifyFunction(verifyFunction, environment);
+        } else {
+          await deployer.verifyAllFunctions(environment);
+        }
+        break;
+
+      case 'health-check':
+        await deployer.runHealthCheck(environment);
+        break;
+
+      case 'plan':
+        const plan = await deployer.createDeploymentPlan(environment, {
+          parallel: args.includes('--parallel')
+        });
+        console.log(JSON.stringify(plan, null, 2));
+        break;
+
+      case 'rollback':
+        const rollbackFunction = args[2];
+        const version = args[3];
+        if (!rollbackFunction || !version) {
+          throw new Error('Usage: rollback <environment> <function> <version>');
+        }
+        await deployer.rollbackFunction(rollbackFunction, environment, version);
+        break;
+
+      default:
+        console.log(`
+Edge Functions Deployment Pipeline
+
+Usage:
+  node scripts/deploy-edge-functions.js <command> [environment] [options]
+
+Commands:
+  deploy [function]     Deploy all functions or specific function
+  verify [function]     Verify all functions or specific function
+  health-check         Run comprehensive health check
+  plan                 Show deployment plan
+  rollback <function> <version>  Rollback function to previous version
+
+Environments:
+  staging              Deploy to staging environment
+  production           Deploy to production environment
+
+Options:
+  --dry-run           Show what would be deployed without deploying
+  --parallel          Deploy functions in parallel (faster)
+  --continue-on-error Continue deployment even if some functions fail
+
+Examples:
+  node scripts/deploy-edge-functions.js deploy staging --dry-run
+  node scripts/deploy-edge-functions.js deploy production --parallel
+  node scripts/deploy-edge-functions.js verify staging
+  node scripts/deploy-edge-functions.js health-check production
+        `);
+        process.exit(1);
+    }
+
+  } catch (error) {
+    console.error(`\n❌ Deployment failed: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+// Export for use as module
+module.exports = EdgeFunctionDeployer;
+
+// Run CLI if script is executed directly
 if (require.main === module) {
   main();
 }
-
-module.exports = {
-  deployFunction,
-  getFunctionDirectories,
-  checkPrerequisites
-};

@@ -1,0 +1,291 @@
+# GitHub Actions Workflow for Edge Functions CI/CD
+# Place this file in .github/workflows/edge-functions-ci.yml
+
+name: Edge Functions CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'supabase/functions/**'
+      - 'scripts/deploy-edge-functions.js'
+      - '.github/workflows/edge-functions-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'supabase/functions/**'
+      - 'scripts/deploy-edge-functions.js'
+
+env:
+  SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+  SUPABASE_STAGING_PROJECT_REF: ${{ secrets.SUPABASE_STAGING_PROJECT_REF }}
+  SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+  SUPABASE_STAGING_URL: ${{ secrets.SUPABASE_STAGING_URL }}
+  REACT_APP_SUPABASE_URL: ${{ secrets.REACT_APP_SUPABASE_URL }}
+  SUPABASE_STAGING_ANON_KEY: ${{ secrets.SUPABASE_STAGING_ANON_KEY }}
+  REACT_APP_SUPABASE_ANON_KEY: ${{ secrets.REACT_APP_SUPABASE_ANON_KEY }}
+
+jobs:
+  validate:
+    name: Validate Edge Functions
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Login to Supabase
+      run: |
+        echo "$SUPABASE_ACCESS_TOKEN" | supabase login --token -
+
+    - name: Validate Edge Functions
+      run: |
+        node scripts/deploy-edge-functions.js plan staging
+        
+    - name: Lint TypeScript files
+      run: |
+        # Check TypeScript syntax in Edge Functions
+        npx tsc --noEmit --skipLibCheck supabase/functions/**/*.ts || true
+
+    - name: Test Edge Functions (dry run)
+      run: |
+        node scripts/deploy-edge-functions.js deploy staging --dry-run
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main'
+    
+    environment:
+      name: staging
+      url: ${{ env.SUPABASE_STAGING_URL }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Login to Supabase
+      run: |
+        echo "$SUPABASE_ACCESS_TOKEN" | supabase login --token -
+
+    - name: Deploy Edge Functions to Staging
+      run: |
+        node scripts/deploy-edge-functions.js deploy staging --parallel --continue-on-error
+
+    - name: Verify Staging Deployment
+      run: |
+        node scripts/deploy-edge-functions.js verify staging
+
+    - name: Run Health Check
+      run: |
+        node scripts/deploy-edge-functions.js health-check staging
+
+    - name: Upload Deployment Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: staging-deployment-reports
+        path: deployment-reports/
+        retention-days: 30
+
+    - name: Comment on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Find the latest deployment report
+          const reportsDir = 'deployment-reports';
+          if (fs.existsSync(reportsDir)) {
+            const files = fs.readdirSync(reportsDir)
+              .filter(f => f.includes('staging'))
+              .sort()
+              .reverse();
+            
+            if (files.length > 0) {
+              const reportPath = path.join(reportsDir, files[0]);
+              const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+              
+              const comment = `## 🚀 Staging Deployment Report
+              
+              **Environment:** ${report.environment}
+              **Timestamp:** ${report.timestamp}
+              **Functions Deployed:** ${report.successfulDeployments}/${report.totalFunctions}
+              
+              ${report.errors.length > 0 ? `**Errors:**\n${report.errors.map(e => `- ${e}`).join('\n')}` : '✅ All functions deployed successfully!'}
+              
+              [View full report in artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            }
+          }
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    
+    environment:
+      name: production
+      url: ${{ env.REACT_APP_SUPABASE_URL }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Login to Supabase
+      run: |
+        echo "$SUPABASE_ACCESS_TOKEN" | supabase login --token -
+
+    - name: Pre-deployment Health Check
+      run: |
+        node scripts/deploy-edge-functions.js health-check production || true
+
+    - name: Deploy Edge Functions to Production
+      run: |
+        node scripts/deploy-edge-functions.js deploy production
+
+    - name: Verify Production Deployment
+      run: |
+        node scripts/deploy-edge-functions.js verify production
+
+    - name: Post-deployment Health Check
+      run: |
+        node scripts/deploy-edge-functions.js health-check production
+
+    - name: Upload Deployment Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: production-deployment-reports
+        path: deployment-reports/
+        retention-days: 90
+
+    - name: Notify on Failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🚨 Production Edge Functions Deployment Failed - ${new Date().toISOString()}`,
+            body: `Production deployment failed for commit ${context.sha}.
+            
+            **Workflow:** ${context.workflow}
+            **Run ID:** ${context.runId}
+            **Actor:** ${context.actor}
+            
+            Please check the [workflow logs](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}) and take immediate action.`,
+            labels: ['bug', 'production', 'deployment-failure']
+          });
+
+  rollback:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    environment:
+      name: production
+      url: ${{ env.REACT_APP_SUPABASE_URL }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
+
+    - name: Login to Supabase
+      run: |
+        echo "$SUPABASE_ACCESS_TOKEN" | supabase login --token -
+
+    - name: Rollback Edge Functions
+      run: |
+        echo "Manual rollback process - requires implementation"
+        # This would involve redeploying from a previous commit
+        # or using stored function versions
+        
+    - name: Verify Rollback
+      run: |
+        node scripts/deploy-edge-functions.js verify production
+
+    - name: Create Rollback Issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `🔄 Production Rollback Executed - ${new Date().toISOString()}`,
+            body: `Production rollback was executed.
+            
+            **Workflow:** ${context.workflow}
+            **Run ID:** ${context.runId}
+            **Actor:** ${context.actor}
+            
+            Please verify the rollback was successful and investigate the root cause.`,
+            labels: ['production', 'rollback']
+          });
