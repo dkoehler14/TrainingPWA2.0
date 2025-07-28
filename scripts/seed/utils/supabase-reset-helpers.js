@@ -109,7 +109,7 @@ async function clearSupabaseUserData(options = {}) {
         query = query.eq(condition.column, condition.value);
       } else {
         // Delete all records by using a condition that's always true
-        query = query.neq('id', 'impossible-id-that-never-exists');
+        query = query.neq('id', '00000000-0000-0000-0000-000000000000');
       }
       
       const { error, count } = await query;

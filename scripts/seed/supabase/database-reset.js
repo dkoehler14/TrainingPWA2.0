@@ -204,8 +204,8 @@ async function performFullReset(supabase, options = {}) {
       if (condition) {
         query = query.eq(condition.column, condition.value);
       } else {
-        // Delete all records
-        query = query.neq('id', 'impossible-id-that-never-exists');
+        // Delete all records using a valid UUID that doesn't exist
+        query = query.neq('id', '00000000-0000-0000-0000-000000000000');
       }
       
       const { error, count } = await query;
@@ -267,7 +267,7 @@ async function performUserDataReset(supabase, options = {}) {
       if (condition) {
         query = query.eq(condition.column, condition.value);
       } else {
-        query = query.neq('id', 'impossible-id-that-never-exists');
+        query = query.neq('id', '00000000-0000-0000-0000-000000000000');
       }
       
       const { error, count } = await query;
@@ -318,7 +318,7 @@ async function performSelectiveReset(supabase, options = {}) {
         const { error, count } = await supabase
           .from(table)
           .delete()
-          .neq('id', 'impossible-id-that-never-exists');
+          .neq('id', '00000000-0000-0000-0000-000000000000');
         
         if (error) {
           console.warn(`Warning: Could not clear ${table}: ${error.message}`);

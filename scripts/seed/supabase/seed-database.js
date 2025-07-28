@@ -149,8 +149,7 @@ async function seedTestUsers(supabase, options = {}) {
         available_equipment: ['Dumbbells', 'Barbell', 'Bench'],
         injuries: [],
         preferences: { theme: 'light', notifications: true },
-        settings: { autoSave: true, showTips: true },
-        scenarioName: 'Basic Test User'
+        settings: { autoSave: true, showTips: true }
       }
     ],
     beginner: [
@@ -168,8 +167,7 @@ async function seedTestUsers(supabase, options = {}) {
         available_equipment: ['Dumbbells', 'Resistance Bands'],
         injuries: [],
         preferences: { theme: 'dark', notifications: false },
-        settings: { autoSave: false, showTips: true },
-        scenarioName: 'Beginner'
+        settings: { autoSave: false, showTips: true }
       }
     ],
     intermediate: [
@@ -187,8 +185,7 @@ async function seedTestUsers(supabase, options = {}) {
         available_equipment: ['Dumbbells', 'Barbell', 'Bench', 'Pull-up Bar'],
         injuries: ['Lower Back'],
         preferences: { theme: 'light', notifications: true },
-        settings: { autoSave: true, showTips: false },
-        scenarioName: 'Intermediate'
+        settings: { autoSave: true, showTips: false }
       }
     ],
     advanced: [
@@ -206,8 +203,7 @@ async function seedTestUsers(supabase, options = {}) {
         available_equipment: ['Dumbbells', 'Barbell', 'Bench', 'Pull-up Bar', 'Squat Rack'],
         injuries: [],
         preferences: { theme: 'dark', notifications: true },
-        settings: { autoSave: true, showTips: false },
-        scenarioName: 'Advanced'
+        settings: { autoSave: true, showTips: false }
       }
     ],
     comprehensive: [
