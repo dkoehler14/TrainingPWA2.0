@@ -11,9 +11,17 @@ const { createClient } = require('@supabase/supabase-js');
 /**
  * Get Supabase client configured for local development
  */
-function getSupabaseClient() {
-  const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'http://127.0.0.1:54321';
-  const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+function getSupabaseClient(useServiceRole = false) {
+  const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 
+                     process.env.REACT_APP_SUPABASE_LOCAL_URL || 
+                     'http://127.0.0.1:54321';
+  
+  // Use service role key for seeding operations to bypass RLS
+  const supabaseKey = useServiceRole 
+    ? (process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU')
+    : (process.env.REACT_APP_SUPABASE_ANON_KEY || 
+       process.env.REACT_APP_SUPABASE_LOCAL_ANON_KEY || 
+       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0');
   
   return createClient(supabaseUrl, supabaseKey, {
     auth: {
@@ -28,11 +36,12 @@ function getSupabaseClient() {
  */
 async function validateSupabaseConnection() {
   try {
-    const supabase = getSupabaseClient();
+    // Use service role for seeding operations to bypass RLS
+    const supabase = getSupabaseClient(true);
     
-    // Test basic connection by querying a system table
+    // Test basic connection by querying the users table
     const { data, error } = await supabase
-      .from('exercises')
+      .from('users')
       .select('count')
       .limit(1);
     
@@ -84,7 +93,8 @@ async function checkSupabaseHealth() {
  * Get database statistics for status reporting
  */
 async function getSupabaseStats() {
-  const supabase = getSupabaseClient();
+  // Use service role for admin operations
+  const supabase = getSupabaseClient(true);
   
   try {
     const [usersResult, programsResult, workoutLogsResult, exercisesResult] = await Promise.all([
@@ -115,7 +125,8 @@ async function getSupabaseStats() {
  * Reset all test data in Supabase database
  */
 async function resetSupabaseData(options = {}) {
-  const supabase = getSupabaseClient();
+  // Use service role for reset operations to bypass RLS
+  const supabase = getSupabaseClient(true);
   const { verbose = false } = options;
   
   if (verbose) {
@@ -180,7 +191,8 @@ async function resetSupabaseData(options = {}) {
  * Seed basic exercise data if not present
  */
 async function ensureBasicExercises() {
-  const supabase = getSupabaseClient();
+  // Use service role for seeding operations
+  const supabase = getSupabaseClient(true);
   
   // Check if exercises already exist
   const { data: existingExercises, error } = await supabase

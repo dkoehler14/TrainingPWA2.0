@@ -23,7 +23,7 @@ async function generateAdvancedTestData(options = {}) {
     verbose = false
   } = options;
   
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for data generation
   const startTime = Date.now();
   
   if (verbose) {

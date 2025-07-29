@@ -96,8 +96,8 @@ INSERT INTO workout_log_exercises (id, workout_log_id, exercise_id, sets, reps, 
 ('550e8400-e29b-41d4-a716-446655440603', '550e8400-e29b-41d4-a716-446655440501', '550e8400-e29b-41d4-a716-446655440009', 3, '{12,12,10}', '{185,185,185}', '{true,true,true}', NULL, 'Deep squats', false, NULL, 1, 1),
 ('550e8400-e29b-41d4-a716-446655440604', '550e8400-e29b-41d4-a716-446655440501', '550e8400-e29b-41d4-a716-446655440008', 3, '{5,5,5}', '{225,225,225}', '{true,true,true}', NULL, 'PR attempt', false, NULL, 2, 2),
 -- Quick workout exercises
-('550e8400-e29b-41d4-a716-446655440605', '550e8400-e29b-41d4-a716-446655440503', '550e8400-e29b-41d4-a716-446655440002', 3, '{15,12,10}', '{0,0,0}', '{true,true,true}', 150.0, 'Bodyweight only', true, 'quick_add', -1, 1),
-('550e8400-e29b-41d4-a716-446655440606', '550e8400-e29b-41d4-a716-446655440503', '550e8400-e29b-41d4-a716-446655440015', 1, '{60}', '{0}', '{true}', 150.0, '1 minute hold', true, 'quick_add', -1, 2);
+('550e8400-e29b-41d4-a716-446655440605', '550e8400-e29b-41d4-a716-446655440503', '550e8400-e29b-41d4-a716-446655440002', 3, '{15,12,10}', '{0,0,0}', '{true,true,true}', 150.0, 'Bodyweight only', true, 'custom', -1, 1),
+('550e8400-e29b-41d4-a716-446655440606', '550e8400-e29b-41d4-a716-446655440503', '550e8400-e29b-41d4-a716-446655440015', 1, '{60}', '{0}', '{true}', 150.0, '1 minute hold', true, 'custom', -1, 2);
 
 -- Create sample user analytics
 INSERT INTO user_analytics (id, user_id, exercise_id, total_volume, max_weight, total_reps, total_sets, last_workout_date, pr_date) VALUES

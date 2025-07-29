@@ -14,53 +14,53 @@ const { logProgress, logSection } = require('../utils/logger');
  * Comprehensive database seeding with realistic data
  */
 async function seedDatabase(options = {}) {
-  const { 
-    verbose = false, 
-    includeHistoricalData = true, 
+  const {
+    verbose = false,
+    includeHistoricalData = true,
     scenario = 'basic',
     scenarios = null,
-    generateProgressiveData = true 
+    generateProgressiveData = true
   } = options;
-  
-  const supabase = getSupabaseClient();
+
+  const supabase = getSupabaseClient(true); // Use service role for seeding
   const startTime = Date.now();
-  
+
   if (verbose) {
     logSection('Comprehensive Database Seeding');
     logProgress(`Seeding scenario: ${scenarios ? scenarios.join(', ') : scenario}`, 'info');
   }
-  
+
   try {
     // Step 1: Ensure global exercises exist
     await seedGlobalExercises(supabase, { verbose });
-    
+
     // Step 2: Create test users with varied profiles based on scenarios
     const users = await seedTestUsers(supabase, { verbose, scenario, scenarios });
-    
+
     // Step 3: Create programs for each user
     const programs = await seedUserPrograms(supabase, users, { verbose });
-    
+
     // Step 4: Create program workouts and exercises
     const workouts = await seedProgramWorkouts(supabase, programs, { verbose });
-    
+
     // Step 5: Create historical workout data if requested
     let workoutLogs = [];
     if (includeHistoricalData) {
-      workoutLogs = await seedHistoricalWorkouts(supabase, users, programs, { 
-        verbose, 
-        generateProgressiveData 
+      workoutLogs = await seedHistoricalWorkouts(supabase, users, programs, {
+        verbose,
+        generateProgressiveData
       });
     }
-    
+
     // Step 6: Generate user analytics based on workout history
     await generateUserAnalytics(supabase, users, workoutLogs, { verbose });
-    
+
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    
+
     if (verbose) {
       logProgress('✅ Database seeding completed successfully', 'success');
     }
-    
+
     return {
       success: true,
       summary: {
@@ -90,33 +90,33 @@ async function seedDatabase(options = {}) {
  */
 async function seedGlobalExercises(supabase, options = {}) {
   const { verbose = false } = options;
-  
+
   if (verbose) {
     logProgress('Checking global exercises...', 'info');
   }
-  
+
   // Check if exercises already exist
   const { data: existingExercises, error } = await supabase
     .from('exercises')
     .select('id')
     .eq('is_global', true)
     .limit(1);
-  
+
   if (error) {
     throw new Error(`Failed to check existing exercises: ${error.message}`);
   }
-  
+
   if (existingExercises && existingExercises.length > 0) {
     if (verbose) {
       logProgress('Global exercises already exist, skipping...', 'info');
     }
     return;
   }
-  
+
   if (verbose) {
     logProgress('Seeding global exercises...', 'info');
   }
-  
+
   // This would typically be handled by the SQL seed file
   // For now, we'll assume it's already been run
   logProgress('Global exercises should be seeded via supabase/seed.sql', 'warning');
@@ -127,11 +127,11 @@ async function seedGlobalExercises(supabase, options = {}) {
  */
 async function seedTestUsers(supabase, options = {}) {
   const { verbose = false, scenario = 'basic', scenarios = null } = options;
-  
+
   if (verbose) {
     logProgress('Creating test users...', 'info');
   }
-  
+
   // Define user templates for different scenarios
   const userTemplates = {
     basic: [
@@ -244,7 +244,7 @@ async function seedTestUsers(supabase, options = {}) {
       }
     ]
   };
-  
+
   // Determine which users to create based on scenario/scenarios
   let usersToCreate = [];
   if (scenarios && Array.isArray(scenarios)) {
@@ -259,15 +259,15 @@ async function seedTestUsers(supabase, options = {}) {
     // Default to basic if scenario not found
     usersToCreate = userTemplates.basic;
   }
-  
+
   // Add all basic users for comprehensive scenario
   if (scenario === 'comprehensive' || (scenarios && scenarios.includes('comprehensive'))) {
-    usersToCreate.push(...userTemplates.basic, ...userTemplates.beginner, 
-                      ...userTemplates.intermediate, ...userTemplates.advanced);
+    usersToCreate.push(...userTemplates.basic, ...userTemplates.beginner,
+      ...userTemplates.intermediate, ...userTemplates.advanced);
   }
-  
+
   const createdUsers = [];
-  
+
   for (const userData of usersToCreate) {
     try {
       const { data: user, error } = await supabase
@@ -275,18 +275,18 @@ async function seedTestUsers(supabase, options = {}) {
         .upsert(userData)
         .select()
         .single();
-      
+
       if (error) {
         console.warn(`Warning: Could not create user ${userData.email}: ${error.message}`);
         continue;
       }
-      
-      createdUsers.push({ 
-        ...user, 
+
+      createdUsers.push({
+        ...user,
         password: 'testpass123',
-        scenarioName: userData.scenarioName 
+        scenarioName: userData.scenarioName
       });
-      
+
       if (verbose) {
         logProgress(`  ✅ Created user: ${user.name} (${user.email}) - ${userData.scenarioName}`, 'info');
       }
@@ -294,7 +294,7 @@ async function seedTestUsers(supabase, options = {}) {
       console.warn(`Warning: Error creating user ${userData.email}:`, error.message);
     }
   }
-  
+
   return createdUsers;
 }
 
@@ -303,18 +303,18 @@ async function seedTestUsers(supabase, options = {}) {
  */
 async function seedUserPrograms(supabase, users, options = {}) {
   const { verbose = false } = options;
-  
+
   if (verbose) {
     logProgress('Creating user programs...', 'info');
   }
-  
+
   const programs = [];
-  
+
   for (const user of users) {
     const userPrograms = await createProgramsForUser(supabase, user, { verbose });
     programs.push(...userPrograms);
   }
-  
+
   return programs;
 }
 
@@ -323,10 +323,10 @@ async function seedUserPrograms(supabase, users, options = {}) {
  */
 async function createProgramsForUser(supabase, user, options = {}) {
   const { verbose = false } = options;
-  
+
   const programTemplates = getProgramTemplatesForUser(user);
   const createdPrograms = [];
-  
+
   for (const template of programTemplates) {
     try {
       const { data: program, error } = await supabase
@@ -334,14 +334,14 @@ async function createProgramsForUser(supabase, user, options = {}) {
         .upsert(template)
         .select()
         .single();
-      
+
       if (error) {
         console.warn(`Warning: Could not create program ${template.name}: ${error.message}`);
         continue;
       }
-      
+
       createdPrograms.push(program);
-      
+
       if (verbose) {
         logProgress(`    ✅ Created program: ${program.name}`, 'info');
       }
@@ -349,7 +349,7 @@ async function createProgramsForUser(supabase, user, options = {}) {
       console.warn(`Warning: Error creating program ${template.name}:`, error.message);
     }
   }
-  
+
   return createdPrograms;
 }
 
@@ -367,7 +367,7 @@ function getProgramTemplatesForUser(user) {
     start_date: new Date().toISOString().split('T')[0],
     completed_weeks: 0
   };
-  
+
   switch (user.experience_level) {
     case 'beginner':
       return [
@@ -382,7 +382,7 @@ function getProgramTemplatesForUser(user) {
           is_current: true
         }
       ];
-    
+
     case 'intermediate':
       return [
         {
@@ -396,7 +396,7 @@ function getProgramTemplatesForUser(user) {
           is_current: true
         }
       ];
-    
+
     case 'advanced':
       return [
         {
@@ -411,7 +411,7 @@ function getProgramTemplatesForUser(user) {
           completed_weeks: 2
         }
       ];
-    
+
     default:
       return [
         {
@@ -433,18 +433,18 @@ function getProgramTemplatesForUser(user) {
  */
 async function seedProgramWorkouts(supabase, programs, options = {}) {
   const { verbose = false } = options;
-  
+
   if (verbose) {
     logProgress('Creating program workouts...', 'info');
   }
-  
+
   const allWorkouts = [];
-  
+
   for (const program of programs) {
     const workouts = await createWorkoutsForProgram(supabase, program, { verbose });
     allWorkouts.push(...workouts);
   }
-  
+
   return allWorkouts;
 }
 
@@ -453,10 +453,10 @@ async function seedProgramWorkouts(supabase, programs, options = {}) {
  */
 async function createWorkoutsForProgram(supabase, program, options = {}) {
   const { verbose = false } = options;
-  
+
   const workoutTemplates = getWorkoutTemplatesForProgram(program);
   const createdWorkouts = [];
-  
+
   for (const workoutTemplate of workoutTemplates) {
     try {
       // Create the workout
@@ -465,12 +465,12 @@ async function createWorkoutsForProgram(supabase, program, options = {}) {
         .upsert(workoutTemplate.workout)
         .select()
         .single();
-      
+
       if (workoutError) {
         console.warn(`Warning: Could not create workout ${workoutTemplate.workout.name}: ${workoutError.message}`);
         continue;
       }
-      
+
       // Create exercises for this workout
       const exercises = [];
       for (const exerciseTemplate of workoutTemplate.exercises) {
@@ -478,23 +478,23 @@ async function createWorkoutsForProgram(supabase, program, options = {}) {
           ...exerciseTemplate,
           workout_id: workout.id
         };
-        
+
         const { data: exercise, error: exerciseError } = await supabase
           .from('program_exercises')
           .upsert(exerciseData)
           .select()
           .single();
-        
+
         if (exerciseError) {
           console.warn(`Warning: Could not create exercise: ${exerciseError.message}`);
           continue;
         }
-        
+
         exercises.push(exercise);
       }
-      
+
       createdWorkouts.push({ ...workout, exercises });
-      
+
       if (verbose) {
         logProgress(`    ✅ Created workout: ${workout.name} (${exercises.length} exercises)`, 'info');
       }
@@ -502,7 +502,7 @@ async function createWorkoutsForProgram(supabase, program, options = {}) {
       console.warn(`Warning: Error creating workout:`, error.message);
     }
   }
-  
+
   return createdWorkouts;
 }
 
@@ -511,7 +511,7 @@ async function createWorkoutsForProgram(supabase, program, options = {}) {
  */
 function getWorkoutTemplatesForProgram(program) {
   const baseId = program.id.slice(0, -3);
-  
+
   switch (program.difficulty) {
     case 'beginner':
       return [
@@ -592,7 +592,7 @@ function getWorkoutTemplatesForProgram(program) {
           ]
         }
       ];
-    
+
     case 'intermediate':
       return [
         {
@@ -672,7 +672,7 @@ function getWorkoutTemplatesForProgram(program) {
           ]
         }
       ];
-    
+
     case 'advanced':
       return [
         {
@@ -714,7 +714,7 @@ function getWorkoutTemplatesForProgram(program) {
           ]
         }
       ];
-    
+
     default:
       return [];
   }
@@ -725,25 +725,25 @@ function getWorkoutTemplatesForProgram(program) {
  */
 async function seedHistoricalWorkouts(supabase, users, programs, options = {}) {
   const { verbose = false, generateProgressiveData = true } = options;
-  
+
   if (verbose) {
     logProgress('Creating historical workout data...', 'info');
   }
-  
+
   const allWorkoutLogs = [];
-  
+
   for (const user of users) {
     const userPrograms = programs.filter(p => p.user_id === user.id);
-    
+
     for (const program of userPrograms) {
-      const workoutLogs = await createProgressiveWorkoutLogs(supabase, user, program, { 
-        verbose, 
-        generateProgressiveData 
+      const workoutLogs = await createProgressiveWorkoutLogs(supabase, user, program, {
+        verbose,
+        generateProgressiveData
       });
       allWorkoutLogs.push(...workoutLogs);
     }
   }
-  
+
   return allWorkoutLogs;
 }
 
@@ -752,11 +752,11 @@ async function seedHistoricalWorkouts(supabase, users, programs, options = {}) {
  */
 async function createProgressiveWorkoutLogs(supabase, user, program, options = {}) {
   const { verbose = false, generateProgressiveData = true } = options;
-  
+
   const workoutLogs = [];
   const weeksToGenerate = Math.min(program.completed_weeks + 1, 4); // Generate up to 4 weeks
   const baseId = user.id.slice(0, -3);
-  
+
   // Get program workouts to base logs on
   const { data: programWorkouts, error: workoutsError } = await supabase
     .from('program_workouts')
@@ -770,21 +770,21 @@ async function createProgressiveWorkoutLogs(supabase, user, program, options = {
     .eq('program_id', program.id)
     .order('week_number')
     .order('day_number');
-  
+
   if (workoutsError || !programWorkouts) {
     console.warn(`Warning: Could not fetch program workouts: ${workoutsError?.message}`);
     return workoutLogs;
   }
-  
+
   let logCounter = 500;
-  
+
   for (let week = 1; week <= weeksToGenerate; week++) {
     const weekWorkouts = programWorkouts.filter(w => w.week_number === week);
-    
+
     for (const programWorkout of weekWorkouts) {
       const daysAgo = (weeksToGenerate - week) * 7 + (3 - programWorkout.day_number);
       const workoutDate = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-      
+
       const workoutLogData = {
         id: `${baseId}${logCounter.toString(16)}`,
         user_id: user.id,
@@ -801,42 +801,42 @@ async function createProgressiveWorkoutLogs(supabase, user, program, options = {
         duration: 45 + Math.floor(Math.random() * 30), // 45-75 minutes
         notes: generateWorkoutNotes(week, programWorkout.name)
       };
-      
+
       try {
         const { data: workoutLog, error: logError } = await supabase
           .from('workout_logs')
           .upsert(workoutLogData)
           .select()
           .single();
-        
+
         if (logError) {
           console.warn(`Warning: Could not create workout log: ${logError.message}`);
           continue;
         }
-        
+
         // Create workout log exercises with progression
         const logExercises = await createWorkoutLogExercises(
-          supabase, 
-          workoutLog, 
+          supabase,
+          workoutLog,
           programWorkout.program_exercises || [],
           week,
           user,
           { generateProgressiveData }
         );
-        
+
         workoutLogs.push({ ...workoutLog, exercises: logExercises });
-        
+
         if (verbose) {
           logProgress(`      ✅ Created workout log: ${workoutLog.name} (Week ${week}, ${logExercises.length} exercises)`, 'info');
         }
-        
+
         logCounter++;
       } catch (error) {
         console.warn(`Warning: Error creating workout log:`, error.message);
       }
     }
   }
-  
+
   return workoutLogs;
 }
 
@@ -847,34 +847,34 @@ async function createWorkoutLogExercises(supabase, workoutLog, programExercises,
   const { generateProgressiveData = true } = options;
   const logExercises = [];
   const baseId = workoutLog.id.slice(0, -3);
-  
+
   let exerciseCounter = 600;
-  
+
   for (const programExercise of programExercises) {
     const baseWeight = getBaseWeightForExercise(programExercise.exercises.name, user);
-    const progressiveWeight = generateProgressiveData ? 
-      baseWeight + (week - 1) * getProgressionIncrement(programExercise.exercises.name, user) : 
+    const progressiveWeight = generateProgressiveData ?
+      baseWeight + (week - 1) * getProgressionIncrement(programExercise.exercises.name, user) :
       baseWeight;
-    
+
     const sets = programExercise.sets;
     const targetReps = programExercise.reps || 10;
-    
+
     // Generate realistic rep and weight arrays
     const reps = [];
     const weights = [];
     const completed = [];
-    
+
     for (let set = 0; set < sets; set++) {
       // Simulate fatigue - later sets might have fewer reps
-      const actualReps = set === 0 ? targetReps : 
-                        set === 1 ? targetReps : 
-                        Math.max(targetReps - Math.floor(Math.random() * 3), targetReps - 2);
-      
+      const actualReps = set === 0 ? targetReps :
+        set === 1 ? targetReps :
+          Math.max(targetReps - Math.floor(Math.random() * 3), targetReps - 2);
+
       reps.push(actualReps);
       weights.push(progressiveWeight);
       completed.push(true);
     }
-    
+
     const exerciseLogData = {
       id: `${baseId}${exerciseCounter.toString(16)}`,
       workout_log_id: workoutLog.id,
@@ -890,26 +890,26 @@ async function createWorkoutLogExercises(supabase, workoutLog, programExercises,
       original_index: programExercise.order_index,
       order_index: programExercise.order_index
     };
-    
+
     try {
       const { data: logExercise, error } = await supabase
         .from('workout_log_exercises')
         .upsert(exerciseLogData)
         .select()
         .single();
-      
+
       if (error) {
         console.warn(`Warning: Could not create workout log exercise: ${error.message}`);
         continue;
       }
-      
+
       logExercises.push(logExercise);
       exerciseCounter++;
     } catch (error) {
       console.warn(`Warning: Error creating workout log exercise:`, error.message);
     }
   }
-  
+
   return logExercises;
 }
 
@@ -922,7 +922,7 @@ function getBaseWeightForExercise(exerciseName, user) {
     intermediate: 0.8,
     advanced: 1.0
   };
-  
+
   const baseWeights = {
     'Bench Press': user.preferred_units === 'LB' ? 135 : 60,
     'Squat': user.preferred_units === 'LB' ? 155 : 70,
@@ -934,10 +934,10 @@ function getBaseWeightForExercise(exerciseName, user) {
     'Bicep Curls': user.preferred_units === 'LB' ? 25 : 12,
     'Lateral Raises': user.preferred_units === 'LB' ? 15 : 7
   };
-  
+
   const baseWeight = baseWeights[exerciseName] || (user.preferred_units === 'LB' ? 45 : 20);
   const multiplier = experienceMultipliers[user.experience_level] || 0.8;
-  
+
   return Math.round(baseWeight * multiplier);
 }
 
@@ -946,13 +946,13 @@ function getBaseWeightForExercise(exerciseName, user) {
  */
 function getProgressionIncrement(exerciseName, user) {
   const increment = user.preferred_units === 'LB' ? 5 : 2.5;
-  
+
   // Smaller increments for isolation exercises
   const smallIncrementExercises = ['Bicep Curls', 'Lateral Raises', 'Tricep Extensions'];
   if (smallIncrementExercises.includes(exerciseName)) {
     return user.preferred_units === 'LB' ? 2.5 : 1.25;
   }
-  
+
   return increment;
 }
 
@@ -970,11 +970,11 @@ function generateWorkoutNotes(week, workoutName) {
     'Felt tired but pushed through',
     'Excellent mind-muscle connection'
   ];
-  
+
   if (week === 1) {
     return 'First week - focusing on form and getting used to the routine';
   }
-  
+
   return notes[Math.floor(Math.random() * notes.length)];
 }
 
@@ -988,7 +988,7 @@ function generateExerciseNotes(exerciseName, week) {
     'Deadlift': ['Perfect form', 'Strong pull', 'Good hip hinge', 'Felt explosive'],
     'Pull-ups': ['Full range', 'Good control', 'Strong pull', 'Felt the lats working']
   };
-  
+
   const notes = exerciseNotes[exerciseName] || ['Good set', 'Felt good', 'Solid reps'];
   return notes[Math.floor(Math.random() * notes.length)];
 }
@@ -998,26 +998,26 @@ function generateExerciseNotes(exerciseName, week) {
  */
 async function generateUserAnalytics(supabase, users, workoutLogs, options = {}) {
   const { verbose = false } = options;
-  
+
   if (verbose) {
     logProgress('Generating user analytics...', 'info');
   }
-  
+
   for (const user of users) {
     if (verbose) {
       logProgress(`  Generating analytics for ${user.name}...`, 'info');
     }
-    
+
     // Get all workout log exercises for this user
     const userWorkoutLogs = workoutLogs.filter(log => log.user_id === user.id);
     const exerciseStats = new Map();
-    
+
     // Calculate stats from workout logs
     for (const workoutLog of userWorkoutLogs) {
       if (workoutLog.exercises) {
         for (const exercise of workoutLog.exercises) {
           const exerciseId = exercise.exercise_id;
-          
+
           if (!exerciseStats.has(exerciseId)) {
             exerciseStats.set(exerciseId, {
               totalVolume: 0,
@@ -1028,34 +1028,34 @@ async function generateUserAnalytics(supabase, users, workoutLogs, options = {})
               prDate: null
             });
           }
-          
+
           const stats = exerciseStats.get(exerciseId);
-          
+
           // Calculate volume (weight * reps for each set)
           for (let i = 0; i < exercise.sets; i++) {
             const weight = exercise.weights[i] || 0;
             const reps = exercise.reps[i] || 0;
             stats.totalVolume += weight * reps;
             stats.totalReps += reps;
-            
+
             // Track max weight
             if (weight > stats.maxWeight) {
               stats.maxWeight = weight;
               stats.prDate = workoutLog.date;
             }
           }
-          
+
           stats.totalSets += exercise.sets;
           stats.lastWorkoutDate = workoutLog.date;
         }
       }
     }
-    
+
     // Create analytics records
     const analyticsData = [];
     let analyticsCounter = 700;
     const baseId = user.id.slice(0, -3);
-    
+
     for (const [exerciseId, stats] of exerciseStats) {
       analyticsData.push({
         id: `${baseId}${analyticsCounter.toString(16)}`,
@@ -1070,14 +1070,14 @@ async function generateUserAnalytics(supabase, users, workoutLogs, options = {})
       });
       analyticsCounter++;
     }
-    
+
     // Insert analytics data
     if (analyticsData.length > 0) {
       try {
         const { error } = await supabase
           .from('user_analytics')
           .upsert(analyticsData);
-        
+
         if (error) {
           console.warn(`Warning: Could not create analytics for ${user.name}: ${error.message}`);
         } else if (verbose) {
@@ -1100,7 +1100,7 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const verbose = args.includes('--verbose') || args.includes('-v');
   const includeHistoricalData = !args.includes('--no-history');
-  
+
   seedDatabase({ verbose, includeHistoricalData })
     .then(result => {
       if (result.success) {

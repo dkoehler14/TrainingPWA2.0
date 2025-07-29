@@ -23,7 +23,7 @@ async function resetDatabase(options = {}) {
     force = false
   } = options;
   
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for reset operations
   const startTime = Date.now();
   
   if (verbose) {
@@ -437,7 +437,7 @@ async function confirmResetOperation(mode) {
  */
 async function getDatabaseStatistics(options = {}) {
   const { verbose = false } = options;
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for statistics
   
   if (verbose) {
     logProgress('Gathering database statistics...', 'info');

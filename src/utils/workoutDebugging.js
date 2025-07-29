@@ -5,7 +5,7 @@
  * including performance monitoring, operation tracking, and migration validation.
  */
 
-import { supabaseLogger, logSupabaseQuery } from './supabaseDebugger';
+import { SupabaseLogger, supabaseLogger, logSupabaseQuery } from './supabaseDebugger';
 import { getConnectionMonitor } from './supabaseConnectionMonitor';
 import { extractErrorDetails } from './supabaseErrorHandler';
 
@@ -148,7 +148,7 @@ class WorkoutPerformanceTracker {
    * Log operation details
    */
   logOperation(operation) {
-    const logger = new supabaseLogger('WorkoutPerformance');
+    const logger = new SupabaseLogger('WorkoutPerformance');
     
     if (operation.success) {
       logger.debug(`✅ ${operation.type} completed`, {
@@ -175,7 +175,7 @@ class WorkoutPerformanceTracker {
       this.metrics.cacheMisses++;
     }
 
-    const logger = new supabaseLogger('WorkoutCache');
+    const logger = new SupabaseLogger('WorkoutCache');
     logger.debug(`${hit ? '🎯' : '❌'} Cache ${hit ? 'hit' : 'miss'}`, {
       operation,
       key,
@@ -189,7 +189,7 @@ class WorkoutPerformanceTracker {
   trackRealtimeEvent(eventType, data) {
     this.metrics.realtimeEvents++;
     
-    const logger = new supabaseLogger('WorkoutRealtime');
+    const logger = new SupabaseLogger('WorkoutRealtime');
     logger.debug(`📡 Real-time event: ${eventType}`, {
       data,
       totalEvents: this.metrics.realtimeEvents
@@ -257,7 +257,7 @@ const performanceTracker = new WorkoutPerformanceTracker();
  */
 export class WorkoutDebugger {
   constructor(context = 'WorkoutLogger') {
-    this.logger = new supabaseLogger(context);
+    this.logger = new SupabaseLogger(context);
     this.context = context;
   }
 

@@ -15,7 +15,7 @@ const { logProgress, logSection, logSummary, logError } = require('../utils/logg
  */
 async function validateDatabaseIntegrity(options = {}) {
   const { verbose = false, fix = false } = options;
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for validation
   
   if (verbose) {
     logSection('Database Integrity Validation');
@@ -306,7 +306,7 @@ async function generateTestDataPatterns(options = {}) {
     verbose = false 
   } = options;
   
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for data generation
   
   if (verbose) {
     logSection(`Generating Test Data Pattern: ${pattern}`);
@@ -376,7 +376,7 @@ async function generateProgressionPattern(supabase, options = {}) {
  */
 async function cleanupAndOptimize(options = {}) {
   const { verbose = false, vacuum = false } = options;
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for cleanup
   
   if (verbose) {
     logSection('Database Cleanup and Optimization');
@@ -438,7 +438,7 @@ async function cleanupAndOptimize(options = {}) {
  */
 async function exportDatabaseInfo(options = {}) {
   const { verbose = false, includeData = false } = options;
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseClient(true); // Use service role for export
   
   if (verbose) {
     logSection('Exporting Database Information');

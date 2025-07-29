@@ -256,6 +256,13 @@ export class PerformanceMonitor {
   }
 
   /**
+   * Record load time (alias for trackPageLoad for backward compatibility)
+   */
+  recordLoadTime(component, duration, metadata = {}) {
+    this.trackPageLoad(component, duration, metadata)
+  }
+
+  /**
    * Track application errors
    */
   trackError(error, context = {}) {
@@ -725,6 +732,9 @@ export const trackUserInteraction = (interaction, duration, metadata) =>
 
 export const trackPageLoad = (page, duration, metadata) => 
   performanceMonitor.trackPageLoad(page, duration, metadata)
+
+export const recordLoadTime = (component, duration, metadata) => 
+  performanceMonitor.recordLoadTime(component, duration, metadata)
 
 export const trackError = (error, context) => 
   performanceMonitor.trackError(error, context)

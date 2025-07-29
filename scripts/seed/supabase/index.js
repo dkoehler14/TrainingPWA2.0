@@ -221,7 +221,7 @@ async function handleStatusCommand(options) {
     const { getSupabaseClient } = require('../utils/supabase-helpers');
     const { getSupabaseResetStatistics } = require('../utils/supabase-reset-helpers');
     
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseClient(true); // Use service role for statistics
     const stats = await getSupabaseResetStatistics(supabase);
     
     console.log('Current data in Supabase database:');
