@@ -11,7 +11,7 @@ import {
   invalidateProgramCache,
   invalidateExerciseCache,
   warmUserCache,
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCache';
 import cacheWarmingService from '../services/cacheWarmingService';
 
 const CacheDemo = () => {

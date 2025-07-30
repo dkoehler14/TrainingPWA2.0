@@ -108,7 +108,7 @@ invalidateCache(['workoutLogs', 'programs'], {
 #### Cache Warming
 ```javascript
 import cacheWarmingService from '../services/cacheWarmingService';
-import { warmUserCache, warmAppCache } from '../api/enhancedFirestoreCache';
+import { warmUserCache, warmAppCache } from '../api/supabaseCache';
 
 // Smart cache warming (context-aware)
 await cacheWarmingService.smartWarmCache(userId, {

@@ -19,7 +19,7 @@ import CacheDemo from './components/CacheDemo';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
-import { getCacheStats } from './api/enhancedFirestoreCache';
+import { getCacheStats } from './api/supabaseCache';
 import cacheWarmingService from './services/cacheWarmingService';
 import {
   getDevelopmentDebuggingStatus,
