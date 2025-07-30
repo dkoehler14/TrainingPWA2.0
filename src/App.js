@@ -20,7 +20,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
 import { getCacheStats } from './api/supabaseCache';
-import cacheWarmingService from './services/cacheWarmingService';
+import cacheWarmingService from './services/supabaseCacheWarmingService';
 import {
   getDevelopmentDebuggingStatus,
   developmentLogger,

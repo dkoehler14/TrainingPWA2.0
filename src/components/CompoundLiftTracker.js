@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getSubcollectionCached, warmUserCache } from '../api/supabaseCacheMigration';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import '../styles/CompoundLiftTracker.css';
 

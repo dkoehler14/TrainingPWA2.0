@@ -4,7 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
-import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
 
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 

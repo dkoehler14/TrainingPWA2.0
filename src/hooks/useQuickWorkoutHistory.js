@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { getCollectionCached } from '../api/enhancedFirestoreCache';
+import { getCollectionCached } from '../api/supabaseCacheMigration';
 
 const useQuickWorkoutHistory = () => {
   const { user, isAuthenticated } = useContext(AuthContext);

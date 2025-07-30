@@ -135,6 +135,17 @@ function CreateProgram({ mode = 'create', userRole }) {
       try {
         if (!user) return;
         
+        // Cache warming for CreateProgram page
+        const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
+        const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
+          lastVisitedPage: 'CreateProgram',
+          timeOfDay: new Date().getHours(),
+          priority: 'low' // Lower priority since it's not as data-intensive
+        }).catch(error => {
+          console.warn('Cache warming failed:', error);
+          return null;
+        });
+        
         // Fetch exercises using Supabase
         const exercisesData = await getAvailableExercises(user.id);
         

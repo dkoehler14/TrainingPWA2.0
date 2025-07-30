@@ -12,7 +12,7 @@ import {
   invalidateExerciseCache,
   warmUserCache,
 } from '../api/supabaseCache';
-import cacheWarmingService from '../services/cacheWarmingService';
+import cacheWarmingService from '../services/supabaseCacheWarmingService';
 
 const CacheDemo = () => {
   const { user, isAuthenticated } = useContext(AuthContext);
@@ -548,7 +548,7 @@ const CacheDemo = () => {
         <Alert variant="success">
           <h6>Migration Steps:</h6>
           <ol>
-            <li>Replace import statements: <code>../api/firestoreCache</code> → <code>../api/enhancedFirestoreCache</code></li>
+            <li>Replace import statements: <code>../api/enhancedFirestoreCache</code> → <code>../api/supabaseCacheMigration</code></li>
             <li>Update invalidation calls: <code>invalidateCache('workoutLogs')</code> → <code>invalidateWorkoutCache(userId)</code></li>
             <li>Add cache warming to component initialization</li>
             <li>Monitor performance with <code>getCacheStats()</code></li>

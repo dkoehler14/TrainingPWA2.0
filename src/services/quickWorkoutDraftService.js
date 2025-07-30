@@ -11,7 +11,7 @@ import {
     getCollectionCached,
     invalidateWorkoutCache,
     invalidateUserCache
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCacheMigration';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
 

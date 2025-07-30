@@ -185,7 +185,7 @@ function QuickWorkout() {
                     performanceMonitor.recordParallelLoading(4); // 4 parallel operations
 
                     // Phase 1 Optimization: Start smart cache warming immediately
-                    const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
+                    const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
                     const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
                         lastVisitedPage: 'QuickWorkout',
                         timeOfDay: new Date().getHours(),

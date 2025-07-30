@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Form, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
 import '../styles/Progress4.css';
-import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
 
 // Utility functions
 const calculateVolume = (sets, reps, weights) => {

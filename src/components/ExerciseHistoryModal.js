@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Modal, Button, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
-import { getCollectionCached } from '../api/enhancedFirestoreCache';
+import { getCollectionCached } from '../api/supabaseCacheMigration';
 import {
   groupExerciseHistoryBySessions,
   formatWeightDisplay,

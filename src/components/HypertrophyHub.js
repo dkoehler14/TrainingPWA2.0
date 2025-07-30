@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { getSubcollectionCached, warmUserCache } from '../api/enhancedFirestoreCache';
+import { getSubcollectionCached, warmUserCache } from '../api/supabaseCacheMigration';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import '../styles/HypertrophyHub.css';
 

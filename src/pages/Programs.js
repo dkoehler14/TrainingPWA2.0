@@ -89,6 +89,17 @@ function Programs({ userRole }) {
       if (user) {
         setIsLoading(true);
         try {
+          // Cache warming for Programs page
+          const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
+          const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
+            lastVisitedPage: 'Programs',
+            timeOfDay: new Date().getHours(),
+            priority: 'normal'
+          }).catch(error => {
+            console.warn('Cache warming failed:', error);
+            return null;
+          });
+
           // Fetch user programs using Supabase
           const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
           const processedUserPrograms = userProgramsData.map(program => ({
@@ -1553,8 +1564,8 @@ function Programs({ userRole }) {
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div className="d-flex align-items-center">
                 <h1 className="soft-title programs-title mb-0 me-3">My Programs</h1>
-                <Badge 
-                  bg={isRealtimeConnected ? 'success' : 'secondary'} 
+                <Badge
+                  bg={isRealtimeConnected ? 'success' : 'secondary'}
                   className="d-flex align-items-center"
                 >
                   <Broadcast className="me-1" size={12} />

@@ -417,6 +417,17 @@ function LogWorkout() {
     const fetchData = async () => {
       if (user) {
         try {
+          // Cache warming for LogWorkout page
+          const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
+          const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
+            lastVisitedPage: 'LogWorkout',
+            timeOfDay: new Date().getHours(),
+            priority: 'high' // High priority since this is a core workout page
+          }).catch(error => {
+            console.warn('Cache warming failed:', error);
+            return null;
+          });
+
           // Parallel data fetching for better performance
           const [programsData, allExercises] = await Promise.all([
             // Fetch programs with caching

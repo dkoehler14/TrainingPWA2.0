@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
 import { supabase } from '../config/supabase';
-import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/enhancedFirestoreCache';
+import { getCollectionCached, invalidateExerciseCache, getAllExercisesMetadata, getDocCached } from '../api/supabaseCacheMigration';
 import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 import { db } from '../firebase';
 import { runTransaction, doc, collection } from 'firebase/firestore';

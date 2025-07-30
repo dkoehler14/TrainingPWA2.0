@@ -77,7 +77,7 @@ function QuickWorkoutHistoryContent() {
 
       try {
         // Phase 1 Optimization: Start cache warming for history page
-        const cacheWarmingService = (await import('../services/cacheWarmingService')).default;
+        const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
         const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
           lastVisitedPage: 'QuickWorkoutHistory',
           timeOfDay: new Date().getHours(),
