@@ -177,7 +177,7 @@
     - Add comprehensive logging for production debugging
     - _Requirements: 3.1, 3.2, 6.1, 6.2_
 
-- [-] 12. Documentation and cleanup
+- [x] 12. Documentation and cleanup
   - [x] 12.1 Create service documentation
     - Document new service API and usage patterns
     - Add migration guide from old Firestore service
@@ -185,7 +185,7 @@
     - Add troubleshooting guide and common issues
     - _Requirements: 5.3, 5.5_
 
-  - [ ] 12.2 Clean up old Firestore references
+  - [x] 12.2 Clean up old Firestore references
     - Remove unused Firestore cache warming imports
     - Clean up old service files if no longer needed
     - Update any remaining references to old cache system

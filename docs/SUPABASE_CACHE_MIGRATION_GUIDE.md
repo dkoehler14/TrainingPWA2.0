@@ -27,7 +27,7 @@ import {
   getCacheStats,
   invalidateCache,
   invalidateUserCache
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCache';
 
 import { cacheWarmingService } from '../services/cacheWarmingService';
 ```
@@ -141,7 +141,7 @@ const WorkoutComponent = () => {
 
 #### Before (Firestore)
 ```javascript
-// Old cache invalidation
+// Old cache invalidation (Firestore - deprecated)
 import { invalidateCache, invalidateUserCache } from '../api/enhancedFirestoreCache';
 
 // Invalidate specific cache

@@ -1,8 +1,8 @@
-# Enhanced Firestore Cache Implementation Guide
+# Enhanced Supabase Cache Implementation Guide
 
 ## Overview
 
-This document outlines the implementation of Phase 2: Enhanced Caching Strategy for the TrainingPWA database performance optimization. The enhanced caching system provides granular invalidation, intelligent cache warming, performance monitoring, and significant performance improvements over the original caching implementation.
+This document outlines the implementation of the Enhanced Caching Strategy for the TrainingPWA database performance optimization. The enhanced caching system provides granular invalidation, intelligent cache warming, performance monitoring, and significant performance improvements. The system has been migrated from Firestore to Supabase while maintaining API compatibility.
 
 ## 🚀 Key Features
 
@@ -35,12 +35,12 @@ This document outlines the implementation of Phase 2: Enhanced Caching Strategy 
 ```
 src/
 ├── api/
-│   ├── firestoreCache.js              # Original cache (legacy)
-│   └── enhancedFirestoreCache.js      # Enhanced cache system ✨
+│   ├── supabaseCache.js               # Supabase cache system ✨
+│   └── supabaseCacheMigration.js      # Cache migration utilities ✨
 ├── services/
-│   └── cacheWarmingService.js         # Cache warming service ✨
-├── utils/
-│   └── cacheMigration.js              # Migration utilities ✨
+│   ├── supabaseCacheWarmingService.js # Supabase cache warming service ✨
+│   ├── cacheWarmingService.js         # Compatibility wrapper ✨
+│   └── cacheWarmingServiceCompat.js   # Backward compatibility layer ✨
 ├── components/
 │   └── CacheDemo.js                   # Demo component ✨
 └── pages/
@@ -59,7 +59,7 @@ import {
   getDocCached, 
   getSubcollectionCached,
   getCollectionGroupCached 
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCache';
 
 // Enhanced collection query with custom TTL
 const exercises = await getCollectionCached('exercises', {}, 60 * 60 * 1000); // 1 hour
@@ -84,7 +84,7 @@ import {
   invalidateProgramCache,
   invalidateExerciseCache,
   invalidateCache 
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCache';
 
 // User-specific invalidation
 invalidateUserCache(userId);
@@ -131,7 +131,7 @@ await warmAppCache();
 
 #### Cache Statistics
 ```javascript
-import { getCacheStats, debugCache } from '../api/enhancedFirestoreCache';
+import { getCacheStats, debugCache } from '../api/supabaseCache';
 
 // Get comprehensive cache statistics
 const stats = getCacheStats();
@@ -158,18 +158,18 @@ console.log('Average duration:', warmingStats.averageDuration);
 
 ### Step 1: Update Import Statements
 
-**Before (Old Cache):**
+**Before (Old Firestore Cache):**
 ```javascript
-import { getCollectionCached, invalidateCache } from '../api/firestoreCache';
+import { getCollectionCached, invalidateCache } from '../api/enhancedFirestoreCache';
 ```
 
-**After (Enhanced Cache):**
+**After (Supabase Cache):**
 ```javascript
 import { 
   getCollectionCached, 
   invalidateWorkoutCache,
   warmUserCache 
-} from '../api/enhancedFirestoreCache';
+} from '../api/supabaseCache';
 ```
 
 ### Step 2: Replace Broad Invalidation

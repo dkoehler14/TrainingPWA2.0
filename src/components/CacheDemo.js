@@ -545,14 +545,14 @@ const CacheDemo = () => {
           </ul>
         </Alert>
         
-        <Alert variant="success">
-          <h6>Migration Steps:</h6>
-          <ol>
-            <li>Replace import statements: <code>../api/enhancedFirestoreCache</code> → <code>../api/supabaseCacheMigration</code></li>
-            <li>Update invalidation calls: <code>invalidateCache('workoutLogs')</code> → <code>invalidateWorkoutCache(userId)</code></li>
-            <li>Add cache warming to component initialization</li>
-            <li>Monitor performance with <code>getCacheStats()</code></li>
-          </ol>
+        <Alert variant="info">
+          <h6>Current Implementation:</h6>
+          <ul>
+            <li><strong>Supabase Cache:</strong> Using <code>../api/supabaseCache</code> for all cache operations</li>
+            <li><strong>Smart Invalidation:</strong> Context-aware cache invalidation with <code>invalidateWorkoutCache(userId)</code></li>
+            <li><strong>Automatic Warming:</strong> Background cache warming integrated with user behavior</li>
+            <li><strong>Real-time Monitoring:</strong> Live performance tracking with <code>getCacheStats()</code></li>
+          </ul>
         </Alert>
       </Card.Body>
     </Card>
@@ -572,7 +572,7 @@ const CacheDemo = () => {
         <div className="col-12">
           <h2>🚀 Enhanced Cache System Demo</h2>
           <p className="text-muted">
-            Demonstration of the enhanced Firestore caching system with granular invalidation, 
+            Demonstration of the enhanced Supabase caching system with granular invalidation, 
             cache warming, and performance monitoring.
           </p>
           
