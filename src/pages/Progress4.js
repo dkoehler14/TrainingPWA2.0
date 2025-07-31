@@ -92,7 +92,7 @@ function Progress4() {
             console.warn('Cache warming failed, proceeding with data fetch:', error);
           });
 
-        const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.id]] });
+        const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', user.id]] });
         setWorkoutLogs(logsData);
 
         // Use metadata approach for efficient exercise fetching

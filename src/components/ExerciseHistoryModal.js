@@ -41,11 +41,11 @@ function ExerciseHistoryModal({
     try {
       // Query for all workout logs that contain this exercise
       const logsData = await getCollectionCached(
-        'workoutLogs',
+        'workout_logs',
         {
           where: [
-            ['userId', '==', user.id],
-            ['isWorkoutFinished', '==', true]
+            ['user_id', '==', user.id],
+            ['is_finished', '==', true]
           ],
           orderBy: [['date', 'desc']],
           limit: 50

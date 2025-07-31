@@ -61,12 +61,12 @@ class QuickWorkoutDraftService {
 
         if (existingDraftId) {
             // Update existing draft
-            await updateDoc(doc(db, "workoutLogs", existingDraftId), draftData);
+            await updateDoc(doc(db, "workout_logs", existingDraftId), draftData);
             result = { id: existingDraftId, ...draftData };
         } else {
             // Create new draft (and clean up any orphaned drafts)
             await this.cleanupAllDrafts(userId);
-            const docRef = await addDoc(collection(db, "workoutLogs"), draftData);
+            const docRef = await addDoc(collection(db, "workout_logs"), draftData);
             result = { id: docRef.id, ...draftData };
         }
 
@@ -76,7 +76,7 @@ class QuickWorkoutDraftService {
             invalidateWorkoutCache(userId);
         } else {
             // For minor draft updates, only invalidate specific draft cache
-            const cacheKey = `workoutLogs_drafts_${userId}`;
+            const cacheKey = `workout_logs_drafts_${userId}`;
             invalidateUserCache(userId, [cacheKey]);
         }
         
@@ -93,11 +93,11 @@ class QuickWorkoutDraftService {
 
         try {
             const draftsData = await getCollectionCached(
-                'workoutLogs',
+                'workout_logs',
                 {
                     where: [
-                        ['userId', '==', userId],
-                        ['isDraft', '==', true],
+                        ['user_id', '==', userId],
+                        ['is_draft', '==', true],
                         ['type', '==', 'quick_workout']
                     ],
                     orderBy: [['lastModified', 'desc']],
@@ -123,11 +123,11 @@ class QuickWorkoutDraftService {
 
         try {
             const allDrafts = await getCollectionCached(
-                'workoutLogs',
+                'workout_logs',
                 {
                     where: [
-                        ['userId', '==', userId],
-                        ['isDraft', '==', true],
+                        ['user_id', '==', userId],
+                        ['is_draft', '==', true],
                         ['type', '==', 'quick_workout']
                     ]
                 },
@@ -136,7 +136,7 @@ class QuickWorkoutDraftService {
 
             // Delete all existing drafts
             const deletePromises = allDrafts.map(draft =>
-                deleteDoc(doc(db, "workoutLogs", draft.id))
+                deleteDoc(doc(db, "workout_logs", draft.id))
             );
 
             if (deletePromises.length > 0) {
@@ -164,11 +164,11 @@ class QuickWorkoutDraftService {
 
         try {
             const draftsData = await getCollectionCached(
-                'workoutLogs',
+                'workout_logs',
                 {
                     where: [
-                        ['userId', '==', userId],
-                        ['isDraft', '==', true],
+                        ['user_id', '==', userId],
+                        ['is_draft', '==', true],
                         ['type', '==', 'quick_workout']
                     ],
                     orderBy: [['lastModified', 'desc']],
@@ -193,10 +193,10 @@ class QuickWorkoutDraftService {
         }
 
         try {
-            await deleteDoc(doc(db, "workoutLogs", draftId));
+            await deleteDoc(doc(db, "workout_logs", draftId));
             // Phase 1 Optimization: Minimal cache invalidation for single draft deletion
             // Only invalidate draft-specific cache, not all workout data
-            const cacheKey = `workoutLogs_drafts_${userId}`;
+            const cacheKey = `workout_logs_drafts_${userId}`;
             invalidateUserCache(userId, [cacheKey]);
         } catch (error) {
             console.error('Error deleting draft:', error);
@@ -234,7 +234,7 @@ class QuickWorkoutDraftService {
 
         try {
             // Convert the draft to a completed workout
-            await updateDoc(doc(db, "workoutLogs", draftId), completedWorkoutData);
+            await updateDoc(doc(db, "workout_logs", draftId), completedWorkoutData);
             // Phase 1 Optimization: Full cache invalidation needed when completing draft
             // This affects both draft and workout history caches
             invalidateWorkoutCache(userId);
@@ -260,11 +260,11 @@ class QuickWorkoutDraftService {
             thresholdDate.setDate(thresholdDate.getDate() - this.OLD_DRAFT_THRESHOLD_DAYS);
 
             const oldDrafts = await getCollectionCached(
-                'workoutLogs',
+                'workout_logs',
                 {
                     where: [
-                        ['userId', '==', userId],
-                        ['isDraft', '==', true],
+                        ['user_id', '==', userId],
+                        ['is_draft', '==', true],
                         ['lastModified', '<', Timestamp.fromDate(thresholdDate)]
                     ]
                 },
@@ -273,13 +273,13 @@ class QuickWorkoutDraftService {
 
             // Delete old drafts in batches
             const deletePromises = oldDrafts.map(draft => 
-                deleteDoc(doc(db, "workoutLogs", draft.id))
+                deleteDoc(doc(db, "workout_logs", draft.id))
             );
 
             if (deletePromises.length > 0) {
                 await Promise.all(deletePromises);
                 // Phase 1 Optimization: Targeted invalidation for old draft cleanup
-                const cacheKey = `workoutLogs_drafts_${userId}`;
+                const cacheKey = `workout_logs_drafts_${userId}`;
                 invalidateUserCache(userId, [cacheKey]);
                 console.log(`Phase 1: Cleaned up ${deletePromises.length} old workout drafts with minimal cache invalidation`);
             }

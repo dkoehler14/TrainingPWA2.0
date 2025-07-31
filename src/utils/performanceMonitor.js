@@ -263,6 +263,74 @@ export class PerformanceMonitor {
   }
 
   /**
+   * Record parallel loading operations
+   */
+  recordParallelLoading(operationCount, metadata = {}) {
+    this.addToHistory({
+      type: 'parallel_loading',
+      operationCount,
+      timestamp: Date.now(),
+      metadata
+    })
+    
+    console.log(`📊 Recording ${operationCount} parallel loading operations`)
+  }
+
+  /**
+   * Record cache warming operation
+   */
+  recordCacheWarming(operation, metadata = {}) {
+    this.addToHistory({
+      type: 'cache_warming',
+      operation,
+      timestamp: Date.now(),
+      metadata
+    })
+    
+    console.log(`📊 Cache warming recorded: ${operation}`)
+  }
+
+  /**
+   * Record cache hit
+   */
+  recordCacheHit(resource, metadata = {}) {
+    this.trackCacheOperation(`hit_${resource}`, true, 0, metadata)
+    console.log(`📊 Cache hit recorded: ${resource}`)
+  }
+
+  /**
+   * Record cache miss
+   */
+  recordCacheMiss(resource, metadata = {}) {
+    this.trackCacheOperation(`miss_${resource}`, false, 0, metadata)
+    console.log(`📊 Cache miss recorded: ${resource}`)
+  }
+
+  /**
+   * Record database read operation
+   */
+  recordDatabaseRead(resource, source, metadata = {}) {
+    if (source === 'error') {
+      this.addToHistory({
+        type: 'database_read_error',
+        resource,
+        timestamp: Date.now(),
+        metadata
+      })
+      console.log(`📊 Database read error recorded: ${resource}`)
+    } else {
+      this.addToHistory({
+        type: 'database_read',
+        resource,
+        source,
+        timestamp: Date.now(),
+        metadata
+      })
+      console.log(`📊 Database read recorded: ${resource} from ${source}`)
+    }
+  }
+
+  /**
    * Track application errors
    */
   trackError(error, context = {}) {
@@ -736,11 +804,27 @@ export const trackPageLoad = (page, duration, metadata) =>
 export const recordLoadTime = (component, duration, metadata) => 
   performanceMonitor.recordLoadTime(component, duration, metadata)
 
-export const trackError = (error, context) => 
+export const trackError = (error, context) =>
   performanceMonitor.trackError(error, context)
 
+// Export new convenience functions
+export const recordParallelLoading = (operationCount, metadata) =>
+  performanceMonitor.recordParallelLoading(operationCount, metadata)
+
+export const recordCacheWarming = (operation, metadata) =>
+  performanceMonitor.recordCacheWarming(operation, metadata)
+
+export const recordCacheHit = (resource, metadata) =>
+  performanceMonitor.recordCacheHit(resource, metadata)
+
+export const recordCacheMiss = (resource, metadata) =>
+  performanceMonitor.recordCacheMiss(resource, metadata)
+
+export const recordDatabaseRead = (resource, source, metadata) =>
+  performanceMonitor.recordDatabaseRead(resource, source, metadata)
+
 // Export performance dashboard
-export const getPerformanceDashboard = () => 
+export const getPerformanceDashboard = () =>
   performanceMonitor.getPerformanceDashboard()
 
 // Export performance data

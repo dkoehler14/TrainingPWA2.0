@@ -86,7 +86,20 @@ export const calculateRecentActivity = (workouts, days = 30) => {
 
   // Filter workouts within the specified time period
   const recentWorkouts = workouts.filter(workout => {
-    const workoutDate = workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+    let workoutDate = workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+
+    // Ensure we have a valid Date object
+    if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+      if (typeof workoutDate === 'string' || typeof workoutDate === 'number') {
+        workoutDate = new Date(workoutDate);
+      }
+      // If still invalid, exclude this workout
+      if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+        console.warn('Invalid workout date found in recent activity:', workout);
+        return false;
+      }
+    }
+
     return workoutDate >= cutoffDate;
   });
 
@@ -97,11 +110,26 @@ export const calculateRecentActivity = (workouts, days = 30) => {
   // Get last workout date and calculate days since
   let lastWorkoutDate = null;
   let daysSinceLastWorkout = null;
-  
+
   if (workouts.length > 0) {
     const lastWorkout = workouts[0]; // Assuming workouts are sorted by date desc
     lastWorkoutDate = lastWorkout.completedDate?.toDate?.() || lastWorkout.completedDate || new Date(lastWorkout.date);
-    daysSinceLastWorkout = Math.floor((now - lastWorkoutDate) / (24 * 60 * 60 * 1000));
+
+    // Ensure we have a valid Date object
+    if (!(lastWorkoutDate instanceof Date) || isNaN(lastWorkoutDate.getTime())) {
+      if (typeof lastWorkoutDate === 'string' || typeof lastWorkoutDate === 'number') {
+        lastWorkoutDate = new Date(lastWorkoutDate);
+      }
+      // If still invalid, set to null
+      if (!(lastWorkoutDate instanceof Date) || isNaN(lastWorkoutDate.getTime())) {
+        console.warn('Invalid last workout date found:', lastWorkout);
+        lastWorkoutDate = null;
+      }
+    }
+
+    if (lastWorkoutDate) {
+      daysSinceLastWorkout = Math.floor((now - lastWorkoutDate) / (24 * 60 * 60 * 1000));
+    }
   }
 
   // Calculate current workout streak (consecutive days with workouts)
@@ -130,7 +158,21 @@ export const calculateWorkoutStreak = (workouts) => {
   // Group workouts by date
   const workoutDates = new Set();
   workouts.forEach(workout => {
-    const workoutDate = workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+    let workoutDate = workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+
+    // Ensure we have a valid Date object
+    if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+      // Try to parse as string if it's not a valid Date
+      if (typeof workoutDate === 'string' || typeof workoutDate === 'number') {
+        workoutDate = new Date(workoutDate);
+      }
+      // If still invalid, skip this workout
+      if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+        console.warn('Invalid workout date found:', workout);
+        return;
+      }
+    }
+
     const dateString = workoutDate.toDateString();
     workoutDates.add(dateString);
   });
@@ -178,20 +220,49 @@ export const calculateWorkoutFrequencyMetrics = (workouts) => {
   const last7Days = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
   const last30Days = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
   const last90Days = new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000));
-  
+
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const thisYearStart = new Date(now.getFullYear(), 0, 1);
 
   const getWorkoutDate = (workout) => {
-    return workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+    let workoutDate = workout.completedDate?.toDate?.() || workout.completedDate || new Date(workout.date);
+
+    // Ensure we have a valid Date object
+    if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+      if (typeof workoutDate === 'string' || typeof workoutDate === 'number') {
+        workoutDate = new Date(workoutDate);
+      }
+      // If still invalid, return null to exclude from calculations
+      if (!(workoutDate instanceof Date) || isNaN(workoutDate.getTime())) {
+        console.warn('Invalid workout date found in frequency metrics:', workout);
+        return null;
+      }
+    }
+
+    return workoutDate;
   };
 
   return {
-    last7Days: workouts.filter(w => getWorkoutDate(w) >= last7Days).length,
-    last30Days: workouts.filter(w => getWorkoutDate(w) >= last30Days).length,
-    last90Days: workouts.filter(w => getWorkoutDate(w) >= last90Days).length,
-    thisMonth: workouts.filter(w => getWorkoutDate(w) >= thisMonthStart).length,
-    thisYear: workouts.filter(w => getWorkoutDate(w) >= thisYearStart).length,
+    last7Days: workouts.filter(w => {
+      const date = getWorkoutDate(w);
+      return date && date >= last7Days;
+    }).length,
+    last30Days: workouts.filter(w => {
+      const date = getWorkoutDate(w);
+      return date && date >= last30Days;
+    }).length,
+    last90Days: workouts.filter(w => {
+      const date = getWorkoutDate(w);
+      return date && date >= last90Days;
+    }).length,
+    thisMonth: workouts.filter(w => {
+      const date = getWorkoutDate(w);
+      return date && date >= thisMonthStart;
+    }).length,
+    thisYear: workouts.filter(w => {
+      const date = getWorkoutDate(w);
+      return date && date >= thisYearStart;
+    }).length,
     allTime: workouts.length
   };
 };
@@ -217,7 +288,7 @@ export const calculateTotalSetsAndExercises = (workouts) => {
   workouts.forEach(workout => {
     if (workout.exercises && Array.isArray(workout.exercises)) {
       totalExercises += workout.exercises.length;
-      
+
       workout.exercises.forEach(exercise => {
         totalSets += exercise.sets || 0;
       });

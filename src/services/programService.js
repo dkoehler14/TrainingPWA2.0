@@ -53,7 +53,12 @@ export const getUserPrograms = async (userId, filters = {}) => {
         if (error) throw error
         return data || []
       },
-      { ttl: PROGRAM_CACHE_TTL }
+      {
+        ttl: PROGRAM_CACHE_TTL,
+        table: 'programs',
+        userId: userId,
+        tags: ['programs', 'user']
+      }
     )
   }, 'getUserPrograms')
 }
@@ -92,7 +97,7 @@ export const getProgramById = async (programId) => {
         if (error) throw error
 
         // Sort workouts by week and day
-        if (data.program_workouts) {
+        if (data && data.program_workouts) {
           data.program_workouts.sort((a, b) => {
             if (a.week_number !== b.week_number) {
               return a.week_number - b.week_number
@@ -110,7 +115,11 @@ export const getProgramById = async (programId) => {
 
         return data
       },
-      { ttl: PROGRAM_CACHE_TTL }
+      {
+        ttl: PROGRAM_CACHE_TTL,
+        table: 'programs',
+        tags: ['programs', 'program_detail']
+      }
     )
   }, 'getProgramById')
 }

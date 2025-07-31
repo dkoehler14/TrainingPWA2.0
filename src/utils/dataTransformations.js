@@ -73,8 +73,8 @@ export const transformExercisesToSupabaseFormat = (exerciseData) => {
   return exerciseData.map(ex => ({
     exerciseId: ex.exerciseId,
     sets: Number(ex.sets),
-    reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-    weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+    reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
+    weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
     completed: ex.completed,
     notes: ex.notes || '',
     bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
@@ -99,8 +99,8 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
       exercises: log.workout_log_exercises.map(ex => ({
         exerciseId: ex.exercise_id,
         sets: ex.sets,
-        reps: ex.reps || Array(ex.sets).fill(0),
-        weights: ex.weights || Array(ex.sets).fill(''),
+        reps: ex.reps ? ex.reps.map(rep => rep === null ? '' : rep) : Array(ex.sets).fill(''),
+        weights: ex.weights ? ex.weights.map(weight => weight === null ? '' : weight) : Array(ex.sets).fill(''),
         completed: ex.completed || Array(ex.sets).fill(false),
         notes: ex.notes || '',
         bodyweight: ex.bodyweight || '',

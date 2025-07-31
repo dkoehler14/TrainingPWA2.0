@@ -12,7 +12,7 @@ import {
   reportDevelopmentError,
   ERROR_TYPES,
   updateServiceStatus,
-  handleEmulatorFallback,
+  handleSupabaseFallback,
   initializeDevelopmentErrorHandling,
   attemptServiceRecovery,
   handleServiceInitializationFallback
@@ -168,7 +168,7 @@ async function connectToEmulatorsWithErrorHandling() {
       const isAvailable = await attemptServiceRecovery(service.name);
       
       if (!isAvailable) {
-        const fallback = handleEmulatorFallback(service.name, new Error(`${service.name} emulator not available`));
+        const fallback = handleSupabaseFallback(service.name, new Error(`${service.name} emulator not available`));
         serviceStatusLogger.logEmulatorFailure(service.name, 'localhost', service.port, 
           new Error(`Port ${service.port} not available`));
         failedServices.push({ service: service.name, fallback });
@@ -195,7 +195,7 @@ async function connectToEmulatorsWithErrorHandling() {
         }
       );
       
-      const fallback = handleEmulatorFallback(service.name, emulatorError);
+      const fallback = handleSupabaseFallback(service.name, emulatorError);
       failedServices.push({ service: service.name, fallback, error: emulatorError });
       updateServiceStatus(service.name, false, emulatorError);
     }

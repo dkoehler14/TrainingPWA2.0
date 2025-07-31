@@ -208,12 +208,10 @@ export const getAvailableExercises = async (userId, filters = {}) => {
           query = query.ilike('name', `%${filters.search}%`)
         }
 
-        const { data, error } = await query
-
-        if (error) throw error
-        return data || []
+        // Return the full Supabase result object with data and error properties
+        return await query
       },
-      { ttl: EXERCISE_CACHE_TTL }
+      { ttl: EXERCISE_CACHE_TTL, table: 'exercises', userId }
     )
   }, 'getAvailableExercises')
 }

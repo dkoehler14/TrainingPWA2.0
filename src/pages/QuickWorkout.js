@@ -96,15 +96,18 @@ function QuickWorkout() {
 
         // Transform Supabase draft data to component format
         const exercises = draft.workout_log_exercises || draft.exercises || [];
-        setSelectedExercises(exercises.map(ex => ({
-            exerciseId: ex.exercise_id || ex.exerciseId,
-            sets: ex.sets || 3,
-            reps: ex.reps || Array(ex.sets || 3).fill(''),
-            weights: ex.weights || Array(ex.sets || 3).fill(''),
-            completed: ex.completed || Array(ex.sets || 3).fill(false),
-            notes: ex.notes || '',
-            bodyweight: ex.bodyweight || ''
-        })));
+        setSelectedExercises(exercises.map(ex => {
+            const sets = ex.sets !== undefined && ex.sets !== null ? ex.sets : 3;
+            return {
+                exerciseId: ex.exercise_id || ex.exerciseId,
+                sets: sets,
+                reps: ex.reps || Array(sets).fill(''),
+                weights: ex.weights || Array(sets).fill(''),
+                completed: ex.completed || Array(sets).fill(false),
+                notes: ex.notes || '',
+                bodyweight: ex.bodyweight || ''
+            };
+        }));
 
         setShowResumeModal(false);
         showUserMessage('Draft loaded successfully!', 'success');

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { getCollectionCached } from '../api/supabaseCacheMigration';
 
 const useQuickWorkoutHistory = () => {
   const { user, isAuthenticated } = useContext(AuthContext);
@@ -23,21 +22,37 @@ const useQuickWorkoutHistory = () => {
     try {
       // Phase 1 Optimization: Longer TTL for historical data (30 minutes)
       // Historical workout data changes less frequently than active workouts
-      const workoutData = await getCollectionCached(
-        'workoutLogs',
-        {
-          where: [
-            ['userId', '==', user.id],
-            ['type', '==', 'quick_workout'],
-            ['isWorkoutFinished', '==', true]
-          ],
-          orderBy: [['completedDate', 'desc']]
-        },
-        30 * 60 * 1000 // 30 minutes TTL - optimized for historical data
-      );
+      // Use workoutLogService to get complete workout data with exercises
+      const workoutLogService = (await import('../services/workoutLogService')).default;
+      const workoutData = await workoutLogService.getWorkoutHistory(user.id, 50, 0);
+
+      // Transform Supabase data structure to match expected frontend format
+      const transformedWorkouts = workoutData.map(workout => {
+        const exercises = (workout.workout_log_exercises || []).map(logExercise => ({
+          exerciseId: logExercise.exercise_id,
+          sets: logExercise.sets,
+          reps: logExercise.reps || [],
+          weights: logExercise.weights || [],
+          completed: logExercise.completed || [],
+          notes: logExercise.notes || '',
+          bodyweight: logExercise.bodyweight || null
+        }));
+
+        return {
+          id: workout.id,
+          name: workout.name,
+          type: workout.type,
+          date: workout.completed_date || workout.date,
+          completedDate: workout.completed_date,
+          isFinished: workout.is_finished,
+          isDraft: workout.is_draft,
+          userId: workout.user_id,
+          exercises: exercises
+        };
+      });
 
       // Validate workout data structure
-      const validWorkouts = workoutData.filter(workout => {
+      const validWorkouts = transformedWorkouts.filter(workout => {
         if (!workout || typeof workout !== 'object') {
           console.warn('Invalid workout data structure:', workout);
           return false;

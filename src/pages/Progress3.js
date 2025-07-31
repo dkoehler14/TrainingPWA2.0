@@ -49,7 +49,7 @@ function Analytics() {
                             console.warn('Cache warming failed, proceeding with data fetch:', error);
                         });
 
-                    const logsData = await getCollectionCached('workoutLogs', { where: [['userId', '==', user.id]] });
+                    const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', user.id]] });
                     const logsWithDate = logsData.map(log => ({
                         ...log,
                         date: log.date.toDate ? log.date.toDate() : log.date

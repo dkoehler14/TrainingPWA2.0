@@ -60,20 +60,60 @@ class WorkoutLogService {
    */
   async createWorkoutLogExercises(workoutLogId, exercises) {
     return withSupabaseErrorHandling(async () => {
-      const exerciseData = exercises.map((ex, index) => ({
-        workout_log_id: workoutLogId,
-        exercise_id: ex.exerciseId,
-        sets: Number(ex.sets),
-        reps: ex.reps || [],
-        weights: ex.weights || [],
-        completed: ex.completed || [],
-        bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
-        notes: ex.notes || '',
-        is_added: ex.isAdded || false,
-        added_type: ex.addedType || null,
-        original_index: ex.originalIndex || -1,
-        order_index: index
-      }))
+      const exerciseData = exercises.map((ex, index) => {
+        // Validate and sanitize exercise data
+        const sets = ex.sets && ex.sets !== '' ? Number(ex.sets) : 1
+        const exerciseId = ex.exerciseId && ex.exerciseId !== '' ? ex.exerciseId : null
+        const bodyweight = ex.bodyweight && ex.bodyweight !== '' ? Number(ex.bodyweight) : null
+
+        // Validate required fields
+        if (!exerciseId) {
+          throw new Error(`Exercise ID is required for exercise at index ${index}`)
+        }
+
+        if (isNaN(sets) || sets <= 0) {
+          throw new Error(`Invalid sets value for exercise at index ${index}: ${ex.sets}`)
+        }
+
+        // Ensure arrays match the sets count (required by DB constraint)
+        const reps = ex.reps || []
+        const weights = ex.weights || []
+        const completed = ex.completed || []
+
+        // Pad or trim arrays to match sets count
+        const paddedReps = [...reps]
+        const paddedWeights = [...weights]
+        const paddedCompleted = [...completed]
+
+        // Pad with null values for uncompleted sets (preserve empty state)
+        while (paddedReps.length < sets) paddedReps.push(null)
+        while (paddedWeights.length < sets) paddedWeights.push(null)
+        while (paddedCompleted.length < sets) paddedCompleted.push(false)
+
+        // Trim if arrays are too long
+        paddedReps.length = sets
+        paddedWeights.length = sets
+        paddedCompleted.length = sets
+
+        // Convert empty strings to null for database storage (preserve uncompleted state)
+        const cleanedReps = paddedReps.map(rep => rep === '' || rep === undefined ? null : rep)
+        const cleanedWeights = paddedWeights.map(weight => weight === '' || weight === undefined ? null : weight)
+
+        return {
+          workout_log_id: workoutLogId,
+          exercise_id: exerciseId,
+          sets: sets,
+          reps: cleanedReps,
+          weights: cleanedWeights,
+          completed: paddedCompleted,
+          bodyweight: bodyweight,
+          notes: ex.notes || '',
+          is_added: ex.isAdded || false,
+          added_type: ex.addedType || null,
+          original_index: ex.originalIndex || -1,
+          order_index: index
+        }
+      })
 
       const { data, error } = await supabase
         .from('workout_log_exercises')
@@ -91,7 +131,7 @@ class WorkoutLogService {
   async getWorkoutLog(userId, programId, weekIndex, dayIndex) {
     return withSupabaseErrorHandling(async () => {
       const cacheKey = `workout_log_${userId}_${programId}_${weekIndex}_${dayIndex}`
-      
+
       return supabaseCache.getWithCache(
         cacheKey,
         async () => {
@@ -117,7 +157,7 @@ class WorkoutLogService {
             .single()
 
           if (error && error.code !== 'PGRST116') throw error
-          
+
           // Return null if no workout log found
           if (error && error.code === 'PGRST116') return null
 
@@ -139,7 +179,7 @@ class WorkoutLogService {
   async getProgramWorkoutLogs(userId, programId) {
     return withSupabaseErrorHandling(async () => {
       const cacheKey = `program_workout_logs_${userId}_${programId}`
-      
+
       return supabaseCache.getWithCache(
         cacheKey,
         async () => {
@@ -259,14 +299,48 @@ class WorkoutLogService {
         throw new Error('Invalid parameters for saving draft')
       }
 
+      // Validate and sanitize exercises data before saving
+      const validatedExercises = exercises.map((ex, index) => {
+        if (!ex.exerciseId || ex.exerciseId === '') {
+          throw new Error(`Exercise ID is required for exercise at index ${index}`)
+        }
+
+        // Handle sets - ensure it's a valid positive integer (must be > 0 per DB constraint)
+        let sets = 1 // Default to 1 set minimum
+        if (ex.sets !== undefined && ex.sets !== null && ex.sets !== '') {
+          sets = Number(ex.sets)
+          if (isNaN(sets) || sets <= 0) {
+            sets = 1 // Ensure at least 1 set
+          }
+        }
+
+        // Handle bodyweight - ensure it's a valid number or null
+        let bodyweight = null
+        if (ex.bodyweight !== undefined && ex.bodyweight !== null && ex.bodyweight !== '') {
+          const bw = Number(ex.bodyweight)
+          if (!isNaN(bw) && bw > 0) {
+            bodyweight = bw
+          }
+        }
+
+        return {
+          ...ex,
+          sets: sets,
+          bodyweight: bodyweight
+        }
+      })
+
       const draftData = {
         user_id: userId,
+        programId: null, // Quick workouts are not tied to a program
+        weekIndex: null,
+        dayIndex: null,
         name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
         type: 'quick_workout',
         date: new Date().toISOString().split('T')[0],
-        is_draft: true,
-        is_finished: false,
-        weight_unit: 'LB',
+        isFinished: false,
+        isDraft: true,
+        weightUnit: 'LB',
         updated_at: new Date().toISOString()
       }
 
@@ -284,7 +358,18 @@ class WorkoutLogService {
         // Update existing draft
         const { data, error } = await supabase
           .from('workout_logs')
-          .update(draftData)
+          .update({
+            program_id: draftData.programId,
+            week_index: draftData.weekIndex,
+            day_index: draftData.dayIndex,
+            name: draftData.name,
+            type: draftData.type,
+            date: draftData.date,
+            is_finished: draftData.isFinished,
+            is_draft: draftData.isDraft,
+            weight_unit: draftData.weightUnit,
+            updated_at: draftData.updated_at
+          })
           .eq('id', existingDraftId)
           .select()
           .single()
@@ -293,7 +378,7 @@ class WorkoutLogService {
         workoutLog = data
 
         // Update exercises
-        await this.updateWorkoutLogExercises(existingDraftId, exercises)
+        await this.updateWorkoutLogExercises(existingDraftId, validatedExercises)
       } else {
         // Clean up any orphaned drafts first
         await this.cleanupAllDrafts(userId)
@@ -301,7 +386,7 @@ class WorkoutLogService {
         // Create new draft
         workoutLog = await this.createWorkoutLog(userId, {
           ...draftData,
-          exercises
+          exercises: validatedExercises
         })
       }
 
@@ -333,19 +418,21 @@ class WorkoutLogService {
         .eq('type', 'quick_workout')
         .order('updated_at', { ascending: false })
         .limit(1)
-        .single()
 
-      if (error && error.code !== 'PGRST116') throw error
-      
+      if (error) throw error
+
       // Return null if no draft found
-      if (error && error.code === 'PGRST116') return null
+      if (!data || data.length === 0) return null
+
+      // Get the first (most recent) draft
+      const draft = data[0]
 
       // Sort exercises by order_index
-      if (data?.workout_log_exercises) {
-        data.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+      if (draft?.workout_log_exercises) {
+        draft.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
       }
 
-      return data
+      return draft
     }, 'getSingleDraft')
   }
 
@@ -516,7 +603,7 @@ class WorkoutLogService {
   async getExerciseHistory(userId, exerciseId, limit = 50) {
     return withSupabaseErrorHandling(async () => {
       const cacheKey = `exercise_history_${userId}_${exerciseId}_${limit}`
-      
+
       return supabaseCache.getWithCache(
         cacheKey,
         async () => {
@@ -549,27 +636,33 @@ class WorkoutLogService {
 
           // Transform data to match expected format
           const historyData = []
-          
+
           data.forEach(logExercise => {
             const workout = logExercise.workout_logs
             const exercise = logExercise.exercises
-            
+
             // Process each set
             for (let setIndex = 0; setIndex < logExercise.sets; setIndex++) {
               if (logExercise.completed && logExercise.completed[setIndex]) {
-                const weight = logExercise.weights[setIndex] || 0
-                const reps = logExercise.reps[setIndex] || 0
-                const bodyweight = logExercise.bodyweight || 0
+                // Safely convert to numbers, handling null, empty strings and invalid values
+                const weight = logExercise.weights[setIndex] && logExercise.weights[setIndex] !== '' && logExercise.weights[setIndex] !== null ? Number(logExercise.weights[setIndex]) : 0
+                const reps = logExercise.reps[setIndex] && logExercise.reps[setIndex] !== '' && logExercise.reps[setIndex] !== null ? Number(logExercise.reps[setIndex]) : 0
+                const bodyweight = logExercise.bodyweight && logExercise.bodyweight !== '' && logExercise.bodyweight !== null ? Number(logExercise.bodyweight) : 0
 
-                let totalWeight = weight
-                let displayWeight = weight
+                // Validate numbers
+                const validWeight = isNaN(weight) ? 0 : weight
+                const validReps = isNaN(reps) ? 0 : reps
+                const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+                let totalWeight = validWeight
+                let displayWeight = validWeight
 
                 if (exercise.exercise_type === 'Bodyweight') {
-                  totalWeight = bodyweight
-                  displayWeight = bodyweight
-                } else if (exercise.exercise_type === 'Bodyweight Loadable' && bodyweight > 0) {
-                  totalWeight = bodyweight + weight
-                  displayWeight = `${bodyweight} + ${weight} = ${totalWeight}`
+                  totalWeight = validBodyweight
+                  displayWeight = validBodyweight
+                } else if (exercise.exercise_type === 'Bodyweight Loadable' && validBodyweight > 0) {
+                  totalWeight = validBodyweight + validWeight
+                  displayWeight = `${validBodyweight} + ${validWeight} = ${totalWeight}`
                 }
 
                 historyData.push({
@@ -577,12 +670,12 @@ class WorkoutLogService {
                   week: (workout.week_index || 0) + 1,
                   day: (workout.day_index || 0) + 1,
                   set: setIndex + 1,
-                  weight: weight,
+                  weight: validWeight,
                   totalWeight: totalWeight,
                   displayWeight: displayWeight,
-                  reps: reps,
+                  reps: validReps,
                   completed: true,
-                  bodyweight: bodyweight,
+                  bodyweight: validBodyweight,
                   exerciseType: exercise.exercise_type
                 })
               }
@@ -615,20 +708,26 @@ class WorkoutLogService {
 
         exercise.completed.forEach((isCompleted, setIndex) => {
           if (isCompleted) {
-            const weight = Number(exercise.weights[setIndex]) || 0
-            const reps = Number(exercise.reps[setIndex]) || 0
-            const bodyweight = Number(exercise.bodyweight) || 0
+            // Safely convert to numbers, handling null, empty strings and invalid values
+            const weight = exercise.weights[setIndex] && exercise.weights[setIndex] !== '' && exercise.weights[setIndex] !== null ? Number(exercise.weights[setIndex]) : 0
+            const reps = exercise.reps[setIndex] && exercise.reps[setIndex] !== '' && exercise.reps[setIndex] !== null ? Number(exercise.reps[setIndex]) : 0
+            const bodyweight = exercise.bodyweight && exercise.bodyweight !== '' && exercise.bodyweight !== null ? Number(exercise.bodyweight) : 0
 
-            let effectiveWeight = weight
+            // Validate numbers
+            const validWeight = isNaN(weight) ? 0 : weight
+            const validReps = isNaN(reps) ? 0 : reps
+            const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+            let effectiveWeight = validWeight
             if (exercise.exerciseType === 'Bodyweight') {
-              effectiveWeight = bodyweight
+              effectiveWeight = validBodyweight
             } else if (exercise.exerciseType === 'Bodyweight Loadable') {
-              effectiveWeight = bodyweight + weight
+              effectiveWeight = validBodyweight + validWeight
             }
 
-            totalVolume += effectiveWeight * reps
+            totalVolume += effectiveWeight * validReps
             maxWeight = Math.max(maxWeight, effectiveWeight)
-            totalReps += reps
+            totalReps += validReps
             totalSets += 1
           }
         })
@@ -697,7 +796,7 @@ class WorkoutLogService {
   async getWorkoutStats(userId, timeframe = '30d') {
     return withSupabaseErrorHandling(async () => {
       const startDate = new Date()
-      
+
       switch (timeframe) {
         case '7d':
           startDate.setDate(startDate.getDate() - 7)
@@ -750,28 +849,34 @@ class WorkoutLogService {
       data.forEach(workout => {
         workout.workout_log_exercises.forEach(exercise => {
           const muscleGroup = exercise.exercises.primary_muscle_group
-          
+
           if (!muscleGroupBreakdown[muscleGroup]) {
             muscleGroupBreakdown[muscleGroup] = { volume: 0, sets: 0 }
           }
 
           exercise.completed.forEach((isCompleted, setIndex) => {
             if (isCompleted) {
-              const weight = Number(exercise.weights[setIndex]) || 0
-              const reps = Number(exercise.reps[setIndex]) || 0
-              const bodyweight = Number(exercise.bodyweight) || 0
+              // Safely convert to numbers, handling null, empty strings and invalid values
+              const weight = exercise.weights[setIndex] && exercise.weights[setIndex] !== '' && exercise.weights[setIndex] !== null ? Number(exercise.weights[setIndex]) : 0
+              const reps = exercise.reps[setIndex] && exercise.reps[setIndex] !== '' && exercise.reps[setIndex] !== null ? Number(exercise.reps[setIndex]) : 0
+              const bodyweight = exercise.bodyweight && exercise.bodyweight !== '' && exercise.bodyweight !== null ? Number(exercise.bodyweight) : 0
 
-              let effectiveWeight = weight
+              // Validate numbers
+              const validWeight = isNaN(weight) ? 0 : weight
+              const validReps = isNaN(reps) ? 0 : reps
+              const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+              let effectiveWeight = validWeight
               if (exercise.exercises.exercise_type === 'Bodyweight') {
-                effectiveWeight = bodyweight
+                effectiveWeight = validBodyweight
               } else if (exercise.exercises.exercise_type === 'Bodyweight Loadable') {
-                effectiveWeight = bodyweight + weight
+                effectiveWeight = validBodyweight + validWeight
               }
 
-              const volume = effectiveWeight * reps
+              const volume = effectiveWeight * validReps
               totalVolume += volume
               totalSets += 1
-              totalReps += reps
+              totalReps += validReps
 
               muscleGroupBreakdown[muscleGroup].volume += volume
               muscleGroupBreakdown[muscleGroup].sets += 1
@@ -803,18 +908,23 @@ class WorkoutLogService {
       const existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex)
 
       // Transform exercise data to Supabase format
-      const transformedExercises = exercises.map((ex, index) => ({
-        exerciseId: ex.exerciseId,
-        sets: Number(ex.sets),
-        reps: ex.reps || [],
-        weights: ex.weights || [],
-        completed: ex.completed || [],
-        bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
-        notes: ex.notes || '',
-        isAdded: ex.isAdded || false,
-        addedType: ex.addedType || null,
-        originalIndex: ex.originalIndex || -1
-      }))
+      const transformedExercises = exercises.map((ex, index) => {
+        const sets = ex.sets && ex.sets !== '' ? Number(ex.sets) : 1
+        const bodyweight = ex.bodyweight && ex.bodyweight !== '' ? Number(ex.bodyweight) : null
+
+        return {
+          exerciseId: ex.exerciseId,
+          sets: isNaN(sets) || sets <= 0 ? 1 : sets,
+          reps: ex.reps || [],
+          weights: ex.weights || [],
+          completed: ex.completed || [],
+          bodyweight: isNaN(bodyweight) ? null : bodyweight,
+          notes: ex.notes || '',
+          isAdded: ex.isAdded || false,
+          addedType: ex.addedType || null,
+          originalIndex: ex.originalIndex || -1
+        }
+      })
 
       const completedDate = new Date().toISOString()
 

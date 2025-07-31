@@ -67,13 +67,14 @@ const SUPABASE_READ_COST_PER_100K = 0.05 // Estimated $0.05 per 100,000 read
  * Enhanced cache entry with metadata
  */
 function createCacheEntry(data, ttl, queryInfo = {}) {
+  const safeData = data || []
   return {
-    data,
+    data: safeData,
     expiry: Date.now() + ttl,
     createdAt: Date.now(),
     accessCount: 0,
     lastAccessed: Date.now(),
-    size: JSON.stringify(data).length,
+    size: JSON.stringify(safeData).length,
     queryInfo,
     tags: queryInfo.tags || []
   }
@@ -349,14 +350,15 @@ export class SupabaseCache {
       throw result.error
     }
 
-    // Track database read
-    const dataSize = JSON.stringify(result.data).length
-    const documentCount = Array.isArray(result.data) ? result.data.length : 1
+    // Track database read - handle undefined data
+    const safeData = result.data || []
+    const dataSize = JSON.stringify(safeData).length
+    const documentCount = Array.isArray(safeData) ? safeData.length : 1
     trackSupabaseRead(table, 'select', documentCount, dataSize, queryTime, userId)
     updateCacheStats(false, queryTime)
 
-    // Cache the result
-    const entry = createCacheEntry(result.data, ttl, {
+    // Cache the result - handle undefined data
+    const entry = createCacheEntry(safeData, ttl, {
       table,
       tags: [...tags, table],
       userId,
@@ -365,7 +367,7 @@ export class SupabaseCache {
 
     this.setCacheEntry(cacheKey, entry)
 
-    return result.data
+    return safeData
   }
 
   /**

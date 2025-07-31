@@ -108,45 +108,44 @@ function ProgramsWorkoutHub({ userRole }) {
 
     // Start performance monitoring for view switch
     viewSwitchStartTime.current = Date.now();
-    performanceMonitor.startTiming(`view_switch_${activeView}_to_${newView}`);
 
-    // Monitor view switch performance
-    performanceMonitor.monitorViewSwitch(activeView, newView, () => {
-      // Set loading state during view switch
-      setIsViewSwitching(true);
+    // Set loading state during view switch
+    setIsViewSwitching(true);
 
-      // Add new view to mounted views set for lazy loading optimization
-      setMountedViews(prev => new Set([...prev, newView]));
+    // Add new view to mounted views set for lazy loading optimization
+    setMountedViews(prev => new Set([...prev, newView]));
 
-      // Update state
-      setActiveView(newView);
+    // Update state
+    setActiveView(newView);
 
-      // Update URL with proper history management
-      const newSearchParams = new URLSearchParams(location.search);
+    // Update URL with proper history management
+    const newSearchParams = new URLSearchParams(location.search);
 
-      if (newView === DEFAULT_VIEW) {
-        // Remove view parameter for default view to keep URL clean
-        newSearchParams.delete('view');
-      } else {
-        // Set view parameter for non-default views
-        newSearchParams.set('view', newView);
-      }
+    if (newView === DEFAULT_VIEW) {
+      // Remove view parameter for default view to keep URL clean
+      newSearchParams.delete('view');
+    } else {
+      // Set view parameter for non-default views
+      newSearchParams.set('view', newView);
+    }
 
-      const newSearch = newSearchParams.toString();
-      const newPath = location.pathname + (newSearch ? `?${newSearch}` : '');
+    const newSearch = newSearchParams.toString();
+    const newPath = location.pathname + (newSearch ? `?${newSearch}` : '');
 
-      // Use navigate to update URL and browser history
-      navigate(newPath, { replace: false });
+    // Use navigate to update URL and browser history
+    navigate(newPath, { replace: false });
 
-      // Clear loading state after a brief delay to allow for smooth transition
-      setTimeout(() => {
-        setIsViewSwitching(false);
-        performanceMonitor.endTiming(`view_switch_${activeView}_to_${newView}`);
-
-        // Monitor memory usage after view switch
-        performanceMonitor.monitorMemoryUsage(`after_switch_to_${newView}`);
-      }, 100);
-    });
+    // Clear loading state after a brief delay to allow for smooth transition
+    setTimeout(() => {
+      setIsViewSwitching(false);
+      
+      // Track view switch performance using the correct API
+      const switchDuration = Date.now() - viewSwitchStartTime.current;
+      performanceMonitor.trackUserInteraction(`view_switch_${activeView}_to_${newView}`, switchDuration, {
+        fromView: activeView,
+        toView: newView
+      });
+    }, 100);
   }, [activeView, location.pathname, location.search, navigate, performanceMonitor]);
 
   // Handle browser back/forward navigation
@@ -168,21 +167,20 @@ function ProgramsWorkoutHub({ userRole }) {
   useEffect(() => {
     // Monitor initial component mount time
     const mountDuration = Date.now() - componentMountTime.current;
-    performanceMonitor.startTiming('component_mount');
-    performanceMonitor.endTiming('component_mount');
-
-    // Monitor initial memory usage
-    performanceMonitor.monitorMemoryUsage('component_mounted');
+    performanceMonitor.trackPageLoad('ProgramsWorkoutHub', mountDuration, {
+      component: 'ProgramsWorkoutHub',
+      initialView: activeView
+    });
 
     // Cleanup function
     return () => {
       // Log performance summary on unmount
       if (process.env.NODE_ENV === 'development') {
-        console.log('[ProgramsWorkoutHub] Performance Summary:', performanceMonitor.getSummary());
+        console.log('[ProgramsWorkoutHub] Performance Dashboard:', performanceMonitor.getPerformanceDashboard());
         console.log('[ProgramsWorkoutHub] Cache Stats:', stateCache.getStats());
       }
     };
-  }, [performanceMonitor, stateCache]);
+  }, [activeView, stateCache]);
 
   // Periodic cache cleanup
   useEffect(() => {
@@ -208,8 +206,12 @@ function ProgramsWorkoutHub({ userRole }) {
   // State preservation functions with enhanced caching
   const saveViewState = useCallback((view, state) => {
     stateCache.mergeState(view, state);
-    performanceMonitor.trackCacheSize(`${view}_state`, state);
-  }, [stateCache, performanceMonitor]);
+    // Track cache operation using the correct API
+    performanceMonitor.trackCacheOperation(`${view}_state_save`, true, 0, {
+      view,
+      stateSize: JSON.stringify(state).length
+    });
+  }, [stateCache]);
 
   const getViewState = useCallback((view) => {
     return stateCache.getStateWithFallback(view, 'default', {});

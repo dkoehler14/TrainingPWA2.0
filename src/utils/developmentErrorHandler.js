@@ -2,32 +2,38 @@
  * Development Error Handler
  * 
  * Provides enhanced error handling, reporting, and recovery mechanisms
- * specifically for development environment issues.
+ * specifically for development environment issues with Supabase.
  */
 
-import { isDevelopment, getEmulatorConfig } from '../config/environment';
+import { isDevelopment, getSupabaseConfig, shouldUseSupabase } from '../config/environment';
+import { CONNECTION_STATUS, getConnectionMonitor } from './supabaseConnectionMonitor';
+import { SupabaseError, classifySupabaseError } from './supabaseErrorHandler';
 
 // Error types for categorization
 export const ERROR_TYPES = {
-  EMULATOR_CONNECTION: 'EMULATOR_CONNECTION',
+  SUPABASE_CONNECTION: 'SUPABASE_CONNECTION',
   SERVICE_STARTUP: 'SERVICE_STARTUP',
   CONFIGURATION: 'CONFIGURATION',
   NETWORK: 'NETWORK',
-  FIREBASE_INIT: 'FIREBASE_INIT'
+  SUPABASE_INIT: 'SUPABASE_INIT',
+  AUTH_ERROR: 'AUTH_ERROR',
+  DATABASE_ERROR: 'DATABASE_ERROR',
+  REALTIME_ERROR: 'REALTIME_ERROR'
 };
 
-// Service status tracking
+// Service status tracking for Supabase services
 const serviceStatus = {
-  firestore: { connected: false, error: null, lastAttempt: null },
+  database: { connected: false, error: null, lastAttempt: null },
   auth: { connected: false, error: null, lastAttempt: null },
-  functions: { connected: false, error: null, lastAttempt: null }
+  realtime: { connected: false, error: null, lastAttempt: null },
+  storage: { connected: false, error: null, lastAttempt: null }
 };
 
 /**
  * Enhanced error reporting for development
  * @param {Error} error - The error object
  * @param {string} errorType - Type of error from ERROR_TYPES
- * @param {string} service - Service name (firestore, auth, functions)
+ * @param {string} service - Service name (database, auth, realtime, storage)
  * @param {Object} context - Additional context information
  */
 export const reportDevelopmentError = (error, errorType, service = null, context = {}) => {
@@ -41,7 +47,9 @@ export const reportDevelopmentError = (error, errorType, service = null, context
     service,
     message: error.message,
     stack: error.stack,
-    context
+    context,
+    supabaseErrorCode: error.code || null,
+    supabaseErrorDetails: error.details || null
   };
 
   // Update service status if applicable
@@ -55,6 +63,14 @@ export const reportDevelopmentError = (error, errorType, service = null, context
   console.error(`Service: ${service || 'General'}`);
   console.error(`Time: ${timestamp}`);
   console.error(`Message: ${error.message}`);
+  
+  if (error.code) {
+    console.error(`Supabase Code: ${error.code}`);
+  }
+  
+  if (error.details) {
+    console.error(`Details: ${error.details}`);
+  }
   
   if (context && Object.keys(context).length > 0) {
     console.error('Context:', context);
@@ -83,17 +99,23 @@ const provideTroubleshootingSuggestions = (errorType, service, error) => {
   const suggestions = [];
 
   switch (errorType) {
-    case ERROR_TYPES.EMULATOR_CONNECTION:
-      suggestions.push('🔧 Make sure Firebase emulators are running: firebase emulators:start');
-      suggestions.push('🔧 Check if the emulator ports are available and not blocked');
-      suggestions.push('🔧 Verify firebase.json emulator configuration');
+    case ERROR_TYPES.SUPABASE_CONNECTION:
+      suggestions.push('🔧 Check your internet connection');
+      suggestions.push('🔧 Verify Supabase project URL and API keys in .env file');
+      suggestions.push('🔧 Check if Supabase project is active and not paused');
       
-      if (service === 'firestore') {
-        suggestions.push('🔧 Firestore emulator should be on localhost:8080');
+      if (service === 'database') {
+        suggestions.push('🔧 Verify database connection and RLS policies');
+        suggestions.push('🔧 Check if database tables exist and are accessible');
       } else if (service === 'auth') {
-        suggestions.push('🔧 Auth emulator should be on localhost:9099');
-      } else if (service === 'functions') {
-        suggestions.push('🔧 Functions emulator should be on localhost:5001');
+        suggestions.push('🔧 Verify auth configuration and providers');
+        suggestions.push('🔧 Check if email confirmation is required');
+      } else if (service === 'realtime') {
+        suggestions.push('🔧 Check if realtime is enabled for your tables');
+        suggestions.push('🔧 Verify realtime subscription permissions');
+      } else if (service === 'storage') {
+        suggestions.push('🔧 Check storage bucket configuration and policies');
+        suggestions.push('🔧 Verify file upload permissions');
       }
       break;
 
@@ -101,24 +123,49 @@ const provideTroubleshootingSuggestions = (errorType, service, error) => {
       suggestions.push('🔧 Try restarting the development server');
       suggestions.push('🔧 Clear browser cache and local storage');
       suggestions.push('🔧 Check for port conflicts with other running services');
+      suggestions.push('🔧 Verify Supabase client initialization');
       break;
 
     case ERROR_TYPES.CONFIGURATION:
       suggestions.push('🔧 Verify .env.development file exists and has correct values');
-      suggestions.push('🔧 Check REACT_APP_USE_EMULATORS is set to "true"');
-      suggestions.push('🔧 Ensure Firebase project ID is correctly configured');
+      suggestions.push('🔧 Check REACT_APP_USE_SUPABASE is set to "true"');
+      suggestions.push('🔧 Ensure REACT_APP_SUPABASE_URL is correctly configured');
+      suggestions.push('🔧 Verify REACT_APP_SUPABASE_ANON_KEY is valid');
       break;
 
     case ERROR_TYPES.NETWORK:
       suggestions.push('🔧 Check your internet connection');
-      suggestions.push('🔧 Verify firewall settings are not blocking local connections');
+      suggestions.push('🔧 Verify firewall settings are not blocking Supabase connections');
       suggestions.push('🔧 Try disabling VPN if active');
+      suggestions.push('🔧 Check if corporate proxy is interfering');
       break;
 
-    case ERROR_TYPES.FIREBASE_INIT:
-      suggestions.push('🔧 Verify Firebase configuration object is valid');
-      suggestions.push('🔧 Check if Firebase SDK versions are compatible');
+    case ERROR_TYPES.SUPABASE_INIT:
+      suggestions.push('🔧 Verify Supabase configuration object is valid');
+      suggestions.push('🔧 Check if Supabase client versions are compatible');
       suggestions.push('🔧 Try clearing node_modules and reinstalling dependencies');
+      suggestions.push('🔧 Ensure environment variables are loaded correctly');
+      break;
+
+    case ERROR_TYPES.AUTH_ERROR:
+      suggestions.push('🔧 Check user credentials and authentication state');
+      suggestions.push('🔧 Verify email confirmation if required');
+      suggestions.push('🔧 Check session expiration and refresh tokens');
+      suggestions.push('🔧 Review auth provider configuration');
+      break;
+
+    case ERROR_TYPES.DATABASE_ERROR:
+      suggestions.push('🔧 Check Row Level Security (RLS) policies');
+      suggestions.push('🔧 Verify table permissions and access rights');
+      suggestions.push('🔧 Check database schema and column names');
+      suggestions.push('🔧 Review query syntax and parameters');
+      break;
+
+    case ERROR_TYPES.REALTIME_ERROR:
+      suggestions.push('🔧 Check if realtime is enabled for the table');
+      suggestions.push('🔧 Verify realtime subscription filters');
+      suggestions.push('🔧 Check network connectivity for websockets');
+      suggestions.push('🔧 Review realtime channel configuration');
       break;
   }
 
@@ -197,37 +244,62 @@ export const updateServiceStatus = (service, connected, error = null) => {
 };
 
 /**
- * Check if emulator is likely running on specified port
- * @param {string} host - Host to check
- * @param {number} port - Port to check
- * @returns {Promise<boolean>} True if port appears to be in use
+ * Check if Supabase service is available
+ * @param {string} service - Service to check (database, auth, realtime, storage)
+ * @returns {Promise<boolean>} True if service appears to be available
  */
-export const checkEmulatorAvailability = async (host = 'localhost', port) => {
+export const checkSupabaseServiceAvailability = async (service = 'database') => {
   try {
+    const supabaseConfig = getSupabaseConfig();
+    if (!supabaseConfig.enabled || !supabaseConfig.url) {
+      return false;
+    }
+
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
     
-    await fetch(`http://${host}:${port}`, {
+    let testUrl;
+    switch (service) {
+      case 'database':
+        testUrl = `${supabaseConfig.url}/rest/v1/`;
+        break;
+      case 'auth':
+        testUrl = `${supabaseConfig.url}/auth/v1/settings`;
+        break;
+      case 'realtime':
+        testUrl = `${supabaseConfig.url}/realtime/v1/`;
+        break;
+      case 'storage':
+        testUrl = `${supabaseConfig.url}/storage/v1/`;
+        break;
+      default:
+        testUrl = `${supabaseConfig.url}/rest/v1/`;
+    }
+
+    const response = await fetch(testUrl, {
       method: 'GET',
-      mode: 'no-cors',
+      headers: {
+        'apikey': supabaseConfig.anonKey,
+        'Authorization': `Bearer ${supabaseConfig.anonKey}`
+      },
       signal: controller.signal
     });
     
     clearTimeout(timeoutId);
-    return true;
+    return response.status < 500; // Accept any non-server error status
   } catch (fetchError) {
     // More specific error handling for different failure types
     if (fetchError.name === 'AbortError') {
-      console.warn(`Timeout checking ${host}:${port} - emulator may not be running`);
+      console.warn(`Timeout checking ${service} service - may not be available`);
     } else if (fetchError.message.includes('Failed to fetch')) {
-      console.warn(`Network error checking ${host}:${port} - emulator likely not running`);
+      console.warn(`Network error checking ${service} service - likely not available`);
     }
     return false;
   }
 };
 
 /**
- * Attempt to recover from emulator connection failures
+ * Attempt to recover from Supabase connection failures
  * @param {string} service - Service to recover
  * @returns {Promise<boolean>} True if recovery was successful
  */
@@ -236,66 +308,75 @@ export const attemptServiceRecovery = async (service) => {
 
   console.log(`🔄 Attempting to recover ${service} service...`);
   
-  const emulatorConfig = getEmulatorConfig();
-  const servicePort = emulatorConfig.ports[service];
-  
-  if (!servicePort) {
-    console.warn(`No port configuration found for ${service}`);
-    return false;
-  }
-
-  // Check if emulator is available
-  const isAvailable = await checkEmulatorAvailability('localhost', servicePort);
+  // Check if service is available
+  const isAvailable = await checkSupabaseServiceAvailability(service);
   
   if (!isAvailable) {
-    console.warn(`${service} emulator not available on port ${servicePort}`);
+    console.warn(`${service} service not available`);
     reportDevelopmentError(
-      new Error(`${service} emulator not responding`),
-      ERROR_TYPES.EMULATOR_CONNECTION,
+      new Error(`${service} service not responding`),
+      ERROR_TYPES.SUPABASE_CONNECTION,
       service,
-      { port: servicePort, recoveryAttempt: true }
+      { recoveryAttempt: true }
     );
     return false;
   }
 
-  console.log(`✅ ${service} emulator appears to be available on port ${servicePort}`);
+  console.log(`✅ ${service} service appears to be available`);
+  
+  // Try to use connection monitor for additional recovery
+  const connectionMonitor = getConnectionMonitor();
+  if (connectionMonitor && service === 'database') {
+    const recoverySuccess = await connectionMonitor.attemptRecovery();
+    if (recoverySuccess) {
+      updateServiceStatus(service, true);
+      return true;
+    }
+  }
+  
+  updateServiceStatus(service, true);
   return true;
 };
 
 /**
- * Graceful fallback handler for when emulators are not available
+ * Graceful fallback handler for when Supabase services are not available
  * @param {string} service - Service that failed
  * @param {Error} error - The connection error
  * @returns {Object} Fallback configuration or instructions
  */
-export const handleEmulatorFallback = (service, error) => {
-  console.warn(`⚠️  ${service} emulator not available, implementing fallback...`);
+export const handleSupabaseFallback = (service, error) => {
+  console.warn(`⚠️  ${service} service not available, implementing fallback...`);
   
-  reportDevelopmentError(error, ERROR_TYPES.EMULATOR_CONNECTION, service, {
+  reportDevelopmentError(error, ERROR_TYPES.SUPABASE_CONNECTION, service, {
     fallbackActivated: true
   });
 
   const fallbackOptions = {
-    firestore: {
-      message: 'Firestore emulator unavailable. Data operations will fail until emulator is started.',
-      action: 'Start Firebase emulators with: firebase emulators:start',
+    database: {
+      message: 'Database service unavailable. Data operations will fail until connection is restored.',
+      action: 'Check Supabase project status and network connectivity',
       canContinue: false
     },
     auth: {
-      message: 'Auth emulator unavailable. Authentication will fail until emulator is started.',
-      action: 'Start Firebase emulators with: firebase emulators:start',
+      message: 'Auth service unavailable. Authentication will fail until service is restored.',
+      action: 'Check Supabase auth configuration and project status',
       canContinue: false
     },
-    functions: {
-      message: 'Functions emulator unavailable. API calls will fail until emulator is started.',
-      action: 'Start Firebase emulators with: firebase emulators:start',
-      canContinue: false
+    realtime: {
+      message: 'Realtime service unavailable. Live updates will not work until service is restored.',
+      action: 'Check Supabase realtime configuration and websocket connectivity',
+      canContinue: true
+    },
+    storage: {
+      message: 'Storage service unavailable. File operations will fail until service is restored.',
+      action: 'Check Supabase storage configuration and bucket policies',
+      canContinue: true
     }
   };
 
   const fallback = fallbackOptions[service] || {
     message: `${service} service unavailable`,
-    action: 'Check service configuration',
+    action: 'Check service configuration and connectivity',
     canContinue: false
   };
 
@@ -306,13 +387,13 @@ export const handleEmulatorFallback = (service, error) => {
 };
 
 /**
- * Enhanced Firebase service initialization with error handling
- * @param {Function} initFunction - Firebase service initialization function
+ * Enhanced Supabase service initialization with error handling
+ * @param {Function} initFunction - Supabase service initialization function
  * @param {string} serviceName - Name of the service being initialized
  * @param {Object} options - Additional options for initialization
  * @returns {Promise<any>} Initialized service or null if failed
  */
-export const initializeFirebaseServiceWithErrorHandling = async (initFunction, serviceName, options = {}) => {
+export const initializeSupabaseServiceWithErrorHandling = async (initFunction, serviceName, options = {}) => {
   if (!isDevelopment) {
     // In production, just run the initialization function
     return initFunction();
@@ -327,7 +408,7 @@ export const initializeFirebaseServiceWithErrorHandling = async (initFunction, s
   } catch (initError) {
     reportDevelopmentError(
       initError,
-      ERROR_TYPES.FIREBASE_INIT,
+      ERROR_TYPES.SUPABASE_INIT,
       serviceName,
       {
         initializationPhase: true,
@@ -351,7 +432,7 @@ export const initializeFirebaseServiceWithErrorHandling = async (initFunction, s
 };
 
 /**
- * Handle Firebase service initialization failures with fallback options
+ * Handle Supabase service initialization failures with fallback options
  * @param {string} serviceName - Name of the service that failed
  * @param {Error} error - The initialization error
  * @param {Object} options - Initialization options
@@ -361,10 +442,10 @@ export const handleServiceInitializationFallback = (serviceName, error, options 
   console.warn(`🔄 Handling ${serviceName} initialization failure...`);
 
   const fallbackStrategies = {
-    firestore: {
-      canContinue: false, // Firestore is critical for most operations
-      message: 'Firestore initialization failed. Database operations will not work.',
-      action: 'Check Firebase configuration and network connectivity',
+    database: {
+      canContinue: false, // Database is critical for most operations
+      message: 'Database initialization failed. Database operations will not work.',
+      action: 'Check Supabase configuration and network connectivity',
       fallbackService: null,
       criticalityLevel: 'high'
     },
@@ -375,12 +456,19 @@ export const handleServiceInitializationFallback = (serviceName, error, options 
       fallbackService: createMockAuthService(),
       criticalityLevel: 'medium'
     },
-    functions: {
-      canContinue: true, // App can run without functions in some cases
-      message: 'Functions initialization failed. API calls may not work.',
-      action: 'Check Firebase Functions configuration or use mock data',
-      fallbackService: createMockFunctionsService(),
+    realtime: {
+      canContinue: true, // App can run without realtime in some cases
+      message: 'Realtime initialization failed. Live updates will not work.',
+      action: 'Check Supabase Realtime configuration or use polling for updates',
+      fallbackService: createMockRealtimeService(),
       criticalityLevel: 'medium'
+    },
+    storage: {
+      canContinue: true, // App can run without storage in some cases
+      message: 'Storage initialization failed. File operations will not work.',
+      action: 'Check Supabase Storage configuration or disable file features',
+      fallbackService: createMockStorageService(),
+      criticalityLevel: 'low'
     }
   };
 
@@ -406,59 +494,103 @@ export const handleServiceInitializationFallback = (serviceName, error, options 
 const createMockAuthService = () => {
   console.warn('🎭 Creating mock auth service for development');
   return {
-    currentUser: null,
-    onAuthStateChanged: (callback) => {
-      console.warn('Mock auth: onAuthStateChanged called');
-      callback(null);
-      return () => {}; // Unsubscribe function
+    getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+    onAuthStateChange: (callback) => {
+      console.warn('Mock auth: onAuthStateChange called');
+      callback('SIGNED_OUT', null);
+      return { data: { subscription: { unsubscribe: () => {} } } };
     },
     signInWithPassword: () => {
       console.warn('Mock auth: signInWithPassword called');
-      return Promise.reject(new Error('Auth service not available in development'));
+      return Promise.resolve({ 
+        data: { user: null, session: null }, 
+        error: new Error('Auth service not available in development') 
+      });
     },
     signOut: () => {
       console.warn('Mock auth: signOut called');
-      return Promise.resolve();
+      return Promise.resolve({ error: null });
     }
   };
 };
 
 /**
- * Create a mock functions service for development fallback
- * @returns {Object} Mock functions service
+ * Create a mock realtime service for development fallback
+ * @returns {Object} Mock realtime service
  */
-const createMockFunctionsService = () => {
-  console.warn('🎭 Creating mock functions service for development');
+const createMockRealtimeService = () => {
+  console.warn('🎭 Creating mock realtime service for development');
   return {
-    httpsCallable: (functionName) => {
-      console.warn(`Mock functions: httpsCallable(${functionName}) called`);
-      return () => {
-        console.warn(`Mock functions: Calling ${functionName}`);
-        return Promise.reject(new Error(`Function ${functionName} not available in development`));
+    channel: (name) => {
+      console.warn(`Mock realtime: channel(${name}) called`);
+      return {
+        on: (event, filter, callback) => {
+          console.warn(`Mock realtime: on(${event}) called`);
+          return { unsubscribe: () => {} };
+        },
+        subscribe: (callback) => {
+          console.warn('Mock realtime: subscribe called');
+          if (callback) callback('SUBSCRIBED');
+          return 'SUBSCRIBED';
+        },
+        unsubscribe: () => {
+          console.warn('Mock realtime: unsubscribe called');
+          return 'ok';
+        }
       };
     }
   };
 };
 
 /**
- * Enhanced emulator connection retry mechanism
+ * Create a mock storage service for development fallback
+ * @returns {Object} Mock storage service
+ */
+const createMockStorageService = () => {
+  console.warn('🎭 Creating mock storage service for development');
+  return {
+    from: (bucket) => {
+      console.warn(`Mock storage: from(${bucket}) called`);
+      return {
+        upload: () => {
+          console.warn('Mock storage: upload called');
+          return Promise.resolve({ 
+            data: null, 
+            error: new Error('Storage service not available in development') 
+          });
+        },
+        download: () => {
+          console.warn('Mock storage: download called');
+          return Promise.resolve({ 
+            data: null, 
+            error: new Error('Storage service not available in development') 
+          });
+        }
+      };
+    }
+  };
+};
+
+/**
+ * Enhanced Supabase connection retry mechanism
  * @param {string} service - Service to retry connection for
  * @param {number} maxRetries - Maximum number of retry attempts
  * @param {number} retryDelay - Delay between retries in milliseconds
  * @returns {Promise<boolean>} True if connection was successful
  */
-export const retryEmulatorConnection = async (service, maxRetries = 3, retryDelay = 2000) => {
+export const retrySupabaseConnection = async (service, maxRetries = 3, retryDelay = 2000) => {
   if (!isDevelopment) return false;
 
-  console.log(`🔄 Starting retry sequence for ${service} emulator (max ${maxRetries} attempts)`);
+  console.log(`🔄 Starting retry sequence for ${service} service (max ${maxRetries} attempts)`);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`🔄 Attempt ${attempt}/${maxRetries} for ${service} emulator`);
+    console.log(`🔄 Attempt ${attempt}/${maxRetries} for ${service} service`);
     
     const success = await attemptServiceRecovery(service);
     
     if (success) {
-      console.log(`✅ ${service} emulator connection successful on attempt ${attempt}`);
+      console.log(`✅ ${service} service connection successful on attempt ${attempt}`);
       return true;
     }
 
@@ -468,10 +600,10 @@ export const retryEmulatorConnection = async (service, maxRetries = 3, retryDela
     }
   }
 
-  console.error(`❌ Failed to connect to ${service} emulator after ${maxRetries} attempts`);
+  console.error(`❌ Failed to connect to ${service} service after ${maxRetries} attempts`);
   reportDevelopmentError(
-    new Error(`${service} emulator connection failed after ${maxRetries} retries`),
-    ERROR_TYPES.EMULATOR_CONNECTION,
+    new Error(`${service} service connection failed after ${maxRetries} retries`),
+    ERROR_TYPES.SUPABASE_CONNECTION,
     service,
     { maxRetries, retryDelay, finalAttempt: true }
   );
@@ -480,13 +612,13 @@ export const retryEmulatorConnection = async (service, maxRetries = 3, retryDela
 };
 
 /**
- * Validate Firebase service health and connectivity
+ * Validate Supabase service health and connectivity
  * @returns {Promise<Object>} Health check results
  */
-export const performFirebaseHealthCheck = async () => {
+export const performSupabaseHealthCheck = async () => {
   if (!isDevelopment) return { healthy: true, services: {} };
 
-  console.log('🏥 Performing Firebase services health check...');
+  console.log('🏥 Performing Supabase services health check...');
   
   const healthResults = {
     healthy: true,
@@ -495,33 +627,53 @@ export const performFirebaseHealthCheck = async () => {
     recommendations: []
   };
 
-  const emulatorConfig = getEmulatorConfig();
+  const supabaseConfig = getSupabaseConfig();
   
-  for (const [service, port] of Object.entries(emulatorConfig.ports)) {
-    if (service === 'ui') continue; // Skip UI port
-    
-    const isAvailable = await checkEmulatorAvailability('localhost', port);
+  if (!supabaseConfig.enabled) {
+    healthResults.healthy = false;
+    healthResults.recommendations.push('Enable Supabase by setting REACT_APP_USE_SUPABASE=true');
+    return healthResults;
+  }
+
+  const services = ['database', 'auth', 'realtime', 'storage'];
+  
+  for (const service of services) {
+    const isAvailable = await checkSupabaseServiceAvailability(service);
     const serviceStatus = getServiceStatus()[service];
     
     healthResults.services[service] = {
       available: isAvailable,
       connected: serviceStatus?.connected || false,
-      port,
       lastError: serviceStatus?.error?.message || null,
       lastAttempt: serviceStatus?.lastAttempt || null
     };
 
     if (!isAvailable) {
       healthResults.healthy = false;
-      healthResults.recommendations.push(`Start ${service} emulator on port ${port}`);
+      healthResults.recommendations.push(`Check ${service} service connectivity and configuration`);
+    }
+  }
+
+  // Check connection monitor status
+  const connectionMonitor = getConnectionMonitor();
+  if (connectionMonitor) {
+    const monitorStatus = connectionMonitor.getStatus();
+    healthResults.connectionMonitor = {
+      status: monitorStatus,
+      isHealthy: monitorStatus === CONNECTION_STATUS.CONNECTED
+    };
+    
+    if (monitorStatus !== CONNECTION_STATUS.CONNECTED) {
+      healthResults.healthy = false;
+      healthResults.recommendations.push('Connection monitor reports unhealthy status');
     }
   }
 
   // Log health check results
   if (healthResults.healthy) {
-    console.log('✅ All Firebase services are healthy');
+    console.log('✅ All Supabase services are healthy');
   } else {
-    console.warn('⚠️  Some Firebase services have issues:');
+    console.warn('⚠️  Some Supabase services have issues:');
     healthResults.recommendations.forEach(rec => console.warn(`  - ${rec}`));
   }
 
@@ -529,12 +681,12 @@ export const performFirebaseHealthCheck = async () => {
 };
 
 /**
- * Initialize development error monitoring
+ * Initialize development error monitoring for Supabase
  */
 export const initializeDevelopmentErrorHandling = () => {
   if (!isDevelopment) return;
 
-  console.log('🔧 Initializing development error handling...');
+  console.log('🔧 Initializing development error handling for Supabase...');
 
   // Global error handler for unhandled errors
   window.addEventListener('error', (event) => {
@@ -552,31 +704,36 @@ export const initializeDevelopmentErrorHandling = () => {
 
   // Promise rejection handler
   window.addEventListener('unhandledrejection', (event) => {
+    const error = event.reason instanceof Error ? event.reason : new Error(event.reason);
+    const errorType = error instanceof SupabaseError ? 
+      (error.name.includes('Auth') ? ERROR_TYPES.AUTH_ERROR : 
+       error.name.includes('Connection') ? ERROR_TYPES.SUPABASE_CONNECTION : 
+       ERROR_TYPES.DATABASE_ERROR) : 
+      ERROR_TYPES.SERVICE_STARTUP;
+    
     reportDevelopmentError(
-      event.reason instanceof Error ? event.reason : new Error(event.reason),
-      ERROR_TYPES.SERVICE_STARTUP,
+      error,
+      errorType,
       null,
       { unhandledPromise: true }
     );
   });
 
   // Periodic service health check
-  if (process.env.REACT_APP_USE_EMULATORS === 'true') {
+  if (shouldUseSupabase()) {
     setInterval(async () => {
-      const emulatorConfig = getEmulatorConfig();
-      for (const [service, port] of Object.entries(emulatorConfig.ports)) {
-        if (service !== 'ui') {
-          const isAvailable = await checkEmulatorAvailability('localhost', port);
-          updateServiceStatus(service, isAvailable);
-        }
+      const services = ['database', 'auth', 'realtime', 'storage'];
+      for (const service of services) {
+        const isAvailable = await checkSupabaseServiceAvailability(service);
+        updateServiceStatus(service, isAvailable);
       }
     }, 30000); // Check every 30 seconds
   }
 
   // Perform initial health check
   setTimeout(async () => {
-    await performFirebaseHealthCheck();
+    await performSupabaseHealthCheck();
   }, 5000); // Wait 5 seconds after initialization
 
-  console.log('✅ Development error handling initialized');
+  console.log('✅ Development error handling for Supabase initialized');
 };

@@ -118,12 +118,12 @@ function ProgressTracker2() {
 		const fetchLogs = async () => {
 			setIsLoading(true);
 			try {
-				const logsData = await getCollectionCached('workoutLogs', {
+				const logsData = await getCollectionCached('workout_logs', {
 					where: [
-						['userId', '==', user.id],
+						['user_id', '==', user.id],
 						['date', '>=', startDate],
 						['date', '<=', endDate],
-						['isWorkoutFinished', '==', true]
+						['is_finished', '==', true]
 					],
 					orderBy: [['date', 'asc']]
 				});

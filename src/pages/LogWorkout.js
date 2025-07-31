@@ -1009,8 +1009,8 @@ function LogWorkout() {
         const transformedExercises = logData.map(ex => ({
           exerciseId: ex.exerciseId,
           sets: Number(ex.sets),
-          reps: ex.reps.map(rep => rep === '' ? 0 : Number(rep)),
-          weights: ex.weights.map(weight => weight === '' ? 0 : Number(weight)),
+          reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
+          weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
           completed: ex.completed,
           notes: ex.notes || '',
           bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
