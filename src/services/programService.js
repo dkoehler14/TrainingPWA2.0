@@ -21,7 +21,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
     // Create cache key based on user ID and filters
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
     const cacheKey = `user_programs_${userId}_${filterKey}`
-    
+
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
@@ -69,7 +69,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
 export const getProgramById = async (programId) => {
   return executeSupabaseOperation(async () => {
     const cacheKey = `program_full_${programId}`
-    
+
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
@@ -228,10 +228,12 @@ export const createCompleteProgram = async (programData, workoutsData) => {
 
     if (programError) throw programError
 
-    // Create workouts for the program
+    // Create workouts for the program (without exercises field)
     const workoutsToInsert = workoutsData.map(workout => ({
-      ...workout,
-      program_id: program.id
+      program_id: program.id,
+      week_number: workout.week_number,
+      day_number: workout.day_number,
+      name: workout.name
     }))
 
     const { data: workouts, error: workoutsError } = await supabase
@@ -248,16 +250,21 @@ export const createCompleteProgram = async (programData, workoutsData) => {
     // Create exercises for each workout
     const allExercises = []
     for (const workout of workouts) {
-      const workoutData = workoutsData.find(w => 
+      const workoutData = workoutsData.find(w =>
         w.week_number === workout.week_number && w.day_number === workout.day_number
       )
-      
-      if (workoutData && workoutData.exercises) {
-        const exercisesToInsert = workoutData.exercises.map(exercise => ({
-          ...exercise,
-          workout_id: workout.id
+
+      if (workoutData && workoutData.exercises && workoutData.exercises.length > 0) {
+        const exercisesToInsert = workoutData.exercises.map((exercise, index) => ({
+          workout_id: workout.id,
+          exercise_id: exercise.exercise_id,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          rest_minutes: exercise.rest_minutes || null,
+          notes: exercise.notes || '',
+          order_index: index
         }))
-        
+
         const { data: exercises, error: exercisesError } = await supabase
           .from('program_exercises')
           .insert(exercisesToInsert)
@@ -313,7 +320,7 @@ export const setCurrentProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
     const { data, error } = await supabase
       .from('programs')
-      .update({ 
+      .update({
         is_current: true,
         updated_at: new Date().toISOString()
       })
@@ -336,7 +343,7 @@ export const deactivateProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
     const { data, error } = await supabase
       .from('programs')
-      .update({ 
+      .update({
         is_active: false,
         is_current: false,
         updated_at: new Date().toISOString()
@@ -418,8 +425,8 @@ export const copyProgram = async (programId, newProgramData, userId) => {
 
       // Copy exercises for each workout
       for (const originalWorkout of originalProgram.program_workouts) {
-        const newWorkout = newWorkouts.find(w => 
-          w.week_number === originalWorkout.week_number && 
+        const newWorkout = newWorkouts.find(w =>
+          w.week_number === originalWorkout.week_number &&
           w.day_number === originalWorkout.day_number
         )
 
@@ -458,7 +465,7 @@ export const updateProgramProgress = async (programId, completedWeeks) => {
   return executeSupabaseOperation(async () => {
     const { data, error } = await supabase
       .from('programs')
-      .update({ 
+      .update({
         completed_weeks: completedWeeks,
         updated_at: new Date().toISOString()
       })
@@ -550,9 +557,9 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
   return executeSupabaseOperation(async () => {
     // Get the program with full workout structure to find the target exercise
     const program = await getProgramById(programId)
-    
+
     // Find the specific workout for the given week and day
-    const targetWorkout = program.program_workouts?.find(workout => 
+    const targetWorkout = program.program_workouts?.find(workout =>
       workout.week_number === weekNumber && workout.day_number === dayNumber
     )
 
@@ -561,7 +568,7 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
     }
 
     // Find the specific exercise to replace within the workout
-    const targetExercise = targetWorkout.program_exercises?.find(ex => 
+    const targetExercise = targetWorkout.program_exercises?.find(ex =>
       ex.exercise_id === oldExerciseId
     )
 
@@ -572,7 +579,7 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
     // Update the exercise in the program_exercises table
     const { data, error } = await supabase
       .from('program_exercises')
-      .update({ 
+      .update({
         exercise_id: newExerciseId,
         updated_at: new Date().toISOString()
       })

@@ -37,7 +37,7 @@ export const getExercises = async (filters = {}) => {
     }
 
     if (filters.createdBy) {
-      query = query.eq('created_by', filters.createdBy)
+      query = query.eq('created_by_auth_id', filters.createdBy)
     }
 
     if (filters.limit) {
@@ -76,7 +76,7 @@ export const searchExercises = async (searchTerm, filters = {}) => {
     }
 
     if (filters.createdBy) {
-      query = query.eq('created_by', filters.createdBy)
+      query = query.eq('created_by_auth_id', filters.createdBy)
     }
 
     const limit = filters.limit || 50
@@ -116,11 +116,8 @@ export const getExercisesByMuscleGroup = async (muscleGroup, options = {}) => {
       .eq('primary_muscle_group', muscleGroup)
       .order('name')
 
-    if (options.includeUserCreated && options.userId) {
-      query = query.or(`is_global.eq.true,created_by.eq.${options.userId}`)
-    } else {
-      query = query.eq('is_global', true)
-    }
+    // RLS policy will automatically filter based on user permissions
+    // No need to manually add OR conditions
 
     if (options.exerciseType) {
       query = query.eq('exercise_type', options.exerciseType)
@@ -144,11 +141,8 @@ export const getExercisesByType = async (exerciseType, options = {}) => {
       .eq('exercise_type', exerciseType)
       .order('name')
 
-    if (options.includeUserCreated && options.userId) {
-      query = query.or(`is_global.eq.true,created_by.eq.${options.userId}`)
-    } else {
-      query = query.eq('is_global', true)
-    }
+    // RLS policy will automatically filter based on user permissions
+    // No need to manually add OR conditions
 
     if (options.muscleGroup) {
       query = query.eq('primary_muscle_group', options.muscleGroup)
@@ -169,7 +163,7 @@ export const getUserExercises = async (userId) => {
     const { data, error } = await supabase
       .from('exercises')
       .select('*')
-      .eq('created_by', userId)
+      .eq('created_by_auth_id', userId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -184,7 +178,7 @@ export const getAvailableExercises = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
     // Create cache key based on user ID and filters
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
-    const cacheKey = `available_exercises_${userId}_${filterKey}`
+    const cacheKey = `available_exercises_${userId || 'anonymous'}_${filterKey}`
     
     return supabaseCache.getWithCache(
       cacheKey,
@@ -192,7 +186,6 @@ export const getAvailableExercises = async (userId, filters = {}) => {
         let query = supabase
           .from('exercises')
           .select('*')
-          .or(`is_global.eq.true,created_by.eq.${userId}`)
           .order('name')
 
         // Apply filters
@@ -418,11 +411,8 @@ export const checkExerciseNameExists = async (name, userId = null, excludeId = n
       .select('id, name')
       .ilike('name', name)
 
-    if (userId) {
-      query = query.or(`is_global.eq.true,created_by.eq.${userId}`)
-    } else {
-      query = query.eq('is_global', true)
-    }
+    // RLS policy will automatically filter based on user permissions
+    // No need to manually add OR conditions
 
     if (excludeId) {
       query = query.neq('id', excludeId)

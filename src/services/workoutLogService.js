@@ -293,11 +293,23 @@ class WorkoutLogService {
   /**
    * Save workout as draft (single-draft mode)
    */
-  async saveDraft(userId, exercises, workoutName, existingDraftId = null) {
+  async saveDraft(authUserId, exercises, workoutName, existingDraftId = null) {
     return withSupabaseErrorHandling(async () => {
-      if (!userId || !exercises || exercises.length === 0) {
+      if (!authUserId || !exercises || exercises.length === 0) {
         throw new Error('Invalid parameters for saving draft')
       }
+
+      // First get the internal user ID from the auth user ID
+      // const { data: userData, error: userError } = await supabase
+      //   .from('users')
+      //   .select('id')
+      //   .eq('auth_id', authUserId)
+      //   .single()
+
+      // if (userError) throw userError
+      // if (!userData) throw new Error('User not found')
+
+      // const internalUserId = userData.id
 
       // Validate and sanitize exercises data before saving
       const validatedExercises = exercises.map((ex, index) => {
@@ -331,7 +343,7 @@ class WorkoutLogService {
       })
 
       const draftData = {
-        user_id: userId,
+        user_id: authUserId,
         programId: null, // Quick workouts are not tied to a program
         weekIndex: null,
         dayIndex: null,
@@ -348,7 +360,7 @@ class WorkoutLogService {
 
       // Check for existing draft if no ID provided
       if (!existingDraftId) {
-        const existingDraft = await this.getSingleDraft(userId)
+        const existingDraft = await this.getSingleDraft(authUserId)
         if (existingDraft) {
           existingDraftId = existingDraft.id
         }
@@ -381,10 +393,10 @@ class WorkoutLogService {
         await this.updateWorkoutLogExercises(existingDraftId, validatedExercises)
       } else {
         // Clean up any orphaned drafts first
-        await this.cleanupAllDrafts(userId)
+        await this.cleanupAllDrafts(authUserId)
 
         // Create new draft
-        workoutLog = await this.createWorkoutLog(userId, {
+        workoutLog = await this.createWorkoutLog(authUserId, {
           ...draftData,
           exercises: validatedExercises
         })
@@ -397,8 +409,18 @@ class WorkoutLogService {
   /**
    * Get single draft for user
    */
-  async getSingleDraft(userId) {
+  async getSingleDraft(authUserId) {
     return withSupabaseErrorHandling(async () => {
+      // First get the internal user ID from the auth user ID
+      // const { data: userData, error: userError } = await supabase
+      //   .from('users')
+      //   .select('id')
+      //   .eq('auth_id', authUserId)
+      //   .single()
+
+      // if (userError) throw userError
+      // if (!userData) throw new Error('User not found')
+
       const { data, error } = await supabase
         .from('workout_logs')
         .select(`
@@ -413,7 +435,7 @@ class WorkoutLogService {
             )
           )
         `)
-        .eq('user_id', userId)
+        .eq('user_id', authUserId)
         .eq('is_draft', true)
         .eq('type', 'quick_workout')
         .order('updated_at', { ascending: false })
@@ -477,13 +499,23 @@ class WorkoutLogService {
   /**
    * Delete specific draft
    */
-  async deleteDraft(userId, draftId) {
+  async deleteDraft(authUserId, draftId) {
     return withSupabaseErrorHandling(async () => {
+      // First get the internal user ID from the auth user ID
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', authUserId)
+        .single()
+
+      if (userError) throw userError
+      if (!userData) throw new Error('User not found')
+
       const { error } = await supabase
         .from('workout_logs')
         .delete()
         .eq('id', draftId)
-        .eq('user_id', userId)
+        .eq('user_id', userData.id)
         .eq('is_draft', true)
 
       if (error) throw error
@@ -493,8 +525,20 @@ class WorkoutLogService {
   /**
    * Complete draft workout
    */
-  async completeDraft(userId, draftId, exercises, workoutName) {
+  async completeDraft(authUserId, draftId, exercises, workoutName) {
     return withSupabaseErrorHandling(async () => {
+      // First get the internal user ID from the auth user ID
+      // const { data: userData, error: userError } = await supabase
+      //   .from('users')
+      //   .select('id')
+      //   .eq('auth_id', authUserId)
+      //   .single()
+
+      // if (userError) throw userError
+      // if (!userData) throw new Error('User not found')
+
+      // const internalUserId = userData.id
+
       const completedData = {
         name: workoutName || `Quick Workout - ${new Date().toLocaleDateString()}`,
         is_draft: false,
@@ -507,7 +551,7 @@ class WorkoutLogService {
         .from('workout_logs')
         .update(completedData)
         .eq('id', draftId)
-        .eq('user_id', userId)
+        .eq('user_id', authUserId)
         .select()
         .single()
 
@@ -519,7 +563,7 @@ class WorkoutLogService {
       }
 
       // Update user analytics
-      await this.updateUserAnalytics(userId, exercises)
+      await this.updateUserAnalytics(authUserId, exercises)
 
       return data
     }, 'completeDraft')

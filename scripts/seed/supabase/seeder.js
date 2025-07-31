@@ -120,6 +120,64 @@ async function seedSupabaseAll(options = {}) {
       console.log('🌱 Starting Supabase database seeding...');
     }
 
+    // First, seed global exercises that all users can access
+    if (verbose) {
+      console.log('  Creating global exercises...');
+    }
+
+    const globalExercises = [
+      // Chest exercises
+      { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Bench Press', primary_muscle_group: 'Chest', exercise_type: 'Compound', instructions: 'Lie on bench, lower bar to chest, press up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Push-ups', primary_muscle_group: 'Chest', exercise_type: 'Bodyweight', instructions: 'Start in plank position, lower chest to ground, push up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Incline Dumbbell Press', primary_muscle_group: 'Chest', exercise_type: 'Compound', instructions: 'On incline bench, press dumbbells up and together', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Dumbbell Flyes', primary_muscle_group: 'Chest', exercise_type: 'Isolation', instructions: 'Lie on bench, arc dumbbells out and back together', is_global: true },
+
+      // Back exercises
+      { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Pull-ups', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Hang from bar, pull body up until chin over bar', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440006', name: 'Bent-over Row', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Bend at hips, pull weight to lower chest', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440007', name: 'Lat Pulldown', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Pull bar down to upper chest, squeeze shoulder blades', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440008', name: 'Deadlift', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Lift weight from ground by extending hips and knees', is_global: true },
+
+      // Legs exercises
+      { id: '550e8400-e29b-41d4-a716-446655440009', name: 'Squat', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Lower body by bending knees and hips, return to standing', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000a', name: 'Leg Press', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Push weight away using legs while seated', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000b', name: 'Lunges', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Step forward, lower back knee toward ground', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000c', name: 'Leg Curl', primary_muscle_group: 'Legs', exercise_type: 'Isolation', instructions: 'Curl heels toward glutes against resistance', is_global: true },
+
+      // Shoulders exercises
+      { id: '550e8400-e29b-41d4-a716-44665544000d', name: 'Overhead Press', primary_muscle_group: 'Shoulders', exercise_type: 'Compound', instructions: 'Press weight overhead from shoulder level', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000e', name: 'Lateral Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Raise arms out to sides to shoulder height', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000f', name: 'Front Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Raise arms forward to shoulder height', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440010', name: 'Rear Delt Flyes', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Bend forward, raise arms out to sides', is_global: true },
+
+      // Arms exercises
+      { id: '550e8400-e29b-41d4-a716-446655440011', name: 'Bicep Curls', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Curl weight up by flexing biceps', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440012', name: 'Tricep Dips', primary_muscle_group: 'Arms', exercise_type: 'Compound', instructions: 'Lower body by bending arms, push back up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440013', name: 'Hammer Curls', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Curl with neutral grip, thumbs up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440014', name: 'Tricep Extensions', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Extend arms overhead, lower weight behind head', is_global: true },
+
+      // Core exercises
+      { id: '550e8400-e29b-41d4-a716-446655440015', name: 'Plank', primary_muscle_group: 'Core', exercise_type: 'Isometric', instructions: 'Hold body straight in push-up position', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440016', name: 'Crunches', primary_muscle_group: 'Core', exercise_type: 'Isolation', instructions: 'Lift shoulders off ground by contracting abs', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440017', name: 'Russian Twists', primary_muscle_group: 'Core', exercise_type: 'Isolation', instructions: 'Rotate torso side to side while seated', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440018', name: 'Mountain Climbers', primary_muscle_group: 'Core', exercise_type: 'Cardio', instructions: 'Alternate bringing knees to chest in plank position', is_global: true }
+    ];
+
+    // Insert global exercises
+    const { data: exercises, error: exerciseError } = await supabase
+      .from('exercises')
+      .upsert(globalExercises)
+      .select();
+
+    if (exerciseError) {
+      console.error('DEBUG: Exercise creation error:', exerciseError);
+      throw new Error(`Failed to create exercises: ${exerciseError.message}`);
+    }
+
+    if (verbose) {
+      console.log(`    ✅ Created ${exercises.length} global exercises`);
+    }
+
     // Define test users with different scenarios
     // Add timestamp to make emails unique and avoid conflicts
     const timestamp = Date.now();
@@ -247,12 +305,13 @@ async function seedSupabaseAll(options = {}) {
       summary: {
         users: createdUsers.length,
         programs: 1,
-        exercises: 0,
+        exercises: exercises.length,
         historicalData: includeHistoricalData,
         duration
       },
       users: createdUsers,
-      programs: [program]
+      programs: [program],
+      exercises: exercises
     };
   } catch (error) {
     console.error('Error seeding Supabase data:', error);
@@ -330,6 +389,7 @@ async function resetSupabaseAll(options = {}) {
       { table: 'program_exercises', description: 'program exercises' },
       { table: 'program_workouts', description: 'program workouts' },
       { table: 'programs', description: 'programs' },
+      { table: 'exercises', description: 'exercises' },
       { table: 'users', description: 'users' }
     ];
 
