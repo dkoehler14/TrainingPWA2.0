@@ -89,6 +89,9 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       };
     });
 
+    console.log("dataTransformation program: ", program);
+    console.log("dataTransformation weekly_configs: ", weekly_configs);
+
     return {
       ...program,
       weekly_configs: weekly_configs

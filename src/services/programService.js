@@ -70,6 +70,8 @@ export const getUserPrograms = async (userId, filters = {}) => {
 
         if (error) throw error
 
+        console.log("programData: ", data);
+
         // Transform each program to include weekly_configs
         const transformedPrograms = (data || []).map(program => {
           // Sort workouts by week and day before transformation
@@ -92,6 +94,8 @@ export const getUserPrograms = async (userId, filters = {}) => {
           // Apply transformation to convert normalized data to weekly_configs format
           return transformSupabaseProgramToWeeklyConfigs(program)
         })
+
+        console.log("transformedPrograms: ", transformedPrograms);
 
         return transformedPrograms
       },
