@@ -1,5 +1,41 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals'
-import { createMockSupabaseClient } from '../../utils/testHelpers'
+
+// Mock the data transformation utility
+const mockTransformSupabaseProgramToWeeklyConfigs = jest.fn((program) => ({
+  ...program,
+  weekly_configs: {}
+}))
+
+jest.mock('../../utils/dataTransformations', () => ({
+  transformSupabaseProgramToWeeklyConfigs: mockTransformSupabaseProgramToWeeklyConfigs
+}))
+
+// Mock Supabase
+const mockFrom = () => ({
+  select: mockSelect,
+  eq: mockEq,
+  order: mockOrder,
+  single: mockSingle,
+  insert: mockInsert,
+  update: mockUpdate,
+  delete: mockDelete
+})
+
+const mockSelect = function() { return this }
+const mockEq = function() { return this }
+const mockOrder = function() { return this }
+const mockSingle = function() { return Promise.resolve({ data: null, error: null }) }
+const mockInsert = function() { return this }
+const mockUpdate = function() { return this }
+const mockDelete = function() { return this }
+
+jest.mock('../../config/supabase', () => ({
+  supabase: {
+    from: mockFrom
+  }
+}))
+
+// Import after mocking
 import {
   getUserPrograms,
   getProgramById,
@@ -10,12 +46,7 @@ import {
   deleteProgram,
   copyProgram
 } from '../programService'
-
-// Mock Supabase
-const mockSupabase = createMockSupabaseClient()
-jest.mock('../../config/supabase', () => ({
-  supabase: mockSupabase
-}))
+import { supabase } from '../../config/supabase'
 
 describe('Program Service', () => {
   beforeEach(() => {
@@ -23,41 +54,119 @@ describe('Program Service', () => {
   })
 
   describe('getUserPrograms', () => {
-    it('should fetch user programs with default ordering', async () => {
+    beforeEach(() => {
+      mockTransformSupabaseProgramToWeeklyConfigs.mockClear()
+    })
+
+    it('should fetch user programs with workout and exercise data', async () => {
       const userId = 'user123'
       const mockPrograms = [
-        { id: '1', name: 'Program 1', user_id: userId },
-        { id: '2', name: 'Program 2', user_id: userId }
+        { 
+          id: '1', 
+          name: 'Program 1', 
+          user_id: userId,
+          program_workouts: [
+            {
+              id: 'workout1',
+              week_number: 1,
+              day_number: 1,
+              program_exercises: [
+                { id: 'ex1', order_index: 0 }
+              ]
+            }
+          ]
+        },
+        { 
+          id: '2', 
+          name: 'Program 2', 
+          user_id: userId,
+          program_workouts: []
+        }
       ]
 
-      mockSupabase.from().order.mockResolvedValue({ data: mockPrograms, error: null })
+      supabase.from().order.mockResolvedValue({ data: mockPrograms, error: null })
 
       const result = await getUserPrograms(userId)
 
-      expect(mockSupabase.from).toHaveBeenCalledWith('programs')
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
-      expect(mockSupabase.from().order).toHaveBeenCalledWith('created_at', { ascending: false })
-      expect(result).toEqual(mockPrograms)
+      expect(supabase.from).toHaveBeenCalledWith('programs')
+      expect(supabase.from().select).toHaveBeenCalledWith(expect.stringContaining('program_workouts'))
+      expect(supabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(supabase.from().order).toHaveBeenCalledWith('created_at', { ascending: false })
+      expect(mockTransformSupabaseProgramToWeeklyConfigs).toHaveBeenCalledTimes(2)
+      expect(result).toHaveLength(2)
     })
 
     it('should apply isActive filter', async () => {
       const userId = 'user123'
       const filters = { isActive: true }
-      mockSupabase.from().order.mockResolvedValue({ data: [], error: null })
+      supabase.from().order.mockResolvedValue({ data: [], error: null })
 
       await getUserPrograms(userId, filters)
 
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_active', true)
+      expect(supabase.from().eq).toHaveBeenCalledWith('is_active', true)
     })
 
     it('should apply isCurrent filter', async () => {
       const userId = 'user123'
       const filters = { isCurrent: true }
-      mockSupabase.from().order.mockResolvedValue({ data: [], error: null })
+      supabase.from().order.mockResolvedValue({ data: [], error: null })
 
       await getUserPrograms(userId, filters)
 
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_current', true)
+      expect(supabase.from().eq).toHaveBeenCalledWith('is_current', true)
+    })
+
+    it('should sort workouts and exercises before transformation', async () => {
+      const userId = 'user123'
+      const mockPrograms = [
+        { 
+          id: '1', 
+          name: 'Program 1', 
+          user_id: userId,
+          program_workouts: [
+            {
+              id: 'workout2',
+              week_number: 2,
+              day_number: 1,
+              program_exercises: [
+                { id: 'ex2', order_index: 1 },
+                { id: 'ex1', order_index: 0 }
+              ]
+            },
+            {
+              id: 'workout1',
+              week_number: 1,
+              day_number: 2,
+              program_exercises: []
+            }
+          ]
+        }
+      ]
+
+      supabase.from().order.mockResolvedValue({ data: mockPrograms, error: null })
+
+      await getUserPrograms(userId)
+
+      // Verify that the transformation function was called with sorted data
+      expect(mockTransformSupabaseProgramToWeeklyConfigs).toHaveBeenCalledWith(
+        expect.objectContaining({
+          program_workouts: expect.arrayContaining([
+            expect.objectContaining({
+              week_number: 1,
+              day_number: 2,
+              program_exercises: []
+            }),
+            expect.objectContaining({
+              week_number: 2,
+              day_number: 1,
+              program_exercises: expect.arrayContaining([
+                expect.objectContaining({ order_index: 0 }),
+                expect.objectContaining({ order_index: 1 })
+              ])
+            })
+          ])
+        })
+      )
     })
   })
 
@@ -80,12 +189,12 @@ describe('Program Service', () => {
         ]
       }
 
-      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
+      supabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await getProgramById(programId)
 
-      expect(mockSupabase.from().select).toHaveBeenCalledWith(expect.stringContaining('program_workouts'))
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(supabase.from().select).toHaveBeenCalledWith(expect.stringContaining('program_workouts'))
+      expect(supabase.from().eq).toHaveBeenCalledWith('id', programId)
       expect(result).toEqual(mockProgram)
     })
   })
@@ -100,19 +209,19 @@ describe('Program Service', () => {
         is_active: true
       }
 
-      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
+      supabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await getCurrentProgram(userId)
 
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_current', true)
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('is_active', true)
+      expect(supabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(supabase.from().eq).toHaveBeenCalledWith('is_current', true)
+      expect(supabase.from().eq).toHaveBeenCalledWith('is_active', true)
       expect(result).toEqual(mockProgram)
     })
 
     it('should return null when no current program found', async () => {
       const userId = 'user123'
-      mockSupabase.from().single.mockResolvedValue({ 
+      supabase.from().single.mockResolvedValue({ 
         data: null, 
         error: { code: 'PGRST116' } 
       })
@@ -133,12 +242,12 @@ describe('Program Service', () => {
       }
       const mockCreatedProgram = { id: 'prog123', ...programData }
 
-      mockSupabase.from().single.mockResolvedValue({ data: mockCreatedProgram, error: null })
+      supabase.from().single.mockResolvedValue({ data: mockCreatedProgram, error: null })
 
       const result = await createProgram(programData)
 
-      expect(mockSupabase.from().insert).toHaveBeenCalledWith([programData])
-      expect(mockSupabase.from().select).toHaveBeenCalled()
+      expect(supabase.from().insert).toHaveBeenCalledWith([programData])
+      expect(supabase.from().select).toHaveBeenCalled()
       expect(result).toEqual(mockCreatedProgram)
     })
   })
@@ -149,17 +258,17 @@ describe('Program Service', () => {
       const updates = { name: 'Updated Program' }
       const mockUpdatedProgram = { id: programId, ...updates }
 
-      mockSupabase.from().single.mockResolvedValue({ data: mockUpdatedProgram, error: null })
+      supabase.from().single.mockResolvedValue({ data: mockUpdatedProgram, error: null })
 
       const result = await updateProgram(programId, updates)
 
-      expect(mockSupabase.from().update).toHaveBeenCalledWith(
+      expect(supabase.from().update).toHaveBeenCalledWith(
         expect.objectContaining({
           ...updates,
           updated_at: expect.any(String)
         })
       )
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(supabase.from().eq).toHaveBeenCalledWith('id', programId)
       expect(result).toEqual(mockUpdatedProgram)
     })
   })
@@ -170,18 +279,18 @@ describe('Program Service', () => {
       const userId = 'user123'
       const mockProgram = { id: programId, is_current: true }
 
-      mockSupabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
+      supabase.from().single.mockResolvedValue({ data: mockProgram, error: null })
 
       const result = await setCurrentProgram(programId, userId)
 
-      expect(mockSupabase.from().update).toHaveBeenCalledWith(
+      expect(supabase.from().update).toHaveBeenCalledWith(
         expect.objectContaining({
           is_current: true,
           updated_at: expect.any(String)
         })
       )
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(supabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(supabase.from().eq).toHaveBeenCalledWith('user_id', userId)
       expect(result).toEqual(mockProgram)
     })
   })
@@ -190,13 +299,13 @@ describe('Program Service', () => {
     it('should delete program', async () => {
       const programId = 'prog123'
       const userId = 'user123'
-      mockSupabase.from().delete.mockResolvedValue({ error: null })
+      supabase.from().delete.mockResolvedValue({ error: null })
 
       const result = await deleteProgram(programId, userId)
 
-      expect(mockSupabase.from().delete).toHaveBeenCalled()
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('id', programId)
-      expect(mockSupabase.from().eq).toHaveBeenCalledWith('user_id', userId)
+      expect(supabase.from().delete).toHaveBeenCalled()
+      expect(supabase.from().eq).toHaveBeenCalledWith('id', programId)
+      expect(supabase.from().eq).toHaveBeenCalledWith('user_id', userId)
       expect(result).toBe(true)
     })
   })

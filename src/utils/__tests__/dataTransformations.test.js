@@ -31,7 +31,7 @@ jest.mock('../programUtils', () => ({
 
 describe('Data Transformation Utilities', () => {
   describe('transformSupabaseProgramToWeeklyConfigs', () => {
-    it('should transform Supabase program structure to weeklyConfigs format', () => {
+    it('should transform Supabase program structure to weekly_configs format', () => {
       const supabaseProgram = {
         id: 'program-123',
         name: 'Test Program',
@@ -47,7 +47,8 @@ describe('Data Transformation Utilities', () => {
                 exercise_id: 'exercise-1',
                 sets: 3,
                 reps: 10,
-                notes: 'Test notes'
+                notes: 'Test notes',
+                order_index: 1
               }
             ]
           },
@@ -60,7 +61,8 @@ describe('Data Transformation Utilities', () => {
                 exercise_id: 'exercise-2',
                 sets: 4,
                 reps: 8,
-                notes: ''
+                notes: '',
+                order_index: 1
               }
             ]
           },
@@ -75,11 +77,18 @@ describe('Data Transformation Utilities', () => {
 
       const result = transformSupabaseProgramToWeeklyConfigs(supabaseProgram);
 
-      expect(result).toHaveLength(2); // 2 weeks
-      expect(result[0]).toHaveLength(2); // 2 days per week
+      // Should return program object with weekly_configs property
+      expect(result).toHaveProperty('id', 'program-123');
+      expect(result).toHaveProperty('name', 'Test Program');
+      expect(result).toHaveProperty('weekly_configs');
+      
+      // Check weekly_configs structure
+      expect(result.weekly_configs).toHaveProperty('week1_day1');
+      expect(result.weekly_configs).toHaveProperty('week1_day2');
+      expect(result.weekly_configs).toHaveProperty('week2_day1');
       
       // Check first week, first day
-      expect(result[0][0]).toEqual({
+      expect(result.weekly_configs.week1_day1).toEqual({
         name: 'Day 1',
         exercises: [
           {
@@ -92,7 +101,7 @@ describe('Data Transformation Utilities', () => {
       });
 
       // Check first week, second day
-      expect(result[0][1]).toEqual({
+      expect(result.weekly_configs.week1_day2).toEqual({
         name: 'Day 2',
         exercises: [
           {
@@ -105,7 +114,7 @@ describe('Data Transformation Utilities', () => {
       });
 
       // Check second week, first day
-      expect(result[1][0]).toEqual({
+      expect(result.weekly_configs.week2_day1).toEqual({
         name: 'Week 2 Day 1',
         exercises: []
       });
@@ -119,11 +128,14 @@ describe('Data Transformation Utilities', () => {
 
       const result = transformSupabaseProgramToWeeklyConfigs(incompleteProgram);
 
-      expect(result).toEqual([]);
+      expect(result).toHaveProperty('id', 'program-123');
+      expect(result).toHaveProperty('name', 'Incomplete Program');
+      expect(result).toHaveProperty('weekly_configs', {});
     });
 
     it('should handle programs with no exercises', () => {
       const programWithoutExercises = {
+        id: 'program-456',
         duration: 1,
         days_per_week: 1,
         program_workouts: [
@@ -138,7 +150,7 @@ describe('Data Transformation Utilities', () => {
 
       const result = transformSupabaseProgramToWeeklyConfigs(programWithoutExercises);
 
-      expect(result[0][0]).toEqual({
+      expect(result.weekly_configs.week1_day1).toEqual({
         name: 'Empty Day',
         exercises: []
       });
@@ -146,6 +158,7 @@ describe('Data Transformation Utilities', () => {
 
     it('should handle out-of-bounds week/day numbers', () => {
       const programWithInvalidIndices = {
+        id: 'program-789',
         duration: 1,
         days_per_week: 1,
         program_workouts: [
@@ -166,9 +179,269 @@ describe('Data Transformation Utilities', () => {
 
       const result = transformSupabaseProgramToWeeklyConfigs(programWithInvalidIndices);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toHaveLength(1);
-      expect(result[0][0].name).toBe('Valid Day');
+      expect(result.weekly_configs).toHaveProperty('week1_day1');
+      expect(result.weekly_configs).not.toHaveProperty('week5_day1');
+      expect(result.weekly_configs.week1_day1.name).toBe('Valid Day');
+    });
+
+    it('should handle null or invalid program input', () => {
+      const nullResult = transformSupabaseProgramToWeeklyConfigs(null);
+      expect(nullResult).toHaveProperty('weekly_configs', {});
+
+      const undefinedResult = transformSupabaseProgramToWeeklyConfigs(undefined);
+      expect(undefinedResult).toHaveProperty('weekly_configs', {});
+    });
+
+    it('should sort exercises by order_index', () => {
+      const programWithOrderedExercises = {
+        id: 'program-ordered',
+        duration: 1,
+        days_per_week: 1,
+        program_workouts: [
+          {
+            week_number: 1,
+            day_number: 1,
+            name: 'Ordered Day',
+            program_exercises: [
+              {
+                exercise_id: 'exercise-2',
+                sets: 3,
+                reps: 8,
+                order_index: 2
+              },
+              {
+                exercise_id: 'exercise-1',
+                sets: 3,
+                reps: 10,
+                order_index: 1
+              }
+            ]
+          }
+        ]
+      };
+
+      const result = transformSupabaseProgramToWeeklyConfigs(programWithOrderedExercises);
+
+      expect(result.weekly_configs.week1_day1.exercises).toEqual([
+        {
+          exerciseId: 'exercise-1',
+          sets: 3,
+          reps: 10,
+          notes: ''
+        },
+        {
+          exerciseId: 'exercise-2',
+          sets: 3,
+          reps: 8,
+          notes: ''
+        }
+      ]);
+    });
+
+    it('should handle invalid exercise objects gracefully', () => {
+      const programWithInvalidExercises = {
+        id: 'program-invalid-ex',
+        duration: 1,
+        days_per_week: 1,
+        program_workouts: [
+          {
+            week_number: 1,
+            day_number: 1,
+            name: 'Mixed Exercises',
+            program_exercises: [
+              {
+                exercise_id: 'valid-exercise',
+                sets: 3,
+                reps: 10,
+                order_index: 1
+              },
+              null, // Invalid exercise
+              {
+                // Missing exercise_id
+                sets: 3,
+                reps: 8,
+                order_index: 2
+              },
+              {
+                exercise_id: 'another-valid',
+                sets: 'invalid', // Invalid sets value
+                reps: 'invalid', // Invalid reps value
+                order_index: 3
+              }
+            ]
+          }
+        ]
+      };
+
+      const result = transformSupabaseProgramToWeeklyConfigs(programWithInvalidExercises);
+
+      // Should only include valid exercises with proper defaults
+      expect(result.weekly_configs.week1_day1.exercises).toEqual([
+        {
+          exerciseId: 'valid-exercise',
+          sets: 3,
+          reps: 10,
+          notes: ''
+        },
+        {
+          exerciseId: '',
+          sets: 3,
+          reps: 8,
+          notes: ''
+        },
+        {
+          exerciseId: 'another-valid',
+          sets: 3, // Default value
+          reps: 8, // Default value
+          notes: ''
+        }
+      ]);
+    });
+
+    it('should handle invalid workout objects', () => {
+      const programWithInvalidWorkouts = {
+        id: 'program-invalid-workouts',
+        duration: 2,
+        days_per_week: 2,
+        program_workouts: [
+          {
+            week_number: 1,
+            day_number: 1,
+            name: 'Valid Workout',
+            program_exercises: []
+          },
+          null, // Invalid workout
+          {
+            // Missing week_number and day_number
+            name: 'Invalid Workout',
+            program_exercises: []
+          },
+          {
+            week_number: 0, // Invalid week number (should be >= 1)
+            day_number: 1,
+            name: 'Zero Week',
+            program_exercises: []
+          },
+          {
+            week_number: 1,
+            day_number: 2,
+            name: 'Valid Workout 2',
+            program_exercises: []
+          }
+        ]
+      };
+
+      const result = transformSupabaseProgramToWeeklyConfigs(programWithInvalidWorkouts);
+
+      // Should only include valid workouts
+      expect(result.weekly_configs).toHaveProperty('week1_day1');
+      expect(result.weekly_configs).toHaveProperty('week1_day2');
+      expect(Object.keys(result.weekly_configs)).toHaveLength(2);
+      
+      expect(result.weekly_configs.week1_day1.name).toBe('Valid Workout');
+      expect(result.weekly_configs.week1_day2.name).toBe('Valid Workout 2');
+    });
+
+    it('should handle programs with invalid duration or days_per_week', () => {
+      const invalidPrograms = [
+        {
+          id: 'program-no-duration',
+          name: 'No Duration',
+          days_per_week: 3,
+          program_workouts: []
+        },
+        {
+          id: 'program-zero-duration',
+          name: 'Zero Duration',
+          duration: 0,
+          days_per_week: 3,
+          program_workouts: []
+        },
+        {
+          id: 'program-negative-days',
+          name: 'Negative Days',
+          duration: 2,
+          days_per_week: -1,
+          program_workouts: []
+        }
+      ];
+
+      invalidPrograms.forEach(program => {
+        const result = transformSupabaseProgramToWeeklyConfigs(program);
+        expect(result).toHaveProperty('weekly_configs', {});
+        expect(result.id).toBe(program.id);
+      });
+    });
+
+    it('should preserve all original program properties', () => {
+      const programWithExtraProps = {
+        id: 'program-extra',
+        name: 'Program with Extra Props',
+        description: 'A test program',
+        created_by: 'user-123',
+        created_at: '2024-01-01T00:00:00Z',
+        duration: 1,
+        days_per_week: 1,
+        custom_field: 'custom_value',
+        program_workouts: [
+          {
+            week_number: 1,
+            day_number: 1,
+            name: 'Day 1',
+            program_exercises: []
+          }
+        ]
+      };
+
+      const result = transformSupabaseProgramToWeeklyConfigs(programWithExtraProps);
+
+      // Should preserve all original properties
+      expect(result.id).toBe('program-extra');
+      expect(result.name).toBe('Program with Extra Props');
+      expect(result.description).toBe('A test program');
+      expect(result.created_by).toBe('user-123');
+      expect(result.created_at).toBe('2024-01-01T00:00:00Z');
+      expect(result.custom_field).toBe('custom_value');
+      
+      // Should add weekly_configs
+      expect(result).toHaveProperty('weekly_configs');
+      expect(result.weekly_configs).toHaveProperty('week1_day1');
+    });
+
+    it('should handle exercises with missing order_index', () => {
+      const programWithMissingOrderIndex = {
+        id: 'program-no-order',
+        duration: 1,
+        days_per_week: 1,
+        program_workouts: [
+          {
+            week_number: 1,
+            day_number: 1,
+            name: 'Unordered Day',
+            program_exercises: [
+              {
+                exercise_id: 'exercise-1',
+                sets: 3,
+                reps: 10
+                // Missing order_index
+              },
+              {
+                exercise_id: 'exercise-2',
+                sets: 3,
+                reps: 8,
+                order_index: 1
+              }
+            ]
+          }
+        ]
+      };
+
+      const result = transformSupabaseProgramToWeeklyConfigs(programWithMissingOrderIndex);
+
+      // Should handle missing order_index gracefully (defaults to 0)
+      expect(result.weekly_configs.week1_day1.exercises).toHaveLength(2);
+      expect(result.weekly_configs.week1_day1.exercises[0].exerciseId).toBe('exercise-1'); // order_index 0 comes first
+      expect(result.weekly_configs.week1_day1.exercises[1].exerciseId).toBe('exercise-2'); // order_index 1 comes second
     });
   });
 

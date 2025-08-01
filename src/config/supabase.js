@@ -15,6 +15,7 @@ import { isDevelopment } from './environment'
 const useSupabase = process.env.REACT_APP_USE_SUPABASE === 'true'
 const isLocalDevelopment = isDevelopment && process.env.REACT_APP_SUPABASE_LOCAL_URL
 const isProduction = process.env.NODE_ENV === 'production'
+const realtimeDisabledByEnv = process.env.REACT_APP_DISABLE_REALTIME === 'true'
 
 // Configuration based on environment
 const getSupabaseConfig = () => {
@@ -25,7 +26,7 @@ const getSupabaseConfig = () => {
       serviceRoleKey: process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY
     }
   }
-  
+
   return {
     url: process.env.REACT_APP_SUPABASE_URL,
     anonKey: process.env.REACT_APP_SUPABASE_ANON_KEY,
@@ -42,7 +43,7 @@ const getClientOptions = () => {
     const { productionClientOptions } = require('./production')
     return productionClientOptions
   }
-  
+
   // Development configuration
   return {
     auth: {
@@ -52,7 +53,7 @@ const getClientOptions = () => {
       flowType: 'pkce',
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
       storageKey: 'supabase.auth.token',
-      debug: isDevelopment
+      debug: false // Disable auth debug logs to reduce console noise
     },
     realtime: {
       params: {
@@ -86,38 +87,38 @@ const clientOptions = getClientOptions()
  */
 async function fetchWithRetry(url, options = {}, retries = 3) {
   const { timeout = 10000, ...fetchOptions } = options
-  
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       // Create abort controller for timeout
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), timeout)
-      
+
       const response = await fetch(url, {
         ...fetchOptions,
         signal: controller.signal
       })
-      
+
       clearTimeout(timeoutId)
-      
+
       // If response is ok, return it
       if (response.ok) {
         return response
       }
-      
+
       // If it's a server error (5xx) and we have retries left, continue
       if (response.status >= 500 && attempt < retries) {
         console.warn(`Supabase request failed (attempt ${attempt}/${retries}):`, response.status)
         await delay(Math.pow(2, attempt) * 1000) // Exponential backoff
         continue
       }
-      
+
       // For client errors (4xx) or final attempt, return the response
       return response
-      
+
     } catch (error) {
       console.error(`Supabase request error (attempt ${attempt}/${retries}):`, error.message)
-      
+
       // If it's the last attempt, throw the error
       if (attempt === retries) {
         throw new SupabaseConnectionError(
@@ -125,7 +126,7 @@ async function fetchWithRetry(url, options = {}, retries = 3) {
           error
         )
       }
-      
+
       // Wait before retrying with exponential backoff
       await delay(Math.pow(2, attempt) * 1000)
     }
@@ -174,9 +175,10 @@ try {
     } else {
       // Use development client creation
       supabase = createClient(config.url, config.anonKey, clientOptions)
-      
-      // Set up connection monitoring in development
+
+      // Suppress GoTrueClient console logs in development
       if (isDevelopment) {
+        suppressGoTrueClientLogs()
         setupConnectionMonitoring(supabase)
       }
     }
@@ -193,6 +195,39 @@ try {
 }
 
 /**
+ * Suppress GoTrueClient console logs to reduce noise during development
+ */
+function suppressGoTrueClientLogs() {
+  const originalLog = console.log
+  const originalWarn = console.warn
+  const originalError = console.error
+
+  console.log = (...args) => {
+    const message = args.join(' ')
+    if (message.includes('GoTrueClient') || message.includes('gotrue-js')) {
+      return // Suppress GoTrueClient logs
+    }
+    originalLog.apply(console, args)
+  }
+
+  console.warn = (...args) => {
+    const message = args.join(' ')
+    if (message.includes('GoTrueClient') || message.includes('gotrue-js')) {
+      return // Suppress GoTrueClient warnings
+    }
+    originalWarn.apply(console, args)
+  }
+
+  console.error = (...args) => {
+    const message = args.join(' ')
+    if (message.includes('GoTrueClient') || message.includes('gotrue-js')) {
+      return // Suppress GoTrueClient errors (but you might want to keep these)
+    }
+    originalError.apply(console, args)
+  }
+}
+
+/**
  * Set up connection monitoring for development
  */
 function setupConnectionMonitoring(client) {
@@ -200,10 +235,10 @@ function setupConnectionMonitoring(client) {
   client.auth.onAuthStateChange((event, session) => {
     console.log('🔐 Supabase Auth Event:', event, session ? 'Session Active' : 'No Session')
   })
-  
+
   // Monitor realtime connection status
   const channel = client.channel('connection-monitor')
-  
+
   channel
     .on('system', { event: 'connected' }, () => {
       console.log('🔗 Supabase Realtime: Connected')
@@ -224,18 +259,18 @@ export async function checkSupabaseHealth() {
   if (!supabase) {
     throw new SupabaseConfigurationError('Supabase client is not initialized')
   }
-  
+
   try {
     // Simple query to test connection
     const { error } = await supabase
       .from('users')
       .select('count')
       .limit(1)
-    
+
     if (error && error.code !== 'PGRST116') { // PGRST116 is "table not found" which is ok for health check
       throw error
     }
-    
+
     return {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -268,6 +303,23 @@ export const shouldUseSupabase = () => {
 }
 
 /**
+ * Helper function to check if realtime should be disabled
+ */
+export const isRealtimeDisabled = () => {
+  // Check environment variable first
+  if (realtimeDisabledByEnv) {
+    return true
+  }
+  
+  // Check localStorage for development toggle
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('disable_realtime') === 'true'
+  }
+  
+  return false
+}
+
+/**
  * Get current Supabase configuration info
  */
 export const getSupabaseInfo = () => {
@@ -290,7 +342,7 @@ export const createSupabaseAdmin = () => {
       'Admin client requires both URL and service role key'
     )
   }
-  
+
   return createClient(config.url, config.serviceRoleKey, {
     auth: {
       autoRefreshToken: false,
@@ -311,12 +363,12 @@ export async function withSupabaseErrorHandling(operation, context = '') {
     return result
   } catch (error) {
     console.error(`Supabase operation failed${context ? ` (${context})` : ''}:`, error)
-    
+
     // Re-throw with additional context
     if (error instanceof SupabaseConnectionError || error instanceof SupabaseConfigurationError) {
       throw error
     }
-    
+
     throw new SupabaseConnectionError(
       `Operation failed${context ? ` in ${context}` : ''}: ${error.message}`,
       error
@@ -328,10 +380,10 @@ export async function withSupabaseErrorHandling(operation, context = '') {
 if (isDevelopment) {
   const info = getSupabaseInfo()
   console.log('🗄️  Supabase Configuration:', info)
-  
+
   if (info.configured && info.shouldUse) {
     console.log('✅ Supabase client initialized successfully')
-    
+
     // Perform health check in development
     checkSupabaseHealth()
       .then(health => {

@@ -210,29 +210,36 @@ const CacheDemo = () => {
           ) : (
             <Alert variant="info">Loading database read statistics...</Alert>
           )}
+          
+          {enhancedStats && (!enhancedStats.recentActivity || !enhancedStats.recentActivity.topCollections) && (
+            <Alert variant="info">
+              <strong>Simplified Mode Active:</strong> Some detailed statistics are disabled for better performance. 
+              The cache system is still working but with reduced complexity.
+            </Alert>
+          )}
         </Card.Body>
       </Card>
 
-      {enhancedStats && enhancedStats.recentActivity.topCollections.length > 0 && (
+      {enhancedStats && enhancedStats.recentActivity && enhancedStats.recentActivity.topTables && enhancedStats.recentActivity.topTables.length > 0 && (
         <Card className="mb-3">
           <Card.Header>
-            <h5>📈 Top Collections by Reads</h5>
+            <h5>📈 Top Tables by Reads</h5>
           </Card.Header>
           <Card.Body>
             <Table striped bordered hover size="sm">
               <thead>
                 <tr>
-                  <th>Collection</th>
+                  <th>Table</th>
                   <th>Database Reads</th>
                   <th>Average Query Time</th>
                 </tr>
               </thead>
               <tbody>
-                {enhancedStats.recentActivity.topCollections.map((collection, index) => (
+                {enhancedStats.recentActivity.topTables.map((tableData, index) => (
                   <tr key={index}>
-                    <td><Badge bg="info">{collection.collection}</Badge></td>
-                    <td className="text-danger">{collection.reads}</td>
-                    <td>{collection.avgTime}</td>
+                    <td><Badge bg="info">{tableData.table}</Badge></td>
+                    <td className="text-danger">{tableData.reads}</td>
+                    <td>{tableData.avgTime}</td>
                   </tr>
                 ))}
               </tbody>
@@ -241,7 +248,7 @@ const CacheDemo = () => {
         </Card>
       )}
 
-      {enhancedStats && enhancedStats.recentActivity.queryHistory.length > 0 && (
+      {enhancedStats && enhancedStats.recentActivity && enhancedStats.recentActivity.queryHistory && enhancedStats.recentActivity.queryHistory.length > 0 && (
         <Card className="mb-3">
           <Card.Header>
             <h5>📋 Recent Query Activity</h5>
@@ -252,7 +259,7 @@ const CacheDemo = () => {
                 <tr>
                   <th>Time</th>
                   <th>Type</th>
-                  <th>Collection</th>
+                  <th>Table</th>
                   <th>Query Time</th>
                   <th>Data Size</th>
                 </tr>
@@ -266,7 +273,7 @@ const CacheDemo = () => {
                         {query.type === 'database-read' ? '🗄️ DB Read' : '⚡ Cache Hit'}
                       </Badge>
                     </td>
-                    <td>{query.collection}</td>
+                    <td>{query.table}</td>
                     <td>{query.queryTime?.toFixed(2)}ms</td>
                     <td>{query.dataSize ? (query.dataSize / 1024).toFixed(2) + ' KB' : 'N/A'}</td>
                   </tr>

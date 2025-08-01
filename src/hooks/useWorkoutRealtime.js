@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../config/supabase'
+import { supabase, isRealtimeDisabled } from '../config/supabase'
 
 export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, options = {}) => {
   const {
@@ -170,7 +170,7 @@ export const useWorkoutRealtime = (userId, programId, weekIndex, dayIndex, optio
    * Connect to real-time channel using enhanced channel manager
    */
   const connect = useCallback(async () => {
-    if (!enabled || !userId || !programId || weekIndex === null || dayIndex === null) {
+    if (!enabled || !userId || !programId || weekIndex === null || dayIndex === null || isRealtimeDisabled()) {
       return
     }
 

@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase'
 import { handleSupabaseError, executeSupabaseOperation } from '../utils/supabaseErrorHandler'
-import { supabaseCache } from '../api/supabaseCache'
+import { supabaseCache, invalidateProgramCache, invalidateUserCache } from '../api/supabaseCache'
+import { transformSupabaseProgramToWeeklyConfigs } from '../utils/dataTransformations'
 
 /**
  * Program Service for Supabase program operations
@@ -15,19 +16,36 @@ const PROGRAM_TEMPLATES_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 /**
  * Get all programs for a user (with caching)
+ * Enhanced to fetch related workout and exercise data and transform to expected format
  */
 export const getUserPrograms = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
     // Create cache key based on user ID and filters
+    // Include version identifier to distinguish enhanced queries with workout/exercise data
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
-    const cacheKey = `user_programs_${userId}_${filterKey}`
+    const cacheKey = `user_programs_enhanced_${userId}_${filterKey}`
 
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
         let query = supabase
           .from('programs')
-          .select('*')
+          .select(`
+            *,
+            program_workouts (
+              *,
+              program_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type,
+                  instructions
+                )
+              )
+            )
+          `)
           .eq('user_id', userId)
           .order('created_at', { ascending: false })
 
@@ -51,7 +69,31 @@ export const getUserPrograms = async (userId, filters = {}) => {
         const { data, error } = await query
 
         if (error) throw error
-        return data || []
+
+        // Transform each program to include weekly_configs
+        const transformedPrograms = (data || []).map(program => {
+          // Sort workouts by week and day before transformation
+          if (program.program_workouts) {
+            program.program_workouts.sort((a, b) => {
+              if (a.week_number !== b.week_number) {
+                return a.week_number - b.week_number
+              }
+              return a.day_number - b.day_number
+            })
+
+            // Sort exercises within each workout by order_index
+            program.program_workouts.forEach(workout => {
+              if (workout.program_exercises) {
+                workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+              }
+            })
+          }
+
+          // Apply transformation to convert normalized data to weekly_configs format
+          return transformSupabaseProgramToWeeklyConfigs(program)
+        })
+
+        return transformedPrograms
       },
       {
         ttl: PROGRAM_CACHE_TTL,
@@ -68,7 +110,8 @@ export const getUserPrograms = async (userId, filters = {}) => {
  */
 export const getProgramById = async (programId) => {
   return executeSupabaseOperation(async () => {
-    const cacheKey = `program_full_${programId}`
+    // Use enhanced cache key to distinguish from basic program queries
+    const cacheKey = `program_enhanced_${programId}`
 
     return supabaseCache.getWithCache(
       cacheKey,
@@ -209,6 +252,14 @@ export const createProgram = async (programData) => {
 
     if (error) throw error
 
+    // Invalidate user program cache to ensure new program appears
+    invalidateProgramCache(programData.user_id)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
+      reason: 'program-created'
+    })
+
     console.log('Program created:', data.name)
     return data
   }, 'createProgram')
@@ -280,6 +331,14 @@ export const createCompleteProgram = async (programData, workoutsData) => {
       }
     }
 
+    // Invalidate user program cache to ensure new program appears
+    invalidateProgramCache(programData.user_id)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
+      reason: 'complete-program-created'
+    })
+
     console.log('Complete program created:', program.name)
     return {
       program,
@@ -308,6 +367,19 @@ export const updateProgram = async (programId, updates) => {
 
     if (error) throw error
 
+    // Invalidate program-specific cache (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-updated'
+    })
+    
+    // Invalidate user program cache
+    invalidateProgramCache(data.user_id)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`], {
+      reason: 'program-updated'
+    })
+
     console.log('Program updated:', data.name)
     return data
   }, 'updateProgram')
@@ -330,6 +402,19 @@ export const setCurrentProgram = async (programId, userId) => {
       .single()
 
     if (error) throw error
+
+    // Invalidate program-specific cache (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-set-current'
+    })
+    
+    // Invalidate user program cache (affects all programs since current status changed)
+    invalidateProgramCache(userId)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
+      reason: 'program-set-current'
+    })
 
     console.log('Program set as current:', data.name)
     return data
@@ -355,6 +440,19 @@ export const deactivateProgram = async (programId, userId) => {
 
     if (error) throw error
 
+    // Invalidate program-specific cache (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-deactivated'
+    })
+    
+    // Invalidate user program cache
+    invalidateProgramCache(userId)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
+      reason: 'program-deactivated'
+    })
+
     console.log('Program deactivated:', data.name)
     return data
   }, 'deactivateProgram')
@@ -372,6 +470,19 @@ export const deleteProgram = async (programId, userId) => {
       .eq('user_id', userId)
 
     if (error) throw error
+
+    // Invalidate program-specific cache (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-deleted'
+    })
+    
+    // Invalidate user program cache
+    invalidateProgramCache(userId)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
+      reason: 'program-deleted'
+    })
 
     console.log('Program deleted:', programId)
     return true
@@ -453,6 +564,14 @@ export const copyProgram = async (programId, newProgramData, userId) => {
       }
     }
 
+    // Invalidate user program cache to ensure copied program appears
+    invalidateProgramCache(userId)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
+      reason: 'program-copied'
+    })
+
     console.log('Program copied:', newProgram.name)
     return newProgram
   }, 'copyProgram')
@@ -474,6 +593,19 @@ export const updateProgramProgress = async (programId, completedWeeks) => {
       .single()
 
     if (error) throw error
+
+    // Invalidate program-specific cache (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-progress-updated'
+    })
+    
+    // Invalidate user program cache
+    invalidateProgramCache(data.user_id)
+    
+    // Also invalidate user cache patterns that include programs (both old and new formats)
+    supabaseCache.invalidate([`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`], {
+      reason: 'program-progress-updated'
+    })
 
     console.log('Program progress updated:', data.name, 'weeks:', completedWeeks)
     return data
@@ -588,6 +720,28 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
       .single()
 
     if (error) throw error
+
+    // Invalidate program-specific cache since exercise data changed (both old and new formats)
+    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+      reason: 'program-exercise-updated'
+    })
+    
+    // Get the program to find the user_id for cache invalidation
+    const { data: programData, error: programError } = await supabase
+      .from('programs')
+      .select('user_id')
+      .eq('id', programId)
+      .single()
+    
+    if (!programError && programData) {
+      // Invalidate user program cache
+      invalidateProgramCache(programData.user_id)
+      
+      // Also invalidate user cache patterns that include programs (both old and new formats)
+      supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
+        reason: 'program-exercise-updated'
+      })
+    }
 
     console.log(`Successfully updated exercise ${targetExercise.id} from ${oldExerciseId} to ${newExerciseId}`)
     return data

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { supabase } from '../config/supabase'
+import { supabase, isRealtimeDisabled } from '../config/supabase'
 import { useAuth } from './useAuth'
 
 export function useRealtimeWorkouts(options = {}) {
@@ -16,7 +16,7 @@ export function useRealtimeWorkouts(options = {}) {
   const [analytics, setAnalytics] = useState([])
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState(null)
-  
+
   const subscriptionsRef = useRef([])
   const {
     enableWorkoutLogs = true,
@@ -39,7 +39,7 @@ export function useRealtimeWorkouts(options = {}) {
   // Handle workout log changes
   const handleWorkoutLogChange = useCallback((payload) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
-    
+
     setWorkouts(current => {
       switch (eventType) {
         case 'INSERT':
@@ -48,15 +48,15 @@ export function useRealtimeWorkouts(options = {}) {
             return [newRecord, ...current].slice(0, limit)
           }
           return current
-          
+
         case 'UPDATE':
-          return current.map(workout => 
+          return current.map(workout =>
             workout.id === newRecord.id ? { ...workout, ...newRecord } : workout
           )
-          
+
         case 'DELETE':
           return current.filter(workout => workout.id !== oldRecord.id)
-          
+
         default:
           return current
       }
@@ -66,7 +66,7 @@ export function useRealtimeWorkouts(options = {}) {
   // Handle draft changes
   const handleDraftChange = useCallback((payload) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
-    
+
     setDrafts(current => {
       switch (eventType) {
         case 'INSERT':
@@ -75,19 +75,19 @@ export function useRealtimeWorkouts(options = {}) {
             return [newRecord, ...current]
           }
           return current
-          
+
         case 'UPDATE':
           // If draft becomes finished, remove from drafts
           if (!newRecord.is_draft) {
             return current.filter(draft => draft.id !== newRecord.id)
           }
-          return current.map(draft => 
+          return current.map(draft =>
             draft.id === newRecord.id ? { ...draft, ...newRecord } : draft
           )
-          
+
         case 'DELETE':
           return current.filter(draft => draft.id !== oldRecord.id)
-          
+
         default:
           return current
       }
@@ -97,20 +97,20 @@ export function useRealtimeWorkouts(options = {}) {
   // Handle analytics changes
   const handleAnalyticsChange = useCallback((payload) => {
     const { eventType, new: newRecord, old: oldRecord } = payload
-    
+
     setAnalytics(current => {
       switch (eventType) {
         case 'INSERT':
           return [...current, newRecord]
-          
+
         case 'UPDATE':
-          return current.map(analytic => 
+          return current.map(analytic =>
             analytic.id === newRecord.id ? { ...analytic, ...newRecord } : analytic
           )
-          
+
         case 'DELETE':
           return current.filter(analytic => analytic.id !== oldRecord.id)
-          
+
         default:
           return current
       }
@@ -119,13 +119,13 @@ export function useRealtimeWorkouts(options = {}) {
 
   // Set up real-time subscriptions
   useEffect(() => {
-    if (!user?.id) {
+    if (!user?.id || isRealtimeDisabled()) {
       cleanup()
       return
     }
 
     setError(null)
-    
+
     try {
       // Subscribe to workout logs
       if (enableWorkoutLogs) {

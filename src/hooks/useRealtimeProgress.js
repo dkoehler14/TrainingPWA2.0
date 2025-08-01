@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '../config/supabase'
+import { supabase, isRealtimeDisabled } from '../config/supabase'
 import { useAuth } from './useAuth'
 
 export const useRealtimeProgress = (options = {}) => {
@@ -152,7 +152,7 @@ export const useRealtimeProgress = (options = {}) => {
    * Connect to real-time channels
    */
   const connect = useCallback(async () => {
-    if (!enabled || !user?.id) return
+    if (!enabled || !user?.id || isRealtimeDisabled()) return
 
     try {
       console.log('🔌 Connecting to real-time progress channels')

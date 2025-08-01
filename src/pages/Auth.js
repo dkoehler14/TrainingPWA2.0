@@ -16,24 +16,24 @@ function Auth() {
   const [resetSuccess, setResetSuccess] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
-  
+
   const navigate = useNavigate();
   const location = useLocation();
-  const { 
-    signUp, 
-    signIn, 
-    signInWithGoogle, 
-    resetPassword, 
-    error: authError, 
+  const {
+    signUp,
+    signIn,
+    signInWithGoogle,
+    resetPassword,
+    error: authError,
     clearError,
-    loading 
+    loading
   } = useAuth();
 
   // Protect this route for guests only
   const { isGuestAllowed, isChecking } = useGuestRoute();
 
   // Get redirect destination
-  const from = location.state?.from || '/dashboard';
+  const from = location.state?.from || '/';
 
   // Clear errors when switching between sign in/up
   useEffect(() => {
@@ -50,7 +50,7 @@ function Auth() {
     try {
       if (isSignUp) {
         const result = await signUp(email, password, { name });
-        
+
         if (result.needsConfirmation) {
           setLocalError('');
           setResetSuccess('Please check your email to confirm your account before signing in.');
@@ -127,7 +127,7 @@ function Auth() {
       <Row className="justify-content-center">
         <Col md={6}>
           <h1 className="text-center mb-4">{isSignUp ? 'Sign Up' : 'Sign In'}</h1>
-          
+
           <Button
             variant="light"
             onClick={handleGoogleSignIn}
@@ -135,10 +135,10 @@ function Auth() {
             className="w-100 mb-3 d-flex align-items-center justify-content-center"
             style={{ border: '1px solid #ccc', fontWeight: 500 }}
           >
-            <img 
-              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
-              alt="Google" 
-              style={{ width: 22, height: 22, marginRight: 8 }} 
+            <img
+              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+              alt="Google"
+              style={{ width: 22, height: 22, marginRight: 8 }}
             />
             {isLoading ? 'Signing in...' : 'Sign in with Google'}
           </Button>
@@ -195,9 +195,9 @@ function Auth() {
               )}
             </Form.Group>
 
-            <Button 
-              variant="primary" 
-              type="submit" 
+            <Button
+              variant="primary"
+              type="submit"
               className="soft-button w-100 mb-3"
               disabled={isLoading}
             >
@@ -222,11 +222,11 @@ function Auth() {
                 variant="link"
                 className="p-0"
                 style={{ fontSize: '0.95rem' }}
-                onClick={() => { 
-                  setShowResetModal(true); 
-                  setResetEmail(email); 
-                  setResetSuccess(''); 
-                  setLocalError(''); 
+                onClick={() => {
+                  setShowResetModal(true);
+                  setResetEmail(email);
+                  setResetSuccess('');
+                  setLocalError('');
                 }}
                 disabled={isLoading}
               >
@@ -235,13 +235,13 @@ function Auth() {
             </div>
           )}
           {/* Password Reset Modal */}
-          <Modal 
-            show={showResetModal} 
+          <Modal
+            show={showResetModal}
             onHide={() => {
               setShowResetModal(false);
               setResetSuccess('');
               setLocalError('');
-            }} 
+            }}
             centered
           >
             <Modal.Header closeButton>
@@ -275,9 +275,9 @@ function Auth() {
                       We'll send you a link to reset your password.
                     </Form.Text>
                   </Form.Group>
-                  
+
                   {localError && <Alert variant="danger">{localError}</Alert>}
-                  
+
                   <div className="d-flex gap-2">
                     <Button
                       variant="secondary"

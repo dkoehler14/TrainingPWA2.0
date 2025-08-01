@@ -102,10 +102,12 @@ function Programs({ userRole }) {
 
           // Fetch user programs using Supabase
           const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
+          console.log("userProgramsData: ", userProgramsData);
           const processedUserPrograms = userProgramsData.map(program => ({
             ...program,
             weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
           }));
+          console.log("processedUserPrograms: ", processedUserPrograms);
           setUserPrograms(processedUserPrograms);
           setRealtimePrograms(processedUserPrograms); // Initialize real-time state
 

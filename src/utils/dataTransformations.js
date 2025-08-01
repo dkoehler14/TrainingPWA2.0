@@ -6,41 +6,104 @@
 import { parseWeeklyConfigs } from './programUtils';
 
 /**
- * Transform Supabase program structure to weeklyConfigs format
- * @param {Object} program - Supabase program object
- * @returns {Array} weeklyConfigs array
+ * Transform Supabase program structure to weekly_configs format
+ * Converts normalized database structure (program_workouts and program_exercises) 
+ * to the flattened weekly_configs format expected by the frontend
+ * @param {Object} program - Supabase program object with program_workouts and program_exercises
+ * @returns {Object} Program object with computed weekly_configs field
  */
 export const transformSupabaseProgramToWeeklyConfigs = (program) => {
-  if (!program.program_workouts || !program.duration || !program.days_per_week) {
-    return [];
+  // Handle missing or invalid program data
+  if (!program || typeof program !== 'object') {
+    console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid program object provided');
+    return { ...program, weekly_configs: {} };
   }
 
-  // Initialize the nested structure
-  const weeklyConfigs = Array.from({ length: program.duration }, () =>
-    Array.from({ length: program.days_per_week }, () => ({ name: undefined, exercises: [] }))
-  );
+  // Handle programs without workout data gracefully
+  if (!program.program_workouts || !Array.isArray(program.program_workouts)) {
+    console.warn('transformSupabaseProgramToWeeklyConfigs: No program_workouts found for program', program.id);
+    return { ...program, weekly_configs: {} };
+  }
 
-  // Transform program_workouts to weeklyConfigs format
-  program.program_workouts.forEach(workout => {
-    const weekIndex = workout.week_number - 1;
-    const dayIndex = workout.day_number - 1;
+  // Validate program structure
+  if (!program.duration || !program.days_per_week || program.duration < 1 || program.days_per_week < 1) {
+    console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid program duration or days_per_week', {
+      duration: program.duration,
+      days_per_week: program.days_per_week,
+      programId: program.id
+    });
+    return { ...program, weekly_configs: {} };
+  }
 
-    if (weekIndex >= 0 && weekIndex < program.duration && 
-        dayIndex >= 0 && dayIndex < program.days_per_week) {
-      
-      weeklyConfigs[weekIndex][dayIndex] = {
-        name: workout.name || `Day ${dayIndex + 1}`,
-        exercises: workout.program_exercises ? workout.program_exercises.map(ex => ({
-          exerciseId: ex.exercise_id,
-          sets: ex.sets || 3,
-          reps: ex.reps || 8,
-          notes: ex.notes || ''
-        })) : []
+  try {
+    const weekly_configs = {};
+
+    // Transform each workout to the expected flattened format
+    program.program_workouts.forEach(workout => {
+      // Validate workout structure
+      if (!workout || typeof workout !== 'object') {
+        console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid workout object', workout);
+        return;
+      }
+
+      const weekNumber = workout.week_number;
+      const dayNumber = workout.day_number;
+
+      // Validate week and day numbers
+      if (!weekNumber || !dayNumber || 
+          weekNumber < 1 || dayNumber < 1 ||
+          weekNumber > program.duration || dayNumber > program.days_per_week) {
+        console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid week or day number', {
+          weekNumber,
+          dayNumber,
+          programDuration: program.duration,
+          programDaysPerWeek: program.days_per_week,
+          workoutId: workout.id
+        });
+        return;
+      }
+
+      // Create the flattened key format expected by parseWeeklyConfigs
+      const key = `week${weekNumber}_day${dayNumber}`;
+
+      // Transform exercises with proper error handling
+      let exercises = [];
+      if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
+        exercises = workout.program_exercises
+          .filter(ex => ex !== null && typeof ex === 'object') // Filter out null/invalid exercises first
+          .sort((a, b) => (a.order_index || 0) - (b.order_index || 0)) // Sort by order_index
+          .map(ex => {
+            return {
+              exerciseId: ex.exercise_id || '',
+              sets: typeof ex.sets === 'number' ? ex.sets : 3,
+              reps: typeof ex.reps === 'number' ? ex.reps : 8,
+              notes: ex.notes || ''
+            };
+          });
+      }
+
+      // Create the day object in the expected format
+      weekly_configs[key] = {
+        name: workout.name || `Day ${dayNumber}`,
+        exercises: exercises
       };
-    }
-  });
+    });
 
-  return weeklyConfigs;
+    return {
+      ...program,
+      weekly_configs: weekly_configs
+    };
+
+  } catch (error) {
+    console.error('transformSupabaseProgramToWeeklyConfigs: Error transforming program data', {
+      error: error.message,
+      programId: program.id,
+      stack: error.stack
+    });
+    
+    // Return program with empty weekly_configs on error to prevent crashes
+    return { ...program, weekly_configs: {} };
+  }
 };
 
 /**
@@ -189,12 +252,14 @@ export const ensureBackwardCompatibility = (data, type) => {
   switch (type) {
     case 'program':
       // Handle both Firebase weekly_configs and Supabase program_workouts
-      if (data.weekly_configs && !data.weeklyConfigs) {
-        // Legacy Firebase format - parse the weekly_configs
+      if (data.program_workouts && !data.weekly_configs) {
+        // New Supabase format - transform to weekly_configs first, then parse
+        const transformedData = transformSupabaseProgramToWeeklyConfigs(data);
+        data.weekly_configs = transformedData.weekly_configs;
         data.weeklyConfigs = parseWeeklyConfigs(data.weekly_configs, data.duration, data.days_per_week);
-      } else if (data.program_workouts && !data.weeklyConfigs) {
-        // New Supabase format - transform to weeklyConfigs
-        data.weeklyConfigs = transformSupabaseProgramToWeeklyConfigs(data);
+      } else if (data.weekly_configs && !data.weeklyConfigs) {
+        // Legacy Firebase format or existing weekly_configs - parse them
+        data.weeklyConfigs = parseWeeklyConfigs(data.weekly_configs, data.duration, data.days_per_week);
       }
       break;
 

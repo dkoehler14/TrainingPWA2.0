@@ -18,6 +18,7 @@ import { authService } from './authService';
 import WarmingStatsTracker from './warmingStatsTracker';
 import { CacheWarmingErrorHandler, ErrorCategory, ErrorSeverity } from './cacheWarmingErrorHandler';
 import { gracefulDegradationManager, ServiceAspect, DegradationLevel } from './gracefulDegradationManager.js';
+import cacheWarmingConfig from '../config/cacheWarmingConfig.js';
 
 /**
  * Priority-based queue manager for cache warming operations
@@ -535,10 +536,24 @@ class ContextAnalyzer {
   /**
    * Analyze time-of-day patterns for workout hours
    * @param {Date} date - Date to analyze (defaults to current time)
+   * @param {Object} config - Configuration options
    * @returns {Object} Time analysis with priority and context
    */
-  static analyzeTimeOfDay(date = new Date()) {
+  static analyzeTimeOfDay(date = new Date(), config = {}) {
     const hour = date.getHours();
+    
+    // If time-based warming is disabled, return neutral analysis
+    if (config.enableTimeBasedWarming === false) {
+      return {
+        hour,
+        isWorkoutHour: false,
+        isMorningWorkoutHour: false,
+        isEveningWorkoutHour: false,
+        priority: 'normal',
+        context: 'time-analysis-disabled',
+        timeCategory: 'standard'
+      };
+    }
     
     // Workout hours: 6-9 AM and 5-8 PM
     const isMorningWorkoutHour = hour >= 6 && hour <= 9;
@@ -586,11 +601,24 @@ class ContextAnalyzer {
   /**
    * Analyze workout day patterns (Monday-Friday priority boost)
    * @param {Date} date - Date to analyze (defaults to current date)
+   * @param {Object} config - Configuration options
    * @returns {Object} Day analysis with priority and context
    */
-  static analyzeWorkoutDay(date = new Date()) {
+  static analyzeWorkoutDay(date = new Date(), config = {}) {
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // If day-based warming is disabled, return neutral analysis
+    if (config.enableDayBasedWarming === false) {
+      return {
+        dayOfWeek,
+        dayName: dayNames[dayOfWeek],
+        isWorkoutDay: false,
+        isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
+        priority: 'normal',
+        context: 'day-analysis-disabled'
+      };
+    }
     
     // Monday-Friday are typical workout days
     const isWorkoutDay = dayOfWeek >= 1 && dayOfWeek <= 5;
@@ -714,6 +742,7 @@ class ContextAnalyzer {
    * @param {string} options.previousPage - Previous page name
    * @param {Object} options.userPreferences - User-specific preferences
    * @param {Object} options.behaviorPatterns - Historical behavior patterns
+   * @param {Object} options.config - Service configuration
    * @returns {Object} Combined priority analysis
    */
   static determinePriority(options = {}) {
@@ -722,12 +751,35 @@ class ContextAnalyzer {
       pageName = null,
       previousPage = null,
       userPreferences = {},
-      behaviorPatterns = {}
+      behaviorPatterns = {},
+      config = {}
     } = options;
     
+    // If simplified mode is enabled, return basic priority
+    if (config.simplifiedMode) {
+      return {
+        finalPriority: 'normal',
+        priorityScore: 0.5,
+        warmingStrategy: 'basic',
+        context: {
+          time: { context: 'simplified-mode' },
+          day: { context: 'simplified-mode' },
+          page: this.analyzePageContext(pageName, previousPage),
+          userPreferences,
+          behaviorPatterns
+        },
+        recommendations: [{
+          type: 'simplified',
+          action: 'basic-warming',
+          reason: 'Simplified mode enabled',
+          priority: 'normal'
+        }]
+      };
+    }
+    
     // Analyze individual context factors
-    const timeAnalysis = this.analyzeTimeOfDay(date);
-    const dayAnalysis = this.analyzeWorkoutDay(date);
+    const timeAnalysis = this.analyzeTimeOfDay(date, config);
+    const dayAnalysis = this.analyzeWorkoutDay(date, config);
     const pageAnalysis = this.analyzePageContext(pageName, previousPage);
     
     // Priority scoring system (higher = more important)
@@ -868,6 +920,12 @@ class SupabaseCacheWarmingService {
       maintenanceInterval: options.maintenanceInterval || 15, // minutes
       maxHistorySize: options.maxHistorySize || 50,
       queueProcessingDelay: options.queueProcessingDelay || 100, // ms
+      
+      // Simplified cache warming options
+      enableDayBasedWarming: options.enableDayBasedWarming !== false, // Default: enabled
+      enableTimeBasedWarming: options.enableTimeBasedWarming !== false, // Default: enabled
+      enableContextAnalysis: options.enableContextAnalysis !== false, // Default: enabled
+      simplifiedMode: options.simplifiedMode || false, // Default: disabled
       
       // Queue manager configuration
       queueConfig: {
@@ -3060,6 +3118,7 @@ class SupabaseCacheWarmingService {
       previousPage: this.currentPageContext?.previous || null,
       userPreferences: this.userPreferences,
       behaviorPatterns: this.behaviorPatterns,
+      config: this.config, // Pass service configuration to context analyzer
       ...options
     };
     
@@ -4725,8 +4784,8 @@ class SupabaseCacheWarmingService {
   }
 }
 
-// Create and export singleton instance
-const supabaseCacheWarmingService = new SupabaseCacheWarmingService();
+// Create and export singleton instance using configuration
+const supabaseCacheWarmingService = new SupabaseCacheWarmingService(cacheWarmingConfig);
 
 // Export service instance as default
 export default supabaseCacheWarmingService;
