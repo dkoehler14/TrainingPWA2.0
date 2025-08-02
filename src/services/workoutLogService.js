@@ -505,7 +505,7 @@ class WorkoutLogService {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id')
-        .eq('auth_id', authUserId)
+        .eq('id', authUserId)
         .single()
 
       if (userError) throw userError

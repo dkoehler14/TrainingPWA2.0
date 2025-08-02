@@ -1,7 +1,6 @@
 -- Create indexes for performance optimization
 
--- User lookups
-CREATE INDEX idx_users_auth_id ON users(auth_id);
+-- User lookups (auth_id is now the primary key, so no separate index needed)
 CREATE INDEX idx_users_email ON users(email);
 
 -- Exercise lookups

@@ -20,14 +20,32 @@ const PROGRAM_TEMPLATES_CACHE_TTL = 60 * 60 * 1000 // 1 hour
  */
 export const getUserPrograms = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
+    const startTime = performance.now();
+    
     // Create cache key based on user ID and filters
     // Include version identifier to distinguish enhanced queries with workout/exercise data
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
     const cacheKey = `user_programs_enhanced_${userId}_${filterKey}`
 
+    console.log('🔍 [PROGRAM_SERVICE] getUserPrograms called:', {
+      userId,
+      filters,
+      filterKey,
+      cacheKey,
+      timestamp: new Date().toISOString()
+    });
+
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
+        console.log('💾 [CACHE_MISS] Cache miss for getUserPrograms, fetching from database:', {
+          cacheKey,
+          userId,
+          filters
+        });
+
+        const queryStartTime = performance.now();
+        
         let query = supabase
           .from('programs')
           .select(`
@@ -52,30 +70,64 @@ export const getUserPrograms = async (userId, filters = {}) => {
         // Apply filters
         if (filters.isActive !== undefined) {
           query = query.eq('is_active', filters.isActive)
+          console.log('🔧 [QUERY_FILTER] Applied isActive filter:', filters.isActive);
         }
 
         if (filters.isCurrent !== undefined) {
           query = query.eq('is_current', filters.isCurrent)
+          console.log('🔧 [QUERY_FILTER] Applied isCurrent filter:', filters.isCurrent);
         }
 
         if (filters.isTemplate !== undefined) {
           query = query.eq('is_template', filters.isTemplate)
+          console.log('🔧 [QUERY_FILTER] Applied isTemplate filter:', filters.isTemplate);
         }
 
         if (filters.difficulty) {
           query = query.eq('difficulty', filters.difficulty)
+          console.log('🔧 [QUERY_FILTER] Applied difficulty filter:', filters.difficulty);
         }
 
         const { data, error } = await query
+        const queryEndTime = performance.now();
+        const queryTime = queryEndTime - queryStartTime;
 
-        if (error) throw error
+        if (error) {
+          console.error('❌ [DATABASE_ERROR] Error fetching programs:', {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            userId,
+            filters,
+            queryTimeMs: Math.round(queryTime * 100) / 100
+          });
+          throw error;
+        }
 
-        console.log("programData: ", data);
+        console.log('📊 [DATABASE_SUCCESS] Programs fetched successfully:', {
+          programCount: data?.length || 0,
+          queryTimeMs: Math.round(queryTime * 100) / 100,
+          userId,
+          filters
+        });
+
+        console.log("📋 [RAW_DATA] Raw program data from database:", data);
 
         // Transform each program to include weekly_configs
-        const transformedPrograms = (data || []).map(program => {
+        const transformStartTime = performance.now();
+        const transformedPrograms = (data || []).map((program, index) => {
+          console.log(`🔄 [TRANSFORM_START] Processing program ${index + 1}/${data.length}:`, {
+            programId: program.id,
+            programName: program.name,
+            hasWorkouts: !!program.program_workouts,
+            workoutCount: program.program_workouts?.length || 0
+          });
+
           // Sort workouts by week and day before transformation
           if (program.program_workouts) {
+            const originalOrder = program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }));
+            
             program.program_workouts.sort((a, b) => {
               if (a.week_number !== b.week_number) {
                 return a.week_number - b.week_number
@@ -83,19 +135,49 @@ export const getUserPrograms = async (userId, filters = {}) => {
               return a.day_number - b.day_number
             })
 
+            console.log(`📅 [WORKOUT_SORT] Sorted workouts for program ${program.id}:`, {
+              originalOrder,
+              sortedOrder: program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }))
+            });
+
             // Sort exercises within each workout by order_index
-            program.program_workouts.forEach(workout => {
+            program.program_workouts.forEach((workout, workoutIndex) => {
               if (workout.program_exercises) {
+                const originalExerciseOrder = workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }));
+                
                 workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+                
+                console.log(`💪 [EXERCISE_SORT] Sorted exercises for workout ${workoutIndex + 1}:`, {
+                  workoutId: workout.id,
+                  originalOrder: originalExerciseOrder,
+                  sortedOrder: workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }))
+                });
               }
             })
           }
 
           // Apply transformation to convert normalized data to weekly_configs format
-          return transformSupabaseProgramToWeeklyConfigs(program)
+          const transformedProgram = transformSupabaseProgramToWeeklyConfigs(program);
+          
+          console.log(`✅ [TRANSFORM_COMPLETE] Program ${index + 1} transformed:`, {
+            programId: program.id,
+            hasWeeklyConfigs: !!transformedProgram.weekly_configs,
+            weeklyConfigsKeys: Object.keys(transformedProgram.weekly_configs || {}).length
+          });
+
+          return transformedProgram;
         })
 
-        console.log("transformedPrograms: ", transformedPrograms);
+        const transformEndTime = performance.now();
+        const transformTime = transformEndTime - transformStartTime;
+
+        console.log('🎯 [TRANSFORM_SUMMARY] All programs transformed:', {
+          totalPrograms: data?.length || 0,
+          transformTimeMs: Math.round(transformTime * 100) / 100,
+          averageTransformTimeMs: data?.length ? Math.round((transformTime / data.length) * 100) / 100 : 0
+        });
+
+        console.log("🔄 [TRANSFORMED_DATA] Final transformed programs:", transformedPrograms);
 
         return transformedPrograms
       },
@@ -103,7 +185,29 @@ export const getUserPrograms = async (userId, filters = {}) => {
         ttl: PROGRAM_CACHE_TTL,
         table: 'programs',
         userId: userId,
-        tags: ['programs', 'user']
+        tags: ['programs', 'user'],
+        onCacheHit: (cachedData) => {
+          const endTime = performance.now();
+          const totalTime = endTime - startTime;
+          
+          console.log('🎯 [CACHE_HIT] Cache hit for getUserPrograms:', {
+            cacheKey,
+            userId,
+            filters,
+            programCount: cachedData?.length || 0,
+            totalTimeMs: Math.round(totalTime * 100) / 100,
+            ttl: PROGRAM_CACHE_TTL
+          });
+        },
+        onCacheSet: (data) => {
+          console.log('💾 [CACHE_SET] Data cached for getUserPrograms:', {
+            cacheKey,
+            userId,
+            filters,
+            programCount: data?.length || 0,
+            ttl: PROGRAM_CACHE_TTL
+          });
+        }
       }
     )
   }, 'getUserPrograms')
@@ -257,14 +361,31 @@ export const createProgram = async (programData) => {
     if (error) throw error
 
     // Invalidate user program cache to ensure new program appears
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache after creation:', {
+      userId: programData.user_id,
+      programId: data.id,
+      programName: data.name,
+      reason: 'program-created'
+    });
+    
     invalidateProgramCache(programData.user_id)
     
     // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
+    const cacheKeysToInvalidate = [`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating specific cache keys:', {
+      keys: cacheKeysToInvalidate,
+      reason: 'program-created'
+    });
+    
+    supabaseCache.invalidate(cacheKeysToInvalidate, {
       reason: 'program-created'
     })
 
-    console.log('Program created:', data.name)
+    console.log('✅ [PROGRAM_CREATED] Program created successfully:', {
+      programId: data.id,
+      programName: data.name,
+      userId: programData.user_id
+    })
     return data
   }, 'createProgram')
 }
@@ -336,14 +457,35 @@ export const createCompleteProgram = async (programData, workoutsData) => {
     }
 
     // Invalidate user program cache to ensure new program appears
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache after complete program creation:', {
+      userId: programData.user_id,
+      programId: program.id,
+      programName: program.name,
+      workoutCount: workouts.length,
+      exerciseCount: allExercises.length,
+      reason: 'complete-program-created'
+    });
+    
     invalidateProgramCache(programData.user_id)
     
     // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
+    const cacheKeysToInvalidate = [`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating specific cache keys:', {
+      keys: cacheKeysToInvalidate,
+      reason: 'complete-program-created'
+    });
+    
+    supabaseCache.invalidate(cacheKeysToInvalidate, {
       reason: 'complete-program-created'
     })
 
-    console.log('Complete program created:', program.name)
+    console.log('✅ [COMPLETE_PROGRAM_CREATED] Complete program created successfully:', {
+      programId: program.id,
+      programName: program.name,
+      userId: programData.user_id,
+      workoutCount: workouts.length,
+      exerciseCount: allExercises.length
+    })
     return {
       program,
       workouts,
@@ -372,19 +514,44 @@ export const updateProgram = async (programId, updates) => {
     if (error) throw error
 
     // Invalidate program-specific cache (both old and new formats)
-    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+    const programCacheKeys = [`program_full_${programId}`, `program_enhanced_${programId}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program-specific cache after update:', {
+      programId,
+      programName: data.name,
+      keys: programCacheKeys,
+      reason: 'program-updated'
+    });
+    
+    supabaseCache.invalidate(programCacheKeys, {
       reason: 'program-updated'
     })
     
     // Invalidate user program cache
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user program cache after update:', {
+      userId: data.user_id,
+      programId,
+      reason: 'program-updated'
+    });
+    
     invalidateProgramCache(data.user_id)
     
     // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`], {
+    const userCacheKeys = [`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user cache patterns after update:', {
+      keys: userCacheKeys,
+      reason: 'program-updated'
+    });
+    
+    supabaseCache.invalidate(userCacheKeys, {
       reason: 'program-updated'
     })
 
-    console.log('Program updated:', data.name)
+    console.log('✅ [PROGRAM_UPDATED] Program updated successfully:', {
+      programId,
+      programName: data.name,
+      userId: data.user_id,
+      updatedFields: Object.keys(updates)
+    })
     return data
   }, 'updateProgram')
 }
@@ -476,19 +643,42 @@ export const deleteProgram = async (programId, userId) => {
     if (error) throw error
 
     // Invalidate program-specific cache (both old and new formats)
-    supabaseCache.invalidate([`program_full_${programId}`, `program_enhanced_${programId}`], {
+    const programCacheKeys = [`program_full_${programId}`, `program_enhanced_${programId}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program-specific cache after deletion:', {
+      programId,
+      userId,
+      keys: programCacheKeys,
+      reason: 'program-deleted'
+    });
+    
+    supabaseCache.invalidate(programCacheKeys, {
       reason: 'program-deleted'
     })
     
     // Invalidate user program cache
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user program cache after deletion:', {
+      userId,
+      programId,
+      reason: 'program-deleted'
+    });
+    
     invalidateProgramCache(userId)
     
     // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
+    const userCacheKeys = [`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`];
+    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user cache patterns after deletion:', {
+      keys: userCacheKeys,
+      reason: 'program-deleted'
+    });
+    
+    supabaseCache.invalidate(userCacheKeys, {
       reason: 'program-deleted'
     })
 
-    console.log('Program deleted:', programId)
+    console.log('✅ [PROGRAM_DELETED] Program deleted successfully:', {
+      programId,
+      userId
+    })
     return true
   }, 'deleteProgram')
 }

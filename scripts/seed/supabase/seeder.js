@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { getSampleProgramData } = require('./sampleWorkoutData');
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'http://127.0.0.1:54321';
@@ -20,18 +21,18 @@ async function createTestUser(supabase, userConfig, verbose = false) {
     // Check if user already exists and clean up if needed
     const { data: existingUsers } = await supabase
       .from('users')
-      .select('auth_id, id')
+      .select('id')
       .eq('email', email);
 
     if (existingUsers && existingUsers.length > 0) {
       if (verbose) {
         console.log(`  Cleaning up existing user: ${email}`);
       }
-      
+
       // Delete existing auth users
       for (const existingUser of existingUsers) {
         try {
-          await supabase.auth.admin.deleteUser(existingUser.auth_id);
+          await supabase.auth.admin.deleteUser(existingUser.id);
         } catch (authError) {
           // Continue even if auth deletion fails
           if (verbose) {
@@ -39,10 +40,10 @@ async function createTestUser(supabase, userConfig, verbose = false) {
           }
         }
       }
-      
+
       // Delete existing database records
       await supabase.from('users').delete().eq('email', email);
-      
+
       // Wait a moment for cleanup to complete
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -70,23 +71,22 @@ async function createTestUser(supabase, userConfig, verbose = false) {
 
     // Now create the user profile in the database
     const userProfile = {
-      id: authUser.user.id, // Use the auth user's ID
-      auth_id: authUser.user.id,
+      id: authUser.user.id, // Use the auth user's ID directly as primary key
       email,
       ...profile
     };
 
-    // Check if a profile with this auth_id already exists
+    // Check if a profile with this id already exists
     const { data: existingProfile } = await supabase
       .from('users')
       .select('id')
-      .eq('auth_id', authUser.user.id);
+      .eq('id', authUser.user.id);
 
     if (existingProfile && existingProfile.length > 0) {
       if (verbose) {
-        console.log(`    Warning: Profile with auth_id ${authUser.user.id} already exists, deleting...`);
+        console.log(`    Warning: Profile with id ${authUser.user.id} already exists, deleting...`);
       }
-      await supabase.from('users').delete().eq('auth_id', authUser.user.id);
+      await supabase.from('users').delete().eq('id', authUser.user.id);
     }
 
     const { data: user, error: userError } = await supabase
@@ -258,42 +258,114 @@ async function seedSupabaseAll(options = {}) {
       console.log(`    ✅ Created ${createdUsers.length} test users`);
     }
 
-    // Create a basic program for the first user
-    const testProgram = {
-      id: '550e8400-e29b-41d4-a716-446655440200',
-      user_id: createdUsers[0].id,
-      name: 'Basic Strength Program',
-      description: 'A simple 3-day strength training program',
-      duration: 8,
-      days_per_week: 3,
-      weight_unit: 'LB',
-      difficulty: 'beginner',
-      goals: ['Build Muscle', 'Get Stronger'],
-      equipment: ['Dumbbells', 'Barbell', 'Bench'],
-      is_template: false,
-      is_current: true,
-      is_active: true,
-      start_date: new Date().toISOString().split('T')[0],
-      completed_weeks: 0
-    };
+    // Create programs for all users using their experience levels
+    console.log('DEBUG: Creating programs for all users...');
 
-    console.log('DEBUG: Inserting program into database...');
+    const createdPrograms = [];
 
-    const { data: program, error: programError } = await supabase
-      .from('programs')
-      .upsert(testProgram)
-      .select()
-      .single();
+    for (const user of createdUsers) {
+      try {
+        if (verbose) {
+          console.log(`  Creating program for ${user.name} (${user.experience_level})...`);
+        }
 
-    if (programError) {
-      console.error('DEBUG: Program creation error:', programError);
-      throw new Error(`Failed to create test program: ${programError.message}`);
+        // Get appropriate sample program data based on user's experience level
+        const sampleData = getSampleProgramData(user.experience_level);
+
+        // Create program data with user-specific information
+        const programData = {
+          ...sampleData.program,
+          user_id: user.id, // Use the user's ID directly (which is auth.uid())
+          start_date: new Date().toISOString().split('T')[0],
+          completed_weeks: 0
+        };
+
+        // Use createCompleteProgram approach to create program with workouts and exercises
+        const { data: program, error: programError } = await supabase
+          .from('programs')
+          .insert([programData])
+          .select()
+          .single();
+
+        if (programError) {
+          console.error(`DEBUG: Program creation error for ${user.name}:`, programError);
+          throw new Error(`Failed to create program for ${user.name}: ${programError.message}`);
+        }
+
+        // Create workouts for the program
+        const workoutsToInsert = sampleData.workouts.map(workout => ({
+          program_id: program.id,
+          week_number: workout.week_number,
+          day_number: workout.day_number,
+          name: workout.name
+        }));
+
+        const { data: workouts, error: workoutsError } = await supabase
+          .from('program_workouts')
+          .insert(workoutsToInsert)
+          .select();
+
+        if (workoutsError) {
+          console.error(`DEBUG: Workouts creation error for ${user.name}:`, workoutsError);
+          // Cleanup: delete the program if workout creation fails
+          await supabase.from('programs').delete().eq('id', program.id);
+          throw new Error(`Failed to create workouts for ${user.name}: ${workoutsError.message}`);
+        }
+
+        // Create exercises for each workout
+        const allExercises = [];
+        for (const workout of workouts) {
+          const workoutData = sampleData.workouts.find(w =>
+            w.week_number === workout.week_number && w.day_number === workout.day_number
+          );
+
+          if (workoutData && workoutData.exercises && workoutData.exercises.length > 0) {
+            const exercisesToInsert = workoutData.exercises.map((exercise, index) => ({
+              workout_id: workout.id,
+              exercise_id: exercise.exercise_id,
+              sets: exercise.sets,
+              reps: exercise.reps,
+              rest_minutes: exercise.rest_minutes || null,
+              notes: exercise.notes || '',
+              order_index: index
+            }));
+
+            const { data: exercises, error: exercisesError } = await supabase
+              .from('program_exercises')
+              .insert(exercisesToInsert)
+              .select();
+
+            if (exercisesError) {
+              console.error(`DEBUG: Exercises creation error for ${user.name}:`, exercisesError);
+              // Cleanup: delete program and workouts if exercise creation fails
+              await supabase.from('programs').delete().eq('id', program.id);
+              throw new Error(`Failed to create exercises for ${user.name}: ${exercisesError.message}`);
+            }
+
+            allExercises.push(...exercises);
+          }
+        }
+
+        createdPrograms.push({
+          program,
+          workouts,
+          exercises: allExercises
+        });
+
+        if (verbose) {
+          console.log(`    ✅ Created program "${program.name}" for ${user.name} with ${workouts.length} workouts and ${allExercises.length} exercises`);
+        }
+
+      } catch (error) {
+        console.error(`Failed to create program for user ${user.name}:`, error.message);
+        // Continue with other users even if one fails
+      }
     }
 
-    console.log('DEBUG: Program created successfully:', program.name);
+    console.log(`DEBUG: Successfully created ${createdPrograms.length} programs`);
 
     if (verbose) {
-      console.log('    ✅ Created basic program');
+      console.log(`    ✅ Created ${createdPrograms.length} complete programs`);
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -304,13 +376,15 @@ async function seedSupabaseAll(options = {}) {
       success: true,
       summary: {
         users: createdUsers.length,
-        programs: 1,
+        programs: createdPrograms.length,
+        workouts: createdPrograms.reduce((total, p) => total + p.workouts.length, 0),
         exercises: exercises.length,
+        programExercises: createdPrograms.reduce((total, p) => total + p.exercises.length, 0),
         historicalData: includeHistoricalData,
         duration
       },
       users: createdUsers,
-      programs: [program],
+      programs: createdPrograms.map(p => p.program),
       exercises: exercises
     };
   } catch (error) {
@@ -361,7 +435,7 @@ async function resetSupabaseAll(options = {}) {
 
     const { data: users, error: getUsersError } = await supabase
       .from('users')
-      .select('auth_id, email');
+      .select('id, email');
 
     if (!getUsersError && users && users.length > 0) {
       if (verbose) {
@@ -371,7 +445,7 @@ async function resetSupabaseAll(options = {}) {
       // Delete auth users
       for (const user of users) {
         try {
-          await supabase.auth.admin.deleteUser(user.auth_id);
+          await supabase.auth.admin.deleteUser(user.id);
           if (verbose) {
             console.log(`    ✅ Deleted auth user: ${user.email}`);
           }

@@ -29,6 +29,11 @@ function Programs({ userRole }) {
   const [forceUpdate, setForceUpdate] = useState(false);
   const chartContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+  
+  // Error handling states
+  const [error, setError] = useState(null);
+  const [programsError, setProgramsError] = useState(null);
+  const [exercisesError, setExercisesError] = useState(null);
 
   // Real-time program updates
   const {
@@ -86,8 +91,20 @@ function Programs({ userRole }) {
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log('🔍 [PROGRAMS_PAGE] useEffect triggered:', {
+        hasUser: !!user,
+        userId: user?.id,
+        userEmail: user?.email,
+        isAuthenticated,
+        timestamp: new Date().toISOString()
+      });
+
       if (user) {
         setIsLoading(true);
+        setError(null);
+        setProgramsError(null);
+        setExercisesError(null);
+        
         try {
           // Cache warming for Programs page
           const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
@@ -100,51 +117,442 @@ function Programs({ userRole }) {
             return null;
           });
 
-          // Fetch user programs using Supabase
-          const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
-          console.log("userProgramsData: ", userProgramsData);
-          const processedUserPrograms = userProgramsData.map(program => ({
-            ...program,
-            weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
-          }));
-          console.log("processedUserPrograms: ", processedUserPrograms);
-          setUserPrograms(processedUserPrograms);
-          setRealtimePrograms(processedUserPrograms); // Initialize real-time state
+          // Fetch user programs using Supabase with error handling
+          try {
+            console.log('🔍 [PROGRAMS_PAGE] About to fetch user programs:', {
+              userId: user.id,
+              filters: { isTemplate: false },
+              timestamp: new Date().toISOString()
+            });
 
-          // Fetch template programs using Supabase
-          const templateProgramsData = await getUserPrograms(user.id, { isTemplate: true });
-          const processedTemplatePrograms = templateProgramsData.map(program => ({
-            ...program,
-            weeklyConfigs: parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week)
-          }));
-          setTemplatePrograms(processedTemplatePrograms);
+            console.log('🔍 [PROGRAMS_PAGE] Calling getUserPrograms service...');
 
-          // Fetch exercises using Supabase
-          const exercisesData = await getAvailableExercises(user.id);
-          const processedExercises = exercisesData.map(ex => ({
-            ...ex,
-            isGlobal: ex.is_global,
-            source: ex.is_global ? 'global' : 'user',
-            createdBy: ex.created_by
-          }));
-          setExercises(processedExercises);
-          setRealtimeExercises(processedExercises); // Initialize real-time state
+            const fetchStartTime = performance.now();
+            const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
+            const fetchEndTime = performance.now();
+            const fetchTime = fetchEndTime - fetchStartTime;
+
+            console.log('📊 [PROGRAMS_PAGE] User programs fetched:', {
+              programCount: userProgramsData?.length || 0,
+              fetchTimeMs: Math.round(fetchTime * 100) / 100,
+              data: userProgramsData
+            });
+
+            // DEBUGGING: Log the exact data structure returned by the service
+            console.log('🔍 [DEBUG] Raw service result analysis:', {
+              isArray: Array.isArray(userProgramsData),
+              type: typeof userProgramsData,
+              isNull: userProgramsData === null,
+              isUndefined: userProgramsData === undefined,
+              length: userProgramsData?.length,
+              firstProgram: userProgramsData?.[0] ? {
+                id: userProgramsData[0].id,
+                name: userProgramsData[0].name,
+                hasWeeklyConfigs: !!userProgramsData[0].weekly_configs,
+                weeklyConfigsType: typeof userProgramsData[0].weekly_configs,
+                weeklyConfigsKeys: userProgramsData[0].weekly_configs ? Object.keys(userProgramsData[0].weekly_configs).length : 0
+              } : 'no-first-program'
+            });
+            
+            const processedUserPrograms = safelyProcessPrograms(userProgramsData, 'user programs');
+            console.log('🔄 [PROGRAMS_PAGE] User programs processed:', {
+              originalCount: userProgramsData?.length || 0,
+              processedCount: processedUserPrograms.length,
+              data: processedUserPrograms
+            });
+            
+            setUserPrograms(processedUserPrograms);
+            
+            // Check if any programs have errors
+            const programsWithErrors = processedUserPrograms.filter(p => p.hasError);
+            const programsWithWarnings = processedUserPrograms.filter(p => p.hasWarning && !p.hasError);
+            
+            if (programsWithErrors.length > 0) {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithErrors.length} user programs have errors:`, {
+                errorPrograms: programsWithErrors.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  error: p.errorMessage
+                }))
+              });
+            }
+
+            if (programsWithWarnings.length > 0) {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithWarnings.length} user programs have warnings:`, {
+                warningPrograms: programsWithWarnings.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  warning: p.warningMessage
+                }))
+              });
+            }
+            
+          } catch (error) {
+            console.error('❌ [PROGRAMS_PAGE] Error fetching user programs:', {
+              error: error.message,
+              stack: error.stack,
+              userId: user.id
+            });
+            setProgramsError('Failed to load your programs. Please try refreshing the page.');
+            setUserPrograms([]);
+          }
+
+          // Fetch template programs using Supabase with error handling
+          try {
+            console.log('🔍 [PROGRAMS_PAGE] Fetching template programs:', {
+              userId: user.id,
+              filters: { isTemplate: true },
+              timestamp: new Date().toISOString()
+            });
+
+            const fetchStartTime = performance.now();
+            const templateProgramsData = await getUserPrograms(user.id, { isTemplate: true });
+            const fetchEndTime = performance.now();
+            const fetchTime = fetchEndTime - fetchStartTime;
+
+            console.log('📊 [PROGRAMS_PAGE] Template programs fetched:', {
+              programCount: templateProgramsData?.length || 0,
+              fetchTimeMs: Math.round(fetchTime * 100) / 100,
+              data: templateProgramsData
+            });
+
+            const processedTemplatePrograms = safelyProcessPrograms(templateProgramsData, 'template programs');
+            console.log('🔄 [PROGRAMS_PAGE] Template programs processed:', {
+              originalCount: templateProgramsData?.length || 0,
+              processedCount: processedTemplatePrograms.length,
+              data: processedTemplatePrograms
+            });
+
+            setTemplatePrograms(processedTemplatePrograms);
+            
+            // Check if any template programs have errors
+            const templatesWithErrors = processedTemplatePrograms.filter(p => p.hasError);
+            const templatesWithWarnings = processedTemplatePrograms.filter(p => p.hasWarning && !p.hasError);
+            
+            if (templatesWithErrors.length > 0) {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${templatesWithErrors.length} template programs have errors:`, {
+                errorPrograms: templatesWithErrors.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  error: p.errorMessage
+                }))
+              });
+            }
+
+            if (templatesWithWarnings.length > 0) {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${templatesWithWarnings.length} template programs have warnings:`, {
+                warningPrograms: templatesWithWarnings.map(p => ({
+                  id: p.id,
+                  name: p.name,
+                  warning: p.warningMessage
+                }))
+              });
+            }
+            
+          } catch (error) {
+            console.error('❌ [PROGRAMS_PAGE] Error fetching template programs:', {
+              error: error.message,
+              stack: error.stack,
+              userId: user.id
+            });
+            // Template programs are less critical, so we don't set a blocking error
+            setTemplatePrograms([]);
+          }
+
+          // Fetch exercises using Supabase with error handling
+          try {
+            console.log('🔍 [PROGRAMS_PAGE] Fetching exercises:', {
+              userId: user.id,
+              timestamp: new Date().toISOString()
+            });
+
+            const fetchStartTime = performance.now();
+            const exercisesData = await getAvailableExercises(user.id);
+            const fetchEndTime = performance.now();
+            const fetchTime = fetchEndTime - fetchStartTime;
+
+            console.log('📊 [PROGRAMS_PAGE] Exercises fetched:', {
+              exerciseCount: exercisesData?.length || 0,
+              fetchTimeMs: Math.round(fetchTime * 100) / 100
+            });
+
+            const processedExercises = exercisesData.map(ex => ({
+              ...ex,
+              isGlobal: ex.is_global,
+              source: ex.is_global ? 'global' : 'user',
+              createdBy: ex.created_by
+            }));
+
+            console.log('🔄 [PROGRAMS_PAGE] Exercises processed:', {
+              originalCount: exercisesData?.length || 0,
+              processedCount: processedExercises.length,
+              globalCount: processedExercises.filter(ex => ex.isGlobal).length,
+              userCount: processedExercises.filter(ex => !ex.isGlobal).length
+            });
+
+            setExercises(processedExercises);
+            
+          } catch (error) {
+            console.error('❌ [PROGRAMS_PAGE] Error fetching exercises:', {
+              error: error.message,
+              stack: error.stack,
+              userId: user.id
+            });
+            setExercisesError('Failed to load exercise library. Some features may not work correctly.');
+            setExercises([]);
+          }
 
         } catch (error) {
-          console.error("Error fetching data: ", error);
+          console.error("Error in fetchData: ", error);
+          setError('Failed to load program data. Please try refreshing the page.');
         } finally {
           setIsLoading(false);
         }
       } else {
+        console.log('🔍 [PROGRAMS_PAGE] No user found, skipping data fetch:', {
+          hasUser: !!user,
+          isAuthenticated,
+          timestamp: new Date().toISOString()
+        });
         setIsLoading(false);
       }
     };
     fetchData();
-  }, [user, setRealtimePrograms, setRealtimeExercises]);
+  }, [user/*, setRealtimePrograms, setRealtimeExercises*/]);
 
 
   const getExerciseName = (exerciseId) => {
     return exercises.find(ex => ex.id === exerciseId)?.name || 'Unknown';
+  };
+
+  // Helper function to safely process programs with error handling
+  const safelyProcessPrograms = (programs, context = 'programs') => {
+    const startTime = performance.now();
+    
+    console.log(`🔍 [PROGRAM_PROCESSING] Starting to process ${context}:`, {
+      programCount: Array.isArray(programs) ? programs.length : 'not-array',
+      context,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!Array.isArray(programs)) {
+      console.error(`❌ [PROGRAM_PROCESSING] Invalid ${context} data - not an array:`, {
+        programs,
+        type: typeof programs,
+        isNull: programs === null,
+        isUndefined: programs === undefined
+      });
+      return [];
+    }
+
+    const processedPrograms = programs.map((program, index) => {
+      const programStartTime = performance.now();
+      
+      console.log(`📋 [PROGRAM_PROCESSING] Processing program ${index + 1}/${programs.length}:`, {
+        programId: program?.id,
+        programName: program?.name,
+        context
+      });
+
+      try {
+        // Validate program structure
+        if (!program || typeof program !== 'object') {
+          console.error(`❌ [PROGRAM_PROCESSING] Invalid program object in ${context}:`, {
+            program,
+            index,
+            type: typeof program
+          });
+          return {
+            ...program,
+            weeklyConfigs: [],
+            hasError: true,
+            errorMessage: 'Invalid program data'
+          };
+        }
+
+        // Check for missing weekly_configs
+        if (!program.weekly_configs || typeof program.weekly_configs !== 'object') {
+          console.warn(`⚠️ [PROGRAM_PROCESSING] Program "${program.name}" has missing or invalid weekly_configs:`, {
+            programId: program.id,
+            hasWeeklyConfigs: !!program.weekly_configs,
+            weeklyConfigsType: typeof program.weekly_configs,
+            weeklyConfigsValue: program.weekly_configs,
+            context
+          });
+          return {
+            ...program,
+            weeklyConfigs: [],
+            hasError: true,
+            errorMessage: 'Program has no workout data'
+          };
+        }
+
+        // Check if weekly_configs is empty
+        const weeklyConfigsKeys = Object.keys(program.weekly_configs);
+        if (weeklyConfigsKeys.length === 0) {
+          console.warn(`⚠️ [PROGRAM_PROCESSING] Program "${program.name}" has empty weekly_configs:`, {
+            programId: program.id,
+            weeklyConfigsKeys,
+            context
+          });
+          return {
+            ...program,
+            weeklyConfigs: [],
+            hasError: true,
+            errorMessage: 'Program has no workout data'
+          };
+        }
+
+        // Validate duration and days_per_week
+        if (!program.duration || !program.days_per_week || program.duration < 1 || program.days_per_week < 1) {
+          console.error(`❌ [PROGRAM_PROCESSING] Program "${program.name}" has invalid duration or days_per_week:`, {
+            programId: program.id,
+            duration: program.duration,
+            days_per_week: program.days_per_week,
+            durationValid: program.duration >= 1,
+            daysPerWeekValid: program.days_per_week >= 1,
+            context
+          });
+          return {
+            ...program,
+            weeklyConfigs: [],
+            hasError: true,
+            errorMessage: 'Program has invalid structure'
+          };
+        }
+
+        console.log(`🔄 [PROGRAM_PROCESSING] Parsing weekly configs for "${program.name}":`, {
+          programId: program.id,
+          weeklyConfigsKeys: weeklyConfigsKeys.length,
+          duration: program.duration,
+          daysPerWeek: program.days_per_week,
+          sampleKeys: weeklyConfigsKeys.slice(0, 3),
+          weeklyConfigsStructure: program.weekly_configs
+        });
+
+        // Safely parse weekly configs
+        const parseStartTime = performance.now();
+        const weeklyConfigs = parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week);
+        const parseEndTime = performance.now();
+        const parseTime = parseEndTime - parseStartTime;
+        
+        console.log(`📊 [PROGRAM_PROCESSING] Parse result for "${program.name}":`, {
+          programId: program.id,
+          parseTimeMs: Math.round(parseTime * 100) / 100,
+          resultType: typeof weeklyConfigs,
+          resultIsArray: Array.isArray(weeklyConfigs),
+          resultLength: weeklyConfigs?.length || 0,
+          isEmpty: !weeklyConfigs || weeklyConfigs.length === 0
+        });
+        
+        console.log(`📊 [PROGRAM_PROCESSING] Weekly configs parsed:`, {
+          programId: program.id,
+          parseTimeMs: Math.round(parseTime * 100) / 100,
+          resultLength: weeklyConfigs?.length || 0,
+          success: !!weeklyConfigs
+        });
+
+        // Check if parsing resulted in empty configs
+        if (!weeklyConfigs || weeklyConfigs.length === 0) {
+          console.error(`❌ [PROGRAM_PROCESSING] Failed to parse weekly configs for program "${program.name}":`, {
+            programId: program.id,
+            weeklyConfigs,
+            originalWeeklyConfigs: program.weekly_configs,
+            context
+          });
+          return {
+            ...program,
+            weeklyConfigs: [],
+            hasError: true,
+            errorMessage: 'Failed to load workout data'
+          };
+        }
+
+        // Check if any weeks have empty days
+        const emptyWeeksCheck = weeklyConfigs.map((week, weekIndex) => {
+          const isEmpty = !Array.isArray(week) || week.length === 0 || 
+            week.every(day => !day.exercises || day.exercises.length === 0);
+          
+          if (isEmpty) {
+            console.warn(`⚠️ [PROGRAM_PROCESSING] Week ${weekIndex + 1} is empty for program "${program.name}"`);
+          }
+          
+          return { weekIndex: weekIndex + 1, isEmpty, dayCount: week?.length || 0 };
+        });
+
+        const hasEmptyWeeks = emptyWeeksCheck.some(week => week.isEmpty);
+
+        if (hasEmptyWeeks) {
+          console.warn(`⚠️ [PROGRAM_PROCESSING] Program "${program.name}" has weeks with no exercises:`, {
+            programId: program.id,
+            emptyWeeksCheck,
+            context
+          });
+          return {
+            ...program,
+            weeklyConfigs,
+            hasWarning: true,
+            warningMessage: 'Some weeks may have incomplete workout data'
+          };
+        }
+
+        const programEndTime = performance.now();
+        const programProcessTime = programEndTime - programStartTime;
+
+        // Successfully processed program
+        console.log(`✅ [PROGRAM_PROCESSING] Program "${program.name}" processed successfully:`, {
+          programId: program.id,
+          weekCount: weeklyConfigs.length,
+          processTimeMs: Math.round(programProcessTime * 100) / 100,
+          context
+        });
+
+        return {
+          ...program,
+          weeklyConfigs,
+          hasError: false
+        };
+
+      } catch (error) {
+        const programEndTime = performance.now();
+        const programProcessTime = programEndTime - programStartTime;
+        
+        console.error(`💥 [PROGRAM_PROCESSING] Error processing program in ${context}:`, {
+          error: error.message,
+          stack: error.stack,
+          program,
+          index,
+          processTimeMs: Math.round(programProcessTime * 100) / 100,
+          context
+        });
+        
+        return {
+          ...program,
+          weeklyConfigs: [],
+          hasError: true,
+          errorMessage: 'Error loading program data'
+        };
+      }
+    });
+
+    const endTime = performance.now();
+    const totalProcessTime = endTime - startTime;
+    
+    const successCount = processedPrograms.filter(p => !p.hasError).length;
+    const errorCount = processedPrograms.filter(p => p.hasError).length;
+    const warningCount = processedPrograms.filter(p => p.hasWarning && !p.hasError).length;
+
+    console.log(`🎯 [PROGRAM_PROCESSING] Completed processing ${context}:`, {
+      totalPrograms: programs.length,
+      successCount,
+      errorCount,
+      warningCount,
+      totalProcessTimeMs: Math.round(totalProcessTime * 100) / 100,
+      averageProcessTimeMs: programs.length ? Math.round((totalProcessTime / programs.length) * 100) / 100 : 0,
+      context
+    });
+
+    return processedPrograms;
   };
 
   const adoptProgram = async (program) => {
@@ -308,6 +716,8 @@ function Programs({ userRole }) {
   };
 
   const renderActionButtons = (program, isTemplate) => {
+    const hasWorkoutData = !program.hasError && program.weeklyConfigs && program.weeklyConfigs.length > 0;
+    
     if (isMobile) {
       return (
         <div className="d-flex flex-column gap-2 w-100">
@@ -316,6 +726,7 @@ function Programs({ userRole }) {
             size="sm"
             onClick={() => viewProgramDetails(program)}
             className="w-100"
+            disabled={program.hasError && program.errorMessage === 'Invalid program data'}
           >
             <FileText className="me-1" /> Details
           </Button>
@@ -330,12 +741,13 @@ function Programs({ userRole }) {
               >
                 <Pencil className="me-1" /> Edit
               </Button>
-              {!isTemplate && !program.is_current && (
+              {!isTemplate && !program.is_current && hasWorkoutData && (
                 <Button
                   variant="outline-success"
                   size="sm"
                   onClick={() => handleSetCurrentProgram(program.id)}
                   className="w-100"
+                  title={!hasWorkoutData ? 'Cannot set as current - program has no workout data' : ''}
                 >
                   <Clock className="me-1" /> Set Current
                 </Button>
@@ -357,6 +769,8 @@ function Programs({ userRole }) {
                   size="sm"
                   onClick={() => adoptProgram(program)}
                   className="w-100"
+                  disabled={program.hasError}
+                  title={program.hasError ? 'Cannot adopt - program has errors' : ''}
                 >
                   <Copy className="me-1" /> Adopt
                 </Button>
@@ -382,6 +796,7 @@ function Programs({ userRole }) {
           variant="outline-primary"
           size="sm"
           onClick={() => viewProgramDetails(program)}
+          disabled={program.hasError && program.errorMessage === 'Invalid program data'}
         >
           <FileText className="me-1" /> Details
         </Button>
@@ -395,11 +810,12 @@ function Programs({ userRole }) {
             >
               <Pencil className="me-1" /> Edit
             </Button>
-            {!isTemplate && !program.is_current && (
+            {!isTemplate && !program.is_current && hasWorkoutData && (
               <Button
                 variant="outline-success"
                 size="sm"
                 onClick={() => handleSetCurrentProgram(program.id)}
+                title={!hasWorkoutData ? 'Cannot set as current - program has no workout data' : ''}
               >
                 <Clock className="me-1" /> Set Current
               </Button>
@@ -419,7 +835,8 @@ function Programs({ userRole }) {
                 variant="outline-secondary"
                 size="sm"
                 onClick={() => adoptProgram(program)}
-                className="w-100"
+                disabled={program.hasError}
+                title={program.hasError ? 'Cannot adopt - program has errors' : ''}
               >
                 <Copy className="me-1" /> Adopt
               </Button>
@@ -430,6 +847,8 @@ function Programs({ userRole }) {
             variant="outline-secondary"
             size="sm"
             onClick={() => adoptProgram(program)}
+            disabled={program.hasError}
+            title={program.hasError ? 'Cannot adopt - program has errors' : ''}
           >
             <Copy className="me-1" /> Adopt
           </Button>
@@ -440,14 +859,46 @@ function Programs({ userRole }) {
 
   const renderProgramCard = (program, isTemplate = false) => {
     return (
-      <Card key={program.id} className="mb-3 program-card">
+      <Card key={program.id} className={`mb-3 program-card ${program.hasError ? 'border-warning' : ''}`}>
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start">
-            <div>
-              <Card.Title>{program.name}</Card.Title>
+            <div className="flex-grow-1">
+              <Card.Title className="d-flex align-items-center">
+                {program.name}
+                {program.hasError && (
+                  <Badge bg="warning" className="ms-2" title={program.errorMessage}>
+                    ⚠️ Issue
+                  </Badge>
+                )}
+                {program.hasWarning && (
+                  <Badge bg="secondary" className="ms-2" title={program.warningMessage}>
+                    ⚠️ Warning
+                  </Badge>
+                )}
+              </Card.Title>
               <Card.Subtitle className="text-muted mb-2">
                 {program.duration} weeks | {program.days_per_week} days/week
               </Card.Subtitle>
+              
+              {/* Show error/warning messages */}
+              {program.hasError && (
+                <Alert variant="warning" className="mb-2 py-2">
+                  <small>
+                    <strong>Issue:</strong> {program.errorMessage}
+                    {program.errorMessage === 'Program has no workout data' && (
+                      <span> - This program may need to be recreated or edited to add workout details.</span>
+                    )}
+                  </small>
+                </Alert>
+              )}
+              
+              {program.hasWarning && !program.hasError && (
+                <Alert variant="info" className="mb-2 py-2">
+                  <small>
+                    <strong>Note:</strong> {program.warningMessage}
+                  </small>
+                </Alert>
+              )}
             </div>
             {program.is_current && !isTemplate && (
               <Star className="text-warning" size={24} />
@@ -465,6 +916,57 @@ function Programs({ userRole }) {
   // Enhanced Program Details Modal (from Claude)
   const renderProgramDetailsModal = () => {
     if (!selectedProgram) return null;
+
+    // Handle programs with errors in the details modal
+    if (selectedProgram.hasError) {
+      return (
+        <Modal
+          show={showProgramDetails}
+          onHide={() => {
+            setShowProgramDetails(false);
+            setActiveTab('overview');
+          }}
+          size={isMobile ? "fullscreen" : "lg"}
+          centered={!isMobile}
+        >
+          <Modal.Header closeButton>
+            <Modal.Title>{selectedProgram.name}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Alert variant="warning">
+              <Alert.Heading>Program Issue</Alert.Heading>
+              <p>{selectedProgram.errorMessage}</p>
+              {selectedProgram.errorMessage === 'Program has no workout data' && (
+                <div>
+                  <p>This program doesn't have any workout data associated with it. This could happen if:</p>
+                  <ul>
+                    <li>The program was created but never had workouts added</li>
+                    <li>There was an issue during program creation</li>
+                    <li>The workout data was corrupted or lost</li>
+                  </ul>
+                  <p>You can try editing this program to add workout data, or create a new program instead.</p>
+                </div>
+              )}
+              <div className="mt-3">
+                <Button 
+                  variant="primary" 
+                  onClick={() => handleEditProgram(selectedProgram.id)}
+                  className="me-2"
+                >
+                  Edit Program
+                </Button>
+                <Button 
+                  variant="outline-secondary" 
+                  onClick={() => setShowProgramDetails(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </Alert>
+          </Modal.Body>
+        </Modal>
+      );
+    }
 
     // Calculate overall program progress
     const calculateProgramProgress = () => {
@@ -1566,13 +2068,13 @@ function Programs({ userRole }) {
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div className="d-flex align-items-center">
                 <h1 className="soft-title programs-title mb-0 me-3">My Programs</h1>
-                <Badge
+                {/* <Badge
                   bg={isRealtimeConnected ? 'success' : 'secondary'}
                   className="d-flex align-items-center"
                 >
                   <Broadcast className="me-1" size={12} />
                   {isRealtimeConnected ? 'Live' : 'Offline'}
-                </Badge>
+                </Badge> */}
                 {lastUpdate && (
                   <small className="text-muted ms-2">
                     Updated {Math.floor((Date.now() - new Date(lastUpdate.timestamp)) / 1000)}s ago
@@ -1616,14 +2118,43 @@ function Programs({ userRole }) {
               </Alert>
             )}
 
+            {/* Error handling */}
+            {error && (
+              <Alert variant="danger" className="mb-4">
+                <Alert.Heading>Error Loading Programs</Alert.Heading>
+                <p>{error}</p>
+                <Button 
+                  variant="outline-danger" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh Page
+                </Button>
+              </Alert>
+            )}
+
+            {programsError && (
+              <Alert variant="warning" className="mb-4">
+                <Alert.Heading>Programs Loading Issue</Alert.Heading>
+                <p>{programsError}</p>
+              </Alert>
+            )}
+
+            {exercisesError && (
+              <Alert variant="info" className="mb-4">
+                <Alert.Heading>Exercise Library Issue</Alert.Heading>
+                <p>{exercisesError}</p>
+              </Alert>
+            )}
+
             {isLoading ? (
               <div className="text-center py-4">
                 <Spinner animation="border" className="spinner-blue" />
                 <p className="soft-text mt-2">Loading...</p>
               </div>
-            ) : (
+            ) : !error ? (
               <>
-                {userPrograms.length === 0 ? (
+                {userPrograms.length === 0 && !programsError ? (
                   <div className="text-center p-4">
                     <p className="text-muted mb-3">
                       You haven't created any programs yet.
@@ -1638,13 +2169,73 @@ function Programs({ userRole }) {
                     </Button>
                   </div>
                 ) : (
-                  userPrograms.map(program => renderProgramCard(program))
+                  <>
+                    {/* Show programs with error handling */}
+                    {userPrograms.length > 0 && (
+                      <>
+                        <div className="mb-3">
+                          <h2 className="soft-subtitle section-title mb-3">Your Programs</h2>
+                          {/* Show summary of program issues if any */}
+                          {(() => {
+                            const programsWithErrors = userPrograms.filter(p => p.hasError);
+                            const programsWithWarnings = userPrograms.filter(p => p.hasWarning && !p.hasError);
+                            
+                            if (programsWithErrors.length > 0 || programsWithWarnings.length > 0) {
+                              return (
+                                <Alert variant="warning" className="mb-3">
+                                  <small>
+                                    {programsWithErrors.length > 0 && (
+                                      <div>
+                                        <strong>{programsWithErrors.length}</strong> program{programsWithErrors.length !== 1 ? 's' : ''} 
+                                        {programsWithErrors.length === 1 ? ' has' : ' have'} issues and may need attention.
+                                      </div>
+                                    )}
+                                    {programsWithWarnings.length > 0 && (
+                                      <div>
+                                        <strong>{programsWithWarnings.length}</strong> program{programsWithWarnings.length !== 1 ? 's' : ''} 
+                                        {programsWithWarnings.length === 1 ? ' has' : ' have'} warnings.
+                                      </div>
+                                    )}
+                                  </small>
+                                </Alert>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </div>
+                        {userPrograms.map(program => renderProgramCard(program))}
+                      </>
+                    )}
+                  </>
                 )}
 
                 <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
-                {templatePrograms.map(program => renderProgramCard(program, true))}
+                {templatePrograms.length === 0 ? (
+                  <div className="text-center p-4">
+                    <p className="text-muted">No template programs available.</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Show template program issues summary if any */}
+                    {(() => {
+                      const templatesWithErrors = templatePrograms.filter(p => p.hasError);
+                      if (templatesWithErrors.length > 0) {
+                        return (
+                          <Alert variant="info" className="mb-3">
+                            <small>
+                              <strong>{templatesWithErrors.length}</strong> template program{templatesWithErrors.length !== 1 ? 's' : ''} 
+                              {templatesWithErrors.length === 1 ? ' has' : ' have'} issues and cannot be adopted.
+                            </small>
+                          </Alert>
+                        );
+                      }
+                      return null;
+                    })()}
+                    {templatePrograms.map(program => renderProgramCard(program, true))}
+                  </>
+                )}
               </>
-            )}
+            ) : null}
           </div>
         </Col>
       </Row>

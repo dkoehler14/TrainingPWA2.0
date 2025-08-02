@@ -62,7 +62,7 @@ export const testDataGenerators = {
    * Generate test user data
    */
   createTestUser: (overrides = {}) => ({
-    auth_id: `test-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: `test-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     email: `test-${Date.now()}@example.com`,
     name: 'Test User',
     experience_level: 'beginner',

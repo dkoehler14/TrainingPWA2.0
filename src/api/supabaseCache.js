@@ -11,6 +11,7 @@
 
 import { supabase } from '../config/supabase'
 import { getCollectionCached } from './supabaseCacheMigration'
+import { createDebugLogger, logCacheOperation } from '../utils/debugUtils'
 
 // Cache storage and configuration
 const cache = new Map()
@@ -320,8 +321,20 @@ export class SupabaseCache {
       tags = [],
       userId = null,
       bypassCache = false,
-      table = 'unknown'
+      table = 'unknown',
+      onCacheHit = null,
+      onCacheSet = null
     } = options
+
+    const logger = createDebugLogger('SUPABASE_CACHE', 'GET_WITH_CACHE');
+
+    logger.debug('Cache lookup initiated', {
+      cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
+      table,
+      userId,
+      bypassCache,
+      ttl
+    });
 
     // Check cache first (unless bypassed)
     if (!bypassCache) {
@@ -333,19 +346,57 @@ export class SupabaseCache {
         const queryTime = performance.now() - startTime
         const dataSize = JSON.stringify(cached.data).length
 
+        logCacheOperation('hit', 'SUPABASE_CACHE', 'Cache hit for query', {
+          cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
+          table,
+          userId,
+          dataSize: formatBytes(dataSize),
+          queryTimeMs: Math.round(queryTime * 100) / 100,
+          accessCount: cached.accessCount,
+          age: formatDuration(Date.now() - cached.createdAt)
+        });
+
         trackCacheHit(table, dataSize, queryTime, userId)
         updateCacheStats(true, queryTime)
+        
+        // Call onCacheHit callback if provided
+        if (onCacheHit && typeof onCacheHit === 'function') {
+          try {
+            onCacheHit(cached.data);
+          } catch (error) {
+            logger.error('onCacheHit callback failed', { error: error.message });
+          }
+        }
+        
         return cached.data
+      } else if (cached && isExpired(cached)) {
+        logger.warn('Cache entry expired', {
+          cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
+          table,
+          expiredAt: new Date(cached.expiry).toISOString(),
+          ageMs: Date.now() - cached.createdAt
+        });
       }
     }
 
     // Execute database query
+    logger.info('Executing database query', {
+      table,
+      userId,
+      reason: bypassCache ? 'cache-bypassed' : 'cache-miss'
+    });
+
     const startTime = performance.now()
     const result = await queryFn()
     const queryTime = performance.now() - startTime
 
     if (result.error) {
-      console.error(`❌ Supabase query failed for ${table}:`, result.error)
+      logger.error('Database query failed', {
+        table,
+        error: result.error.message,
+        code: result.error.code,
+        queryTimeMs: Math.round(queryTime * 100) / 100
+      });
       updateCacheStats(false, queryTime)
       throw result.error
     }
@@ -354,6 +405,15 @@ export class SupabaseCache {
     const safeData = result.data || []
     const dataSize = JSON.stringify(safeData).length
     const documentCount = Array.isArray(safeData) ? safeData.length : 1
+    
+    logger.success('Database query completed', {
+      table,
+      documentCount,
+      dataSize: formatBytes(dataSize),
+      queryTimeMs: Math.round(queryTime * 100) / 100,
+      userId
+    });
+
     trackSupabaseRead(table, 'select', documentCount, dataSize, queryTime, userId)
     updateCacheStats(false, queryTime)
 
@@ -366,6 +426,23 @@ export class SupabaseCache {
     })
 
     this.setCacheEntry(cacheKey, entry)
+
+    logCacheOperation('set', 'SUPABASE_CACHE', 'Data cached', {
+      cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
+      table,
+      dataSize: formatBytes(dataSize),
+      ttl: formatDuration(ttl),
+      tags
+    });
+
+    // Call onCacheSet callback if provided
+    if (onCacheSet && typeof onCacheSet === 'function') {
+      try {
+        onCacheSet(safeData);
+      } catch (error) {
+        logger.error('onCacheSet callback failed', { error: error.message });
+      }
+    }
 
     return safeData
   }
@@ -414,25 +491,42 @@ export class SupabaseCache {
       reason = 'manual'
     } = options
 
+    const logger = createDebugLogger('SUPABASE_CACHE', 'INVALIDATE');
+    const startTime = performance.now();
+
     let invalidatedCount = 0
     const keysToDelete = []
+    const matchedEntries = []
 
     // Convert single pattern to array
     const patternArray = Array.isArray(patterns) ? patterns : [patterns]
 
+    logger.info('Starting cache invalidation', {
+      patterns: patternArray,
+      exact,
+      userId,
+      tables,
+      tags,
+      reason,
+      totalCacheSize: cache.size
+    });
+
     for (const [key, entry] of cache) {
       let shouldInvalidate = false
+      let matchReason = null
 
       // Check pattern matching
       for (const pattern of patternArray) {
         if (exact) {
           if (key === pattern) {
             shouldInvalidate = true
+            matchReason = `exact-match: ${pattern}`
             break
           }
         } else {
           if (key.includes(pattern)) {
             shouldInvalidate = true
+            matchReason = `pattern-match: ${pattern}`
             break
           }
         }
@@ -443,6 +537,9 @@ export class SupabaseCache {
         const hasMatchingTag = entry.tags?.some(tag => tags.includes(tag))
         if (!hasMatchingTag) {
           shouldInvalidate = false
+          matchReason = null
+        } else {
+          matchReason += ` + tag-match: ${tags.join(',')}`
         }
       }
 
@@ -450,6 +547,9 @@ export class SupabaseCache {
       if (shouldInvalidate && tables.length > 0) {
         if (!tables.includes(entry.queryInfo?.table)) {
           shouldInvalidate = false
+          matchReason = null
+        } else {
+          matchReason += ` + table-match: ${entry.queryInfo?.table}`
         }
       }
 
@@ -457,11 +557,22 @@ export class SupabaseCache {
       if (shouldInvalidate && userId) {
         if (entry.queryInfo?.userId !== userId) {
           shouldInvalidate = false
+          matchReason = null
+        } else {
+          matchReason += ` + user-match: ${userId}`
         }
       }
 
       if (shouldInvalidate) {
         keysToDelete.push(key)
+        matchedEntries.push({
+          key: key.substring(0, 100) + (key.length > 100 ? '...' : ''),
+          table: entry.queryInfo?.table || 'unknown',
+          size: formatBytes(entry.size),
+          age: formatDuration(Date.now() - entry.createdAt),
+          accessCount: entry.accessCount,
+          matchReason
+        })
       }
     }
 
@@ -473,7 +584,22 @@ export class SupabaseCache {
 
     cacheStats.invalidations += invalidatedCount
 
-    console.log(`🗑️ Cache invalidation: ${invalidatedCount} entries removed (reason: ${reason})`)
+    const endTime = performance.now();
+    const invalidationTime = endTime - startTime;
+
+    logCacheOperation('invalidate', 'SUPABASE_CACHE', 'Cache invalidation completed', {
+      patterns: patternArray,
+      invalidatedCount,
+      totalCacheSize: cache.size,
+      reason,
+      invalidationTimeMs: Math.round(invalidationTime * 100) / 100,
+      matchedEntries: matchedEntries.slice(0, 10) // Log first 10 matches
+    });
+
+    if (matchedEntries.length > 10) {
+      logger.debug(`Additional ${matchedEntries.length - 10} entries invalidated (not shown in log)`);
+    }
+
     return invalidatedCount
   }
 

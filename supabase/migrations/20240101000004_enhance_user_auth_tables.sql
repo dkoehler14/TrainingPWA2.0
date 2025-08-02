@@ -31,7 +31,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO public.users (
-        auth_id, 
+        id, 
         email, 
         name,
         email_verified,
@@ -63,7 +63,7 @@ BEGIN
             THEN NEW.last_sign_in_at
             ELSE users.last_login
         END
-    WHERE auth_id = NEW.id;
+    WHERE id = NEW.id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -74,7 +74,7 @@ RETURNS TRIGGER AS $$
 BEGIN
     UPDATE public.users
     SET last_login = NOW()
-    WHERE auth_id = NEW.user_id;
+    WHERE id = NEW.user_id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

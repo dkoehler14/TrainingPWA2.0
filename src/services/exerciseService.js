@@ -37,7 +37,7 @@ export const getExercises = async (filters = {}) => {
     }
 
     if (filters.createdBy) {
-      query = query.eq('created_by_auth_id', filters.createdBy)
+      query = query.eq('created_by', filters.createdBy)
     }
 
     if (filters.limit) {
@@ -76,7 +76,7 @@ export const searchExercises = async (searchTerm, filters = {}) => {
     }
 
     if (filters.createdBy) {
-      query = query.eq('created_by_auth_id', filters.createdBy)
+      query = query.eq('created_by', filters.createdBy)
     }
 
     const limit = filters.limit || 50
@@ -163,7 +163,7 @@ export const getUserExercises = async (userId) => {
     const { data, error } = await supabase
       .from('exercises')
       .select('*')
-      .eq('created_by_auth_id', userId)
+      .eq('created_by', userId)
       .order('created_at', { ascending: false })
 
     if (error) throw error

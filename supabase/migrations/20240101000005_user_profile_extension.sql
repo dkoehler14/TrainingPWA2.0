@@ -28,11 +28,7 @@ CREATE INDEX IF NOT EXISTS idx_user_profiles_fitness_level ON user_profiles(fitn
 
 -- Users can view their own profile
 CREATE POLICY "Users can view their own profile" ON user_profiles
-    FOR SELECT USING (
-        user_id IN (
-            SELECT id FROM users WHERE auth_id = auth.uid()
-        )
-    );
+    FOR SELECT USING (user_id = auth.uid());
 
 -- Users can view public profiles
 CREATE POLICY "Anyone can view public profiles" ON user_profiles
@@ -43,19 +39,11 @@ CREATE POLICY "Anyone can view public profiles" ON user_profiles
 
 -- Users can update their own profile
 CREATE POLICY "Users can update their own profile" ON user_profiles
-    FOR UPDATE USING (
-        user_id IN (
-            SELECT id FROM users WHERE auth_id = auth.uid()
-        )
-    );
+    FOR UPDATE USING (user_id = auth.uid());
 
 -- Users can create their own profile
 CREATE POLICY "Users can create their own profile" ON user_profiles
-    FOR INSERT WITH CHECK (
-        user_id IN (
-            SELECT id FROM users WHERE auth_id = auth.uid()
-        )
-    );
+    FOR INSERT WITH CHECK (user_id = auth.uid());
 
 -- Create function to automatically create user profile on user creation
 CREATE OR REPLACE FUNCTION public.create_user_profile()

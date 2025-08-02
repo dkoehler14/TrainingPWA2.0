@@ -137,7 +137,6 @@ async function seedTestUsers(supabase, options = {}) {
     basic: [
       {
         id: '550e8400-e29b-41d4-a716-446655440100',
-        auth_id: '550e8400-e29b-41d4-a716-446655440100',
         email: 'test@example.com',
         name: 'Test User',
         experience_level: 'beginner',
@@ -155,7 +154,6 @@ async function seedTestUsers(supabase, options = {}) {
     beginner: [
       {
         id: '550e8400-e29b-41d4-a716-446655440101',
-        auth_id: '550e8400-e29b-41d4-a716-446655440101',
         email: 'beginner@example.com',
         name: 'Beginner User',
         experience_level: 'beginner',
@@ -173,7 +171,6 @@ async function seedTestUsers(supabase, options = {}) {
     intermediate: [
       {
         id: '550e8400-e29b-41d4-a716-446655440102',
-        auth_id: '550e8400-e29b-41d4-a716-446655440102',
         email: 'intermediate@example.com',
         name: 'Intermediate User',
         experience_level: 'intermediate',
@@ -191,7 +188,6 @@ async function seedTestUsers(supabase, options = {}) {
     advanced: [
       {
         id: '550e8400-e29b-41d4-a716-446655440103',
-        auth_id: '550e8400-e29b-41d4-a716-446655440103',
         email: 'advanced@example.com',
         name: 'Advanced User',
         experience_level: 'advanced',
@@ -210,7 +206,6 @@ async function seedTestUsers(supabase, options = {}) {
       // Include all user types for comprehensive testing
       {
         id: '550e8400-e29b-41d4-a716-446655440104',
-        auth_id: '550e8400-e29b-41d4-a716-446655440104',
         email: 'powerlifter@example.com',
         name: 'Powerlifter Pro',
         experience_level: 'advanced',
@@ -227,7 +222,6 @@ async function seedTestUsers(supabase, options = {}) {
       },
       {
         id: '550e8400-e29b-41d4-a716-446655440105',
-        auth_id: '550e8400-e29b-41d4-a716-446655440105',
         email: 'bodybuilder@example.com',
         name: 'Bodybuilder Betty',
         experience_level: 'advanced',

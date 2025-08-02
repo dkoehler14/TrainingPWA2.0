@@ -31,7 +31,7 @@ function ExerciseCreationModal({
                     primary_muscle_group: initialData?.primary_muscle_group || '',
                     exercise_type: initialData?.exercise_type || ''
                 });
-                if (userRole === 'admin' && initialData?.created_by_auth_id) {
+                if (userRole === 'admin' && initialData?.created_by) {
                     setAdminVisibility('personal');
                 } else {
                     setAdminVisibility('main');
@@ -123,11 +123,11 @@ function ExerciseCreationModal({
             if (userRole === 'admin' && adminVisibility === 'main') {
                 // Admin creating global exercise
                 exerciseData.is_global = true;
-                exerciseData.created_by_auth_id = user?.id;
+                exerciseData.created_by = user?.id;
             } else {
                 // Regular user or admin creating personal exercise
                 exerciseData.is_global = false;
-                exerciseData.created_by_auth_id = user?.id;
+                exerciseData.created_by = user?.id;
             }
 
             let result;

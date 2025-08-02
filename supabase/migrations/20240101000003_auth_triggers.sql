@@ -2,7 +2,7 @@
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-    INSERT INTO public.users (auth_id, email, name)
+    INSERT INTO public.users (id, email, name)
     VALUES (
         NEW.id,
         NEW.email,
@@ -25,7 +25,7 @@ BEGIN
     SET 
         email = NEW.email,
         updated_at = NOW()
-    WHERE auth_id = NEW.id;
+    WHERE id = NEW.id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -39,7 +39,7 @@ CREATE TRIGGER on_auth_user_updated
 CREATE OR REPLACE FUNCTION public.handle_user_delete()
 RETURNS TRIGGER AS $$
 BEGIN
-    DELETE FROM public.users WHERE auth_id = OLD.id;
+    DELETE FROM public.users WHERE id = OLD.id;
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

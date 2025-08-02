@@ -19,7 +19,7 @@ import { validateUserProfile } from '../utils/userValidation'
 export const createUserProfile = async (authUser, additionalData = {}) => {
   try {
     const userData = {
-      auth_id: authUser.id,
+      id: authUser.id, // Use auth.uid() directly as primary key
       email: authUser.email,
       name: additionalData.name || authUser.user_metadata?.name || '',
       experience_level: additionalData.experienceLevel || 'beginner',
@@ -77,7 +77,7 @@ export const getUserProfile = async (authId) => {
     const { data, error } = await supabase
       .from('users')
       .select('*')
-      .eq('auth_id', authId)
+      .eq('id', authId)
       .single()
 
     if (error) {
@@ -202,7 +202,7 @@ export const updateUserProfileByAuthId = async (authId, updates) => {
     const { data, error } = await supabase
       .from('users')
       .update(updateData)
-      .eq('auth_id', authId)
+      .eq('id', authId)
       .select()
       .single()
 

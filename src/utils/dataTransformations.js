@@ -13,36 +13,80 @@ import { parseWeeklyConfigs } from './programUtils';
  * @returns {Object} Program object with computed weekly_configs field
  */
 export const transformSupabaseProgramToWeeklyConfigs = (program) => {
+  const startTime = performance.now();
+  console.log('🔄 [DATA_TRANSFORM] Starting transformation for program:', {
+    programId: program?.id,
+    programName: program?.name,
+    hasWorkouts: !!program?.program_workouts,
+    workoutCount: program?.program_workouts?.length || 0
+  });
+
   // Handle missing or invalid program data
   if (!program || typeof program !== 'object') {
-    console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid program object provided');
+    console.error('❌ [DATA_TRANSFORM] Invalid program object provided:', {
+      program,
+      type: typeof program,
+      isNull: program === null,
+      isUndefined: program === undefined
+    });
     return { ...program, weekly_configs: {} };
   }
 
   // Handle programs without workout data gracefully
   if (!program.program_workouts || !Array.isArray(program.program_workouts)) {
-    console.warn('transformSupabaseProgramToWeeklyConfigs: No program_workouts found for program', program.id);
+    console.warn('⚠️ [DATA_TRANSFORM] No program_workouts found for program:', {
+      programId: program.id,
+      programName: program.name,
+      hasWorkouts: !!program.program_workouts,
+      workoutsType: typeof program.program_workouts,
+      isArray: Array.isArray(program.program_workouts)
+    });
     return { ...program, weekly_configs: {} };
   }
 
   // Validate program structure
   if (!program.duration || !program.days_per_week || program.duration < 1 || program.days_per_week < 1) {
-    console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid program duration or days_per_week', {
+    console.error('❌ [DATA_TRANSFORM] Invalid program duration or days_per_week:', {
+      programId: program.id,
+      programName: program.name,
       duration: program.duration,
       days_per_week: program.days_per_week,
-      programId: program.id
+      durationValid: program.duration >= 1,
+      daysPerWeekValid: program.days_per_week >= 1
     });
     return { ...program, weekly_configs: {} };
   }
 
   try {
     const weekly_configs = {};
+    let processedWorkouts = 0;
+    let skippedWorkouts = 0;
+    let totalExercises = 0;
+
+    console.log('📊 [DATA_TRANSFORM] Processing workouts:', {
+      totalWorkouts: program.program_workouts.length,
+      programDuration: program.duration,
+      programDaysPerWeek: program.days_per_week
+    });
 
     // Transform each workout to the expected flattened format
-    program.program_workouts.forEach(workout => {
+    program.program_workouts.forEach((workout, index) => {
+      console.log(`🏋️ [DATA_TRANSFORM] Processing workout ${index + 1}/${program.program_workouts.length}:`, {
+        workoutId: workout?.id,
+        weekNumber: workout?.week_number,
+        dayNumber: workout?.day_number,
+        name: workout?.name,
+        exerciseCount: workout?.program_exercises?.length || 0
+      });
+
       // Validate workout structure
       if (!workout || typeof workout !== 'object') {
-        console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid workout object', workout);
+        console.error('❌ [DATA_TRANSFORM] Invalid workout object:', {
+          workout,
+          index,
+          type: typeof workout
+        });
+        skippedWorkouts++;
         return;
       }
 
@@ -53,13 +97,16 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       if (!weekNumber || !dayNumber || 
           weekNumber < 1 || dayNumber < 1 ||
           weekNumber > program.duration || dayNumber > program.days_per_week) {
-        console.warn('transformSupabaseProgramToWeeklyConfigs: Invalid week or day number', {
+        console.error('❌ [DATA_TRANSFORM] Invalid week or day number:', {
+          workoutId: workout.id,
           weekNumber,
           dayNumber,
           programDuration: program.duration,
           programDaysPerWeek: program.days_per_week,
-          workoutId: workout.id
+          weekValid: weekNumber >= 1 && weekNumber <= program.duration,
+          dayValid: dayNumber >= 1 && dayNumber <= program.days_per_week
         });
+        skippedWorkouts++;
         return;
       }
 
@@ -69,17 +116,37 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       // Transform exercises with proper error handling
       let exercises = [];
       if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
-        exercises = workout.program_exercises
-          .filter(ex => ex !== null && typeof ex === 'object') // Filter out null/invalid exercises first
+        console.log(`💪 [DATA_TRANSFORM] Processing ${workout.program_exercises.length} exercises for ${key}`);
+        
+        const validExercises = workout.program_exercises.filter(ex => ex !== null && typeof ex === 'object');
+        const invalidExercises = workout.program_exercises.length - validExercises.length;
+        
+        if (invalidExercises > 0) {
+          console.warn(`⚠️ [DATA_TRANSFORM] Found ${invalidExercises} invalid exercises in workout ${key}`);
+        }
+
+        exercises = validExercises
           .sort((a, b) => (a.order_index || 0) - (b.order_index || 0)) // Sort by order_index
-          .map(ex => {
-            return {
+          .map((ex, exIndex) => {
+            const transformedExercise = {
               exerciseId: ex.exercise_id || '',
               sets: typeof ex.sets === 'number' ? ex.sets : 3,
               reps: typeof ex.reps === 'number' ? ex.reps : 8,
               notes: ex.notes || ''
             };
+
+            console.log(`  📝 [DATA_TRANSFORM] Exercise ${exIndex + 1}: ${ex.exercise_id} (${ex.sets || 3} sets x ${ex.reps || 8} reps)`);
+            
+            return transformedExercise;
           });
+        
+        totalExercises += exercises.length;
+      } else {
+        console.warn(`⚠️ [DATA_TRANSFORM] No exercises found for workout ${key}:`, {
+          hasExercises: !!workout.program_exercises,
+          exercisesType: typeof workout.program_exercises,
+          isArray: Array.isArray(workout.program_exercises)
+        });
       }
 
       // Create the day object in the expected format
@@ -87,10 +154,27 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
         name: workout.name || `Day ${dayNumber}`,
         exercises: exercises
       };
+
+      processedWorkouts++;
+      console.log(`✅ [DATA_TRANSFORM] Successfully processed workout ${key} with ${exercises.length} exercises`);
     });
 
-    console.log("dataTransformation program: ", program);
-    console.log("dataTransformation weekly_configs: ", weekly_configs);
+    const endTime = performance.now();
+    const transformationTime = endTime - startTime;
+
+    console.log('🎯 [DATA_TRANSFORM] Transformation completed:', {
+      programId: program.id,
+      programName: program.name,
+      processedWorkouts,
+      skippedWorkouts,
+      totalExercises,
+      weeklyConfigsKeys: Object.keys(weekly_configs).length,
+      transformationTimeMs: Math.round(transformationTime * 100) / 100,
+      success: true
+    });
+
+    console.log("📋 [DATA_TRANSFORM] Final program data:", program);
+    console.log("📅 [DATA_TRANSFORM] Final weekly_configs:", weekly_configs);
 
     return {
       ...program,
@@ -98,10 +182,16 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
     };
 
   } catch (error) {
-    console.error('transformSupabaseProgramToWeeklyConfigs: Error transforming program data', {
+    const endTime = performance.now();
+    const transformationTime = endTime - startTime;
+    
+    console.error('💥 [DATA_TRANSFORM] Error transforming program data:', {
       error: error.message,
       programId: program.id,
-      stack: error.stack
+      programName: program.name,
+      stack: error.stack,
+      transformationTimeMs: Math.round(transformationTime * 100) / 100,
+      success: false
     });
     
     // Return program with empty weekly_configs on error to prevent crashes

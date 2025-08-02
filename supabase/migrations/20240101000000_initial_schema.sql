@@ -6,8 +6,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Users table
 CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    auth_id UUID UNIQUE NOT NULL, -- Supabase Auth ID
+    id UUID PRIMARY KEY, -- This will be auth.uid()
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     experience_level VARCHAR(50) DEFAULT 'beginner',
@@ -32,7 +31,7 @@ CREATE TABLE exercises (
     exercise_type VARCHAR(100) NOT NULL,
     instructions TEXT,
     is_global BOOLEAN DEFAULT true,
-    created_by UUID REFERENCES users(id),
+    created_by UUID REFERENCES users(id), -- References auth.uid() directly
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
