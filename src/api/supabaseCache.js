@@ -775,6 +775,19 @@ export class SupabaseCache {
   }
 
   /**
+   * Get cached data without executing a query (for fallback scenarios)
+   */
+  get(cacheKey) {
+    const cached = cache.get(cacheKey)
+    if (cached && !isExpired(cached)) {
+      cached.accessCount++
+      cached.lastAccessed = Date.now()
+      return cached.data
+    }
+    return null
+  }
+
+  /**
    * Clear all cache entries
    */
   clear() {
@@ -803,10 +816,31 @@ export function invalidateWorkoutCache(userId) {
 }
 
 export function invalidateProgramCache(userId) {
-  return supabaseCache.invalidate(['programs'], {
+  // Unified cache invalidation to support both old and new cache key patterns
+  const cacheKeysToInvalidate = [
+    // New unified cache keys
+    `user_programs_all_${userId}`,
+    
+    // Old cache key patterns (for backward compatibility during transition)
+    `user_programs_enhanced_${userId}`,
+    `user_programs_${userId}`,
+    `programs_user_${userId}`,
+    
+    // Pattern-based invalidation for any filtered versions
+    `user_programs_all_${userId}_`,
+    `user_programs_enhanced_${userId}_`
+  ];
+
+  console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache with unified approach:', {
+    userId,
+    cacheKeys: cacheKeysToInvalidate,
+    reason: 'program-update'
+  });
+
+  return supabaseCache.invalidate(cacheKeysToInvalidate, {
     userId,
     reason: 'program-update'
-  })
+  });
 }
 
 export function invalidateExerciseCache() {

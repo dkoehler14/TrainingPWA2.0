@@ -1,437 +1,366 @@
 /**
  * Performance Dashboard Component
  * 
- * Provides a comprehensive view of application performance including:
- * - Real-time performance metrics
- * - Database query performance
- * - Cache hit rates and statistics
- * - Performance alerts and recommendations
- * - Historical performance trends
+ * Displays comprehensive performance monitoring data for the programs data fetching optimization
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { performanceMonitor, getPerformanceDashboard } from '../utils/performanceMonitor'
-import { optimizedSupabase } from '../utils/optimizedSupabaseClient'
-import '../styles/PerformanceDashboard.css'
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Badge, Table, Accordion, Button, Modal } from 'react-bootstrap';
+import { GraphUp, Clock, Database, Memory, Activity, Eye, EyeSlash } from 'react-bootstrap-icons';
+import { getPerformanceStats, logPerformanceSummary, resetPerformanceStats } from '../utils/performanceMonitor';
+import { getEnhancedCacheStats } from '../api/supabaseCache';
 
-const PerformanceDashboard = ({ isVisible = false, onClose }) => {
-  const [dashboardData, setDashboardData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('overview')
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const [refreshInterval, setRefreshInterval] = useState(30) // seconds
-  const [alerts, setAlerts] = useState([])
+function PerformanceDashboard({ show = false, onToggle }) {
+  const [performanceStats, setPerformanceStats] = useState(null);
+  const [cacheStats, setCacheStats] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Refresh dashboard data
-  const refreshData = useCallback(async () => {
+  // Refresh performance stats
+  const refreshStats = () => {
     try {
-      setLoading(true)
-      const data = getPerformanceDashboard()
-      const stats = optimizedSupabase.getStats()
-      
-      setDashboardData({
-        ...data,
-        clientStats: stats
-      })
-      
-      // Update alerts
-      setAlerts(data.alerts.recent.filter(alert => !alert.acknowledged))
+      const perfStats = getPerformanceStats();
+      const enhancedCacheStats = getEnhancedCacheStats();
+      setPerformanceStats(perfStats);
+      setCacheStats(enhancedCacheStats);
     } catch (error) {
-      console.error('Failed to refresh performance dashboard:', error)
-    } finally {
-      setLoading(false)
+      console.error('Error refreshing performance stats:', error);
     }
-  }, [])
+  };
 
-  // Auto-refresh effect
+  // Auto-refresh stats every 5 seconds
   useEffect(() => {
-    if (!isVisible) return
-
-    refreshData()
-
     if (autoRefresh) {
-      const interval = setInterval(refreshData, refreshInterval * 1000)
-      return () => clearInterval(interval)
+      const interval = setInterval(refreshStats, 5000);
+      return () => clearInterval(interval);
     }
-  }, [isVisible, autoRefresh, refreshInterval, refreshData])
+  }, [autoRefresh]);
 
-  // Alert callback
+  // Initial load
   useEffect(() => {
-    const handleAlert = (alert) => {
-      setAlerts(prev => [alert, ...prev.slice(0, 9)]) // Keep last 10 alerts
-    }
+    refreshStats();
+  }, []);
 
-    performanceMonitor.onAlert(handleAlert)
-  }, [])
-
-  const acknowledgeAlert = (alertId) => {
-    performanceMonitor.acknowledgeAlert(alertId)
-    setAlerts(prev => prev.filter(alert => alert.id !== alertId))
+  if (!show || !performanceStats) {
+    return (
+      <div style={{ position: 'fixed', top: '10px', right: '10px', zIndex: 1000 }}>
+        <Button
+          variant="outline-info"
+          size="sm"
+          onClick={() => onToggle && onToggle()}
+          title="Show Performance Dashboard"
+        >
+          <GraphUp /> Performance
+        </Button>
+      </div>
+    );
   }
+
+  const formatPercentage = (value) => {
+    if (typeof value === 'string' && value.includes('%')) return value;
+    return `${parseFloat(value || 0).toFixed(2)}%`;
+  };
+
+  const formatTime = (value) => {
+    if (typeof value === 'string' && value.includes('ms')) return value;
+    return `${parseFloat(value || 0).toFixed(2)}ms`;
+  };
 
   const formatBytes = (bytes) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
-
-  const formatDuration = (ms) => {
-    if (ms < 1000) return `${ms.toFixed(0)}ms`
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-    return `${(ms / 60000).toFixed(1)}m`
-  }
-
-  const getPerformanceColor = (value, thresholds) => {
-    if (value <= thresholds.good) return 'performance-good'
-    if (value <= thresholds.warning) return 'performance-warning'
-    return 'performance-critical'
-  }
-
-  const renderOverviewTab = () => {
-    if (!dashboardData) return null
-
-    const { overview, realtime, database, cache } = dashboardData
-
-    return (
-      <div className="performance-overview">
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <h3>Application Uptime</h3>
-            <div className="metric-value">{overview.appUptime}</div>
-          </div>
-          
-          <div className="metric-card">
-            <h3>Database Operations</h3>
-            <div className="metric-value">{overview.totalDatabaseOperations.toLocaleString()}</div>
-            <div className="metric-subtitle">Avg: {overview.averageDatabaseTime}</div>
-          </div>
-          
-          <div className="metric-card">
-            <h3>Cache Hit Rate</h3>
-            <div className={`metric-value ${getPerformanceColor(parseFloat(overview.cacheHitRate), { good: 80, warning: 60 })}`}>
-              {overview.cacheHitRate}
-            </div>
-          </div>
-          
-          <div className="metric-card">
-            <h3>Active Alerts</h3>
-            <div className={`metric-value ${overview.activeAlerts > 0 ? 'performance-critical' : 'performance-good'}`}>
-              {overview.activeAlerts}
-            </div>
-          </div>
-        </div>
-
-        <div className="realtime-metrics">
-          <h3>Real-time Metrics (Last 5 minutes)</h3>
-          <div className="realtime-grid">
-            <div className="realtime-metric">
-              <span className="metric-label">Queries/min:</span>
-              <span className="metric-value">{realtime.queriesPerMinute}</span>
-            </div>
-            <div className="realtime-metric">
-              <span className="metric-label">Cache Hits/min:</span>
-              <span className="metric-value">{realtime.cacheHitsPerMinute}</span>
-            </div>
-            <div className="realtime-metric">
-              <span className="metric-label">Errors/min:</span>
-              <span className="metric-value">{realtime.errorsPerMinute}</span>
-            </div>
-            <div className="realtime-metric">
-              <span className="metric-label">Avg Response:</span>
-              <span className="metric-value">{realtime.averageResponseTime}ms</span>
-            </div>
-          </div>
-        </div>
-
-        {alerts.length > 0 && (
-          <div className="alerts-section">
-            <h3>Active Alerts</h3>
-            <div className="alerts-list">
-              {alerts.slice(0, 5).map(alert => (
-                <div key={alert.id} className={`alert alert-${alert.severity}`}>
-                  <div className="alert-content">
-                    <div className="alert-message">{alert.message}</div>
-                    <div className="alert-time">
-                      {new Date(alert.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                  <button 
-                    className="alert-acknowledge"
-                    onClick={() => acknowledgeAlert(alert.id)}
-                  >
-                    ✓
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const renderDatabaseTab = () => {
-    if (!dashboardData) return null
-
-    const { database } = dashboardData
-
-    return (
-      <div className="performance-database">
-        <div className="database-overview">
-          <h3>Database Performance</h3>
-          <div className="database-stats">
-            <div className="stat-item">
-              <span className="stat-label">Slow Operations:</span>
-              <span className="stat-value">{database.slowOperations}</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Connection Pool:</span>
-              <span className="stat-value">
-                {database.connectionPool.activeConnections}/{database.connectionPool.maxConnections}
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Error Rate:</span>
-              <span className="stat-value">{database.connectionPool.errorRate}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="operations-by-table">
-          <h4>Operations by Table</h4>
-          <div className="table-stats">
-            {Object.entries(database.queryPerformance || {}).map(([table, stats]) => (
-              <div key={table} className="table-stat">
-                <div className="table-name">{table}</div>
-                <div className="table-metrics">
-                  <span>Queries: {stats.queryCount}</span>
-                  <span>Avg: {stats.averageTime}ms</span>
-                  <span>Max: {stats.maxTime}ms</span>
-                  <span className={stats.slowQueries > 0 ? 'performance-warning' : ''}>
-                    Slow: {stats.slowQueries}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const renderCacheTab = () => {
-    if (!dashboardData) return null
-
-    const { cache } = dashboardData
-
-    return (
-      <div className="performance-cache">
-        <div className="cache-overview">
-          <h3>Cache Performance</h3>
-          <div className="cache-stats">
-            <div className="stat-item">
-              <span className="stat-label">Hit Rate:</span>
-              <span className={`stat-value ${getPerformanceColor(cache.hitRate, { good: 80, warning: 60 })}`}>
-                {cache.hitRate.toFixed(1)}%
-              </span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Miss Rate:</span>
-              <span className="stat-value">{cache.missRate.toFixed(1)}%</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-label">Operations:</span>
-              <span className="stat-value">{cache.operations.toLocaleString()}</span>
-            </div>
-          </div>
-        </div>
-
-        {cache.detailed && (
-          <div className="cache-detailed">
-            <h4>Detailed Cache Statistics</h4>
-            <div className="cache-details">
-              <div className="detail-section">
-                <h5>Database Reads</h5>
-                <p>Total: {cache.detailed.databaseReads?.total || 0}</p>
-                <p>This Session: {cache.detailed.databaseReads?.thisSession || 0}</p>
-              </div>
-              
-              <div className="detail-section">
-                <h5>Performance</h5>
-                <p>Improvement: {cache.detailed.cachePerformance?.performanceImprovement || '0%'}</p>
-                <p>DB Avg: {cache.detailed.cachePerformance?.avgDatabaseQueryTime || '0ms'}</p>
-                <p>Cache Avg: {cache.detailed.cachePerformance?.avgCacheQueryTime || '0ms'}</p>
-              </div>
-              
-              <div className="detail-section">
-                <h5>Cost Analysis</h5>
-                <p>Estimated Cost: ${cache.detailed.costAnalysis?.estimatedCost || '0.0000'}</p>
-                <p>Estimated Savings: ${cache.detailed.costAnalysis?.estimatedSavings || '0.0000'}</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const renderTrendsTab = () => {
-    if (!dashboardData || !dashboardData.trends) return null
-
-    const { trends } = dashboardData
-
-    return (
-      <div className="performance-trends">
-        <h3>Performance Trends (Last Hour)</h3>
-        <div className="trends-chart">
-          {trends.map((interval, index) => (
-            <div key={interval.timestamp} className="trend-interval">
-              <div className="interval-time">
-                {new Date(interval.timestamp).toLocaleTimeString()}
-              </div>
-              <div className="interval-metrics">
-                <div className="trend-metric">
-                  <span className="trend-label">DB Ops:</span>
-                  <span className="trend-value">{interval.databaseOps}</span>
-                </div>
-                <div className="trend-metric">
-                  <span className="trend-label">Cache Hits:</span>
-                  <span className="trend-value">{interval.cacheHits}</span>
-                </div>
-                <div className="trend-metric">
-                  <span className="trend-label">Errors:</span>
-                  <span className="trend-value">{interval.errors}</span>
-                </div>
-                <div className="trend-metric">
-                  <span className="trend-label">Avg Time:</span>
-                  <span className="trend-value">{interval.avgResponseTime.toFixed(0)}ms</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  const renderRecommendationsTab = () => {
-    if (!dashboardData || !dashboardData.recommendations) return null
-
-    const { recommendations } = dashboardData
-
-    return (
-      <div className="performance-recommendations">
-        <h3>Performance Recommendations</h3>
-        {recommendations.length === 0 ? (
-          <div className="no-recommendations">
-            <p>✅ No performance issues detected. Your application is running optimally!</p>
-          </div>
-        ) : (
-          <div className="recommendations-list">
-            {recommendations.map((rec, index) => (
-              <div key={index} className={`recommendation recommendation-${rec.priority}`}>
-                <div className="recommendation-header">
-                  <h4>{rec.title}</h4>
-                  <span className={`priority priority-${rec.priority}`}>{rec.priority}</span>
-                </div>
-                <p className="recommendation-description">{rec.description}</p>
-                <div className="recommendation-action">
-                  <strong>Action:</strong> {rec.action}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (!isVisible) return null
+    if (typeof bytes === 'string') return bytes;
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   return (
-    <div className="performance-dashboard-overlay">
-      <div className="performance-dashboard">
-        <div className="dashboard-header">
-          <h2>Performance Dashboard</h2>
-          <div className="dashboard-controls">
-            <label className="auto-refresh-control">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-              Auto-refresh
-            </label>
-            {autoRefresh && (
-              <select
-                value={refreshInterval}
-                onChange={(e) => setRefreshInterval(Number(e.target.value))}
-                className="refresh-interval"
+    <>
+      <div style={{ 
+        position: 'fixed', 
+        top: '10px', 
+        right: '10px', 
+        zIndex: 1000,
+        maxWidth: '400px',
+        maxHeight: '80vh',
+        overflowY: 'auto'
+      }}>
+        <Card className="shadow-sm">
+          <Card.Header className="d-flex justify-content-between align-items-center py-2">
+            <div className="d-flex align-items-center">
+              <GraphUp className="me-2" />
+              <strong>Performance Monitor</strong>
+            </div>
+            <div>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                className="me-2"
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                title={autoRefresh ? 'Disable auto-refresh' : 'Enable auto-refresh'}
               >
-                <option value={10}>10s</option>
-                <option value={30}>30s</option>
-                <option value={60}>1m</option>
-                <option value={300}>5m</option>
-              </select>
-            )}
-            <button onClick={refreshData} className="refresh-button" disabled={loading}>
-              {loading ? '⟳' : '↻'} Refresh
-            </button>
-            <button onClick={onClose} className="close-button">✕</button>
-          </div>
-        </div>
-
-        <div className="dashboard-tabs">
-          <button
-            className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            Overview
-          </button>
-          <button
-            className={`tab ${activeTab === 'database' ? 'active' : ''}`}
-            onClick={() => setActiveTab('database')}
-          >
-            Database
-          </button>
-          <button
-            className={`tab ${activeTab === 'cache' ? 'active' : ''}`}
-            onClick={() => setActiveTab('cache')}
-          >
-            Cache
-          </button>
-          <button
-            className={`tab ${activeTab === 'trends' ? 'active' : ''}`}
-            onClick={() => setActiveTab('trends')}
-          >
-            Trends
-          </button>
-          <button
-            className={`tab ${activeTab === 'recommendations' ? 'active' : ''}`}
-            onClick={() => setActiveTab('recommendations')}
-          >
-            Recommendations
-          </button>
-        </div>
-
-        <div className="dashboard-content">
-          {loading && <div className="loading-indicator">Loading performance data...</div>}
+                {autoRefresh ? <Eye /> : <EyeSlash />}
+              </Button>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                className="me-2"
+                onClick={refreshStats}
+                title="Refresh stats"
+              >
+                <Activity />
+              </Button>
+              <Button
+                variant="outline-info"
+                size="sm"
+                className="me-2"
+                onClick={() => setShowModal(true)}
+                title="View detailed stats"
+              >
+                <Database />
+              </Button>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => onToggle && onToggle()}
+                title="Hide dashboard"
+              >
+                ×
+              </Button>
+            </div>
+          </Card.Header>
           
-          {!loading && (
-            <>
-              {activeTab === 'overview' && renderOverviewTab()}
-              {activeTab === 'database' && renderDatabaseTab()}
-              {activeTab === 'cache' && renderCacheTab()}
-              {activeTab === 'trends' && renderTrendsTab()}
-              {activeTab === 'recommendations' && renderRecommendationsTab()}
-            </>
-          )}
-        </div>
+          <Card.Body className="p-2">
+            {/* Quick Stats */}
+            <Row className="g-2 mb-3">
+              <Col xs={6}>
+                <Card className="text-center border-0 bg-light">
+                  <Card.Body className="p-2">
+                    <div className="h6 mb-1 text-primary">
+                      {performanceStats.cachePerformance.overallCacheHitRate}
+                    </div>
+                    <small className="text-muted">Cache Hit Rate</small>
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col xs={6}>
+                <Card className="text-center border-0 bg-light">
+                  <Card.Body className="p-2">
+                    <div className="h6 mb-1 text-success">
+                      {performanceStats.databasePerformance.averageQueryTime}
+                    </div>
+                    <small className="text-muted">Avg Query Time</small>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            <Row className="g-2 mb-3">
+              <Col xs={6}>
+                <Card className="text-center border-0 bg-light">
+                  <Card.Body className="p-2">
+                    <div className="h6 mb-1 text-info">
+                      {performanceStats.memoryUsage.reductionPercentage}
+                    </div>
+                    <small className="text-muted">Memory Reduction</small>
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col xs={6}>
+                <Card className="text-center border-0 bg-light">
+                  <Card.Body className="p-2">
+                    <div className="h6 mb-1 text-warning">
+                      {performanceStats.databasePerformance.totalQueries}
+                    </div>
+                    <small className="text-muted">Total Queries</small>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Optimization Impact */}
+            <Accordion className="mb-2">
+              <Accordion.Item eventKey="0">
+                <Accordion.Header>
+                  <Clock className="me-2" />
+                  Optimization Impact
+                </Accordion.Header>
+                <Accordion.Body className="p-2">
+                  <Table size="sm" className="mb-0">
+                    <tbody>
+                      <tr>
+                        <td>Unified Cache Hits</td>
+                        <td>
+                          <Badge bg="success">
+                            {performanceStats.cachePerformance.unifiedCacheHits}
+                          </Badge>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Legacy Cache Hits</td>
+                        <td>
+                          <Badge bg="secondary">
+                            {performanceStats.cachePerformance.legacyCacheHits}
+                          </Badge>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Client-Side Filters</td>
+                        <td>
+                          <Badge bg="info">
+                            {performanceStats.cachePerformance.clientSideFilters}
+                          </Badge>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Duplicates Avoided</td>
+                        <td>
+                          <Badge bg="primary">
+                            {performanceStats.cachePerformance.duplicateCacheEntriesAvoided}
+                          </Badge>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </Accordion.Body>
+              </Accordion.Item>
+
+              <Accordion.Item eventKey="1">
+                <Accordion.Header>
+                  <Memory className="me-2" />
+                  Memory Usage
+                </Accordion.Header>
+                <Accordion.Body className="p-2">
+                  <Table size="sm" className="mb-0">
+                    <tbody>
+                      <tr>
+                        <td>Current Usage</td>
+                        <td>{performanceStats.memoryUsage.currentUsage}</td>
+                      </tr>
+                      <tr>
+                        <td>Peak Usage</td>
+                        <td>{performanceStats.memoryUsage.peakUsage}</td>
+                      </tr>
+                      <tr>
+                        <td>Reduction</td>
+                        <td className="text-success">
+                          {performanceStats.memoryUsage.reduction}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>Cache Memory Saved</td>
+                        <td className="text-info">
+                          {performanceStats.memoryUsage.duplicateCacheMemorySaved}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </Accordion.Body>
+              </Accordion.Item>
+
+              <Accordion.Item eventKey="2">
+                <Accordion.Header>
+                  <Database className="me-2" />
+                  Data Flow
+                </Accordion.Header>
+                <Accordion.Body className="p-2">
+                  <Table size="sm" className="mb-0">
+                    <tbody>
+                      <tr>
+                        <td>Programs Fetched</td>
+                        <td>{performanceStats.dataFlow.totalProgramsFetched}</td>
+                      </tr>
+                      <tr>
+                        <td>Template Filtered</td>
+                        <td>{performanceStats.dataFlow.templateProgramsFiltered}</td>
+                      </tr>
+                      <tr>
+                        <td>User Filtered</td>
+                        <td>{performanceStats.dataFlow.userProgramsFiltered}</td>
+                      </tr>
+                      <tr>
+                        <td>Avg Transform Time</td>
+                        <td>{performanceStats.dataFlow.averageTransformationTime}</td>
+                      </tr>
+                      <tr>
+                        <td>Avg Filter Time</td>
+                        <td>{performanceStats.dataFlow.averageFilteringTime}</td>
+                      </tr>
+                      <tr>
+                        <td>Errors</td>
+                        <td>
+                          <Badge bg={performanceStats.dataFlow.dataFlowErrors > 0 ? 'danger' : 'success'}>
+                            {performanceStats.dataFlow.dataFlowErrors}
+                          </Badge>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </Table>
+                </Accordion.Body>
+              </Accordion.Item>
+            </Accordion>
+
+            {/* Session Info */}
+            <div className="text-center">
+              <small className="text-muted">
+                Session: {performanceStats.session.duration} | 
+                Queries/min: {performanceStats.session.queriesPerMinute}
+              </small>
+            </div>
+          </Card.Body>
+        </Card>
       </div>
-    </div>
-  )
+
+      {/* Detailed Stats Modal */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Detailed Performance Statistics</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Accordion>
+            <Accordion.Item eventKey="0">
+              <Accordion.Header>Database Performance</Accordion.Header>
+              <Accordion.Body>
+                <pre style={{ fontSize: '12px', maxHeight: '300px', overflow: 'auto' }}>
+                  {JSON.stringify(performanceStats.databasePerformance, null, 2)}
+                </pre>
+              </Accordion.Body>
+            </Accordion.Item>
+
+            <Accordion.Item eventKey="1">
+              <Accordion.Header>Cache Performance</Accordion.Header>
+              <Accordion.Body>
+                <pre style={{ fontSize: '12px', maxHeight: '300px', overflow: 'auto' }}>
+                  {JSON.stringify(performanceStats.cachePerformance, null, 2)}
+                </pre>
+              </Accordion.Body>
+            </Accordion.Item>
+
+            <Accordion.Item eventKey="2">
+              <Accordion.Header>Enhanced Cache Stats</Accordion.Header>
+              <Accordion.Body>
+                <pre style={{ fontSize: '12px', maxHeight: '300px', overflow: 'auto' }}>
+                  {JSON.stringify(cacheStats, null, 2)}
+                </pre>
+              </Accordion.Body>
+            </Accordion.Item>
+          </Accordion>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="warning" onClick={resetPerformanceStats}>
+            Reset Stats
+          </Button>
+          <Button variant="info" onClick={logPerformanceSummary}>
+            Log Summary
+          </Button>
+          <Button variant="secondary" onClick={() => setShowModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+    </>
+  );
 }
 
-export default PerformanceDashboard
+export default PerformanceDashboard;

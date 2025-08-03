@@ -2,6 +2,14 @@ import { supabase } from '../config/supabase'
 import { handleSupabaseError, executeSupabaseOperation } from '../utils/supabaseErrorHandler'
 import { supabaseCache, invalidateProgramCache, invalidateUserCache } from '../api/supabaseCache'
 import { transformSupabaseProgramToWeeklyConfigs } from '../utils/dataTransformations'
+import { 
+  trackDatabaseQuery, 
+  trackCacheOperation, 
+  trackMemoryUsage, 
+  trackDataFlow,
+  createPerformanceTimer,
+  enableOptimizationTracking
+} from '../utils/performanceMonitor'
 
 /**
  * Program Service for Supabase program operations
@@ -15,21 +23,31 @@ const PROGRAM_SUMMARY_CACHE_TTL = 30 * 60 * 1000 // 30 minutes
 const PROGRAM_TEMPLATES_CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 /**
- * Get all programs for a user (with caching)
- * Enhanced to fetch related workout and exercise data and transform to expected format
+ * Internal function to get all programs for a user (both template and non-template)
+ * Used for optimized fetching without template filtering
+ * @param {string} userId - The user ID
+ * @param {Object} additionalFilters - Additional filters to apply (excluding isTemplate)
+ * @returns {Promise<Array>} Array of all programs for the user
  */
-export const getUserPrograms = async (userId, filters = {}) => {
+const getAllUserPrograms = async (userId, additionalFilters = {}) => {
   return executeSupabaseOperation(async () => {
+    const operationTimer = createPerformanceTimer('getAllUserPrograms', 'database');
     const startTime = performance.now();
     
-    // Create cache key based on user ID and filters
-    // Include version identifier to distinguish enhanced queries with workout/exercise data
+    // Track memory usage before operation
+    trackMemoryUsage('before_optimization', { operation: 'getAllUserPrograms', userId });
+    
+    // Remove template filter if present in additional filters
+    const filters = { ...additionalFilters };
+    delete filters.isTemplate;
+    
+    // Create cache key for unified cache approach
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
-    const cacheKey = `user_programs_enhanced_${userId}_${filterKey}`
+    const cacheKey = `user_programs_all_${userId}${filterKey ? '_' + filterKey : ''}`
 
-    console.log('🔍 [PROGRAM_SERVICE] getUserPrograms called:', {
+    console.log('🔍 [PROGRAM_SERVICE] getAllUserPrograms called:', {
       userId,
-      filters,
+      additionalFilters,
       filterKey,
       cacheKey,
       timestamp: new Date().toISOString()
@@ -38,7 +56,430 @@ export const getUserPrograms = async (userId, filters = {}) => {
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
-        console.log('💾 [CACHE_MISS] Cache miss for getUserPrograms, fetching from database:', {
+        console.log('💾 [CACHE_MISS] Cache miss for getAllUserPrograms, fetching from database:', {
+          cacheKey,
+          userId,
+          filters
+        });
+
+        const queryStartTime = performance.now();
+        const queryTimer = createPerformanceTimer('getAllUserPrograms_database_query', 'database');
+        
+        let query = supabase
+          .from('programs')
+          .select(`
+            *,
+            program_workouts (
+              *,
+              program_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type,
+                  instructions
+                )
+              )
+            )
+          `)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+
+        // Apply non-template filters
+        Object.keys(filters).forEach(key => {
+          if (filters[key] !== undefined) {
+            query = query.eq(key, filters[key])
+            console.log('🔧 [QUERY_FILTER] Applied filter:', { key, value: filters[key] });
+          }
+        })
+
+        const { data, error } = await query
+        const queryEndTime = performance.now();
+        const queryTime = queryEndTime - queryStartTime;
+        const queryResult = queryTimer.end({ 
+          success: !error, 
+          recordCount: data?.length || 0,
+          userId,
+          filters 
+        });
+
+        // Track database query performance
+        trackDatabaseQuery('getAllUserPrograms', 'programs', queryStartTime, queryEndTime, {
+          userId,
+          filters,
+          recordCount: data?.length || 0,
+          success: !error
+        });
+
+        if (error) {
+          // Track data flow error
+          trackDataFlow('data_flow_error', { 
+            error: error.message, 
+            operation: 'getAllUserPrograms_database_query' 
+          }, { userId, filters });
+
+          console.error('❌ [DATABASE_ERROR] Error fetching all programs:', {
+            error: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            userId,
+            filters,
+            queryTimeMs: Math.round(queryTime * 100) / 100
+          });
+          throw error;
+        }
+
+        // Track successful data fetch
+        trackDataFlow('programs_fetched', { 
+          count: data?.length || 0, 
+          source: 'database' 
+        }, { 
+          userId, 
+          filters,
+          templatePrograms: data?.filter(p => p.is_template).length || 0,
+          userPrograms: data?.filter(p => !p.is_template).length || 0
+        });
+
+        console.log('📊 [DATABASE_SUCCESS] All programs fetched successfully:', {
+          programCount: data?.length || 0,
+          queryTimeMs: Math.round(queryTime * 100) / 100,
+          userId,
+          filters,
+          templatePrograms: data?.filter(p => p.is_template).length || 0,
+          userPrograms: data?.filter(p => !p.is_template).length || 0
+        });
+
+        console.log("📋 [RAW_DATA] Raw all programs data from database:", data);
+
+        // Transform each program to include weekly_configs
+        const transformStartTime = performance.now();
+        const transformTimer = createPerformanceTimer('getAllUserPrograms_transformation', 'data_processing');
+        const transformedPrograms = (data || []).map((program, index) => {
+          console.log(`🔄 [TRANSFORM_START] Processing program ${index + 1}/${data.length}:`, {
+            programId: program.id,
+            programName: program.name,
+            isTemplate: program.is_template,
+            hasWorkouts: !!program.program_workouts,
+            workoutCount: program.program_workouts?.length || 0
+          });
+
+          // Sort workouts by week and day before transformation
+          if (program.program_workouts) {
+            const originalOrder = program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }));
+            
+            program.program_workouts.sort((a, b) => {
+              if (a.week_number !== b.week_number) {
+                return a.week_number - b.week_number
+              }
+              return a.day_number - b.day_number
+            })
+
+            console.log(`📅 [WORKOUT_SORT] Sorted workouts for program ${program.id}:`, {
+              originalOrder,
+              sortedOrder: program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }))
+            });
+
+            // Sort exercises within each workout by order_index
+            program.program_workouts.forEach((workout, workoutIndex) => {
+              if (workout.program_exercises) {
+                const originalExerciseOrder = workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }));
+                
+                workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+                
+                console.log(`💪 [EXERCISE_SORT] Sorted exercises for workout ${workoutIndex + 1}:`, {
+                  workoutId: workout.id,
+                  originalOrder: originalExerciseOrder,
+                  sortedOrder: workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }))
+                });
+              }
+            })
+          }
+
+          // Apply transformation to convert normalized data to weekly_configs format
+          const transformedProgram = transformSupabaseProgramToWeeklyConfigs(program);
+          
+          console.log(`✅ [TRANSFORM_COMPLETE] Program ${index + 1} transformed:`, {
+            programId: program.id,
+            programName: program.name,
+            isTemplate: program.is_template,
+            hasWeeklyConfigs: !!transformedProgram.weekly_configs,
+            weeklyConfigsKeys: Object.keys(transformedProgram.weekly_configs || {}).length
+          });
+
+          return transformedProgram;
+        })
+
+        const transformEndTime = performance.now();
+        const transformTime = transformEndTime - transformStartTime;
+        const transformResult = transformTimer.end({ 
+          totalPrograms: data?.length || 0,
+          templatePrograms: transformedPrograms.filter(p => p.is_template).length,
+          userPrograms: transformedPrograms.filter(p => !p.is_template).length
+        });
+
+        // Track transformation performance
+        trackDataFlow('transformation_time', { 
+          duration: transformTime,
+          programCount: data?.length || 0
+        }, { 
+          userId, 
+          averageTimePerProgram: data?.length ? transformTime / data.length : 0
+        });
+
+        console.log('🎯 [TRANSFORM_SUMMARY] All programs transformed:', {
+          totalPrograms: data?.length || 0,
+          templatePrograms: transformedPrograms.filter(p => p.is_template).length,
+          userPrograms: transformedPrograms.filter(p => !p.is_template).length,
+          transformTimeMs: Math.round(transformTime * 100) / 100,
+          averageTransformTimeMs: data?.length ? Math.round((transformTime / data.length) * 100) / 100 : 0
+        });
+
+        console.log("🔄 [TRANSFORMED_DATA] Final transformed all programs:", transformedPrograms);
+
+        // Track memory usage after transformation
+        trackMemoryUsage('after_optimization', { 
+          operation: 'getAllUserPrograms_complete', 
+          userId,
+          programCount: transformedPrograms.length
+        });
+
+        // Complete operation timer
+        const operationResult = operationTimer.end({
+          success: true,
+          programCount: transformedPrograms.length,
+          queryTime: queryTime,
+          transformTime: transformTime
+        });
+
+        return transformedPrograms
+      },
+      {
+        ttl: PROGRAM_CACHE_TTL,
+        table: 'programs',
+        userId: userId,
+        tags: ['programs', 'user', 'all_programs'],
+        onCacheHit: (cachedData) => {
+          const endTime = performance.now();
+          const totalTime = endTime - startTime;
+          
+          // Track unified cache hit
+          trackCacheOperation('unified_hit', 'getAllUserPrograms', cacheKey, {
+            userId,
+            filters,
+            programCount: cachedData?.length || 0,
+            templatePrograms: cachedData?.filter(p => p.is_template).length || 0,
+            userPrograms: cachedData?.filter(p => !p.is_template).length || 0,
+            totalTimeMs: Math.round(totalTime * 100) / 100
+          });
+
+          // Track data flow
+          trackDataFlow('programs_fetched', { 
+            count: cachedData?.length || 0, 
+            source: 'unified_cache' 
+          }, { userId, cacheKey });
+
+          // Track memory usage after cache hit
+          trackMemoryUsage('after_optimization', { 
+            operation: 'getAllUserPrograms_cache_hit', 
+            userId,
+            duplicateEntriesAvoided: 1
+          });
+          
+          console.log('🎯 [CACHE_HIT] Cache hit for getAllUserPrograms:', {
+            cacheKey,
+            userId,
+            filters,
+            programCount: cachedData?.length || 0,
+            templatePrograms: cachedData?.filter(p => p.is_template).length || 0,
+            userPrograms: cachedData?.filter(p => !p.is_template).length || 0,
+            totalTimeMs: Math.round(totalTime * 100) / 100,
+            ttl: PROGRAM_CACHE_TTL
+          });
+        },
+        onCacheSet: (data) => {
+          // Track unified cache miss and subsequent cache set
+          trackCacheOperation('unified_miss', 'getAllUserPrograms', cacheKey, {
+            userId,
+            filters,
+            programCount: data?.length || 0,
+            templatePrograms: data?.filter(p => p.is_template).length || 0,
+            userPrograms: data?.filter(p => !p.is_template).length || 0
+          });
+
+          // Track duplicate cache entries avoided
+          trackCacheOperation('duplicate_avoided', 'unified_cache', cacheKey, {
+            potentialDuplicates: 2, // Would have been 2 separate cache entries
+            actualEntries: 1,
+            memorySaved: JSON.stringify(data).length
+          });
+
+          console.log('💾 [CACHE_SET] Data cached for getAllUserPrograms:', {
+            cacheKey,
+            userId,
+            filters,
+            programCount: data?.length || 0,
+            templatePrograms: data?.filter(p => p.is_template).length || 0,
+            userPrograms: data?.filter(p => !p.is_template).length || 0,
+            ttl: PROGRAM_CACHE_TTL
+          });
+        }
+      }
+    )
+  }, 'getAllUserPrograms')
+}
+
+/**
+ * Get programs for a user with optional template filtering
+ * Enhanced to fetch related workout and exercise data and transform to expected format
+ * Maintains backward compatibility while optimizing for bulk fetching
+ */
+export const getUserPrograms = async (userId, filters = {}) => {
+  return executeSupabaseOperation(async () => {
+    const operationTimer = createPerformanceTimer('getUserPrograms', 'database');
+    const startTime = performance.now();
+
+    console.log('🔍 [PROGRAM_SERVICE] getUserPrograms called:', {
+      userId,
+      filters,
+      timestamp: new Date().toISOString()
+    });
+
+    // If no template filter specified, use optimized path with getAllUserPrograms
+    if (filters.isTemplate === undefined) {
+      console.log('🚀 [OPTIMIZATION] No template filter specified, using getAllUserPrograms for optimized fetching');
+      
+      // Track that we're using the optimized path
+      trackCacheOperation('unified_hit', 'optimization_path', 'getAllUserPrograms', {
+        userId,
+        filters,
+        reason: 'no_template_filter'
+      });
+
+      const result = await getAllUserPrograms(userId, filters);
+      
+      // Complete operation timer
+      operationTimer.end({
+        success: true,
+        optimizedPath: true,
+        programCount: result?.length || 0
+      });
+
+      return result;
+    }
+
+    // For backward compatibility, check if we can use cached all-programs data
+    const nonTemplateFilters = { ...filters };
+    delete nonTemplateFilters.isTemplate;
+    const allProgramsFilterKey = Object.keys(nonTemplateFilters).sort().map(key => `${key}:${nonTemplateFilters[key]}`).join('_');
+    const allProgramsCacheKey = `user_programs_all_${userId}${allProgramsFilterKey ? '_' + allProgramsFilterKey : ''}`;
+    
+    console.log('🔍 [BACKWARD_COMPATIBILITY] Checking for cached all-programs data:', {
+      allProgramsCacheKey,
+      templateFilter: filters.isTemplate,
+      otherFilters: nonTemplateFilters
+    });
+
+    const cachedAllPrograms = supabaseCache.get(allProgramsCacheKey);
+    
+    if (cachedAllPrograms) {
+      console.log('🎯 [CACHE_HIT] Found cached all-programs data, filtering client-side:', {
+        cacheKey: allProgramsCacheKey,
+        totalPrograms: cachedAllPrograms.length,
+        templateFilter: filters.isTemplate
+      });
+
+      // Track client-side filtering from unified cache
+      const filterStartTime = performance.now();
+      const filterTimer = createPerformanceTimer('client_side_filtering', 'data_processing');
+
+      // Filter from cached data
+      const filteredPrograms = cachedAllPrograms.filter(program => 
+        program.is_template === filters.isTemplate
+      );
+
+      const filterEndTime = performance.now();
+      const filterTime = filterEndTime - filterStartTime;
+      const filterResult = filterTimer.end({
+        originalCount: cachedAllPrograms.length,
+        filteredCount: filteredPrograms.length,
+        templateFilter: filters.isTemplate
+      });
+
+      // Track cache operation and client-side filtering
+      trackCacheOperation('unified_hit', 'client_side_filter', allProgramsCacheKey, {
+        userId,
+        originalCount: cachedAllPrograms.length,
+        filteredCount: filteredPrograms.length,
+        templateFilter: filters.isTemplate,
+        filterTimeMs: Math.round(filterTime * 100) / 100
+      });
+
+      trackCacheOperation('client_filter', 'unified_cache', allProgramsCacheKey, {
+        userId,
+        filterType: 'isTemplate',
+        filterValue: filters.isTemplate,
+        efficiency: filteredPrograms.length / cachedAllPrograms.length
+      });
+
+      // Track data flow
+      trackDataFlow('filtering_time', { duration: filterTime }, {
+        userId,
+        originalCount: cachedAllPrograms.length,
+        filteredCount: filteredPrograms.length
+      });
+
+      if (filters.isTemplate) {
+        trackDataFlow('template_programs_filtered', { count: filteredPrograms.length }, { userId });
+      } else {
+        trackDataFlow('user_programs_filtered', { count: filteredPrograms.length }, { userId });
+      }
+
+      const endTime = performance.now();
+      const totalTime = endTime - startTime;
+
+      console.log('✅ [CLIENT_FILTER] Client-side filtering completed:', {
+        originalCount: cachedAllPrograms.length,
+        filteredCount: filteredPrograms.length,
+        templateFilter: filters.isTemplate,
+        totalTimeMs: Math.round(totalTime * 100) / 100
+      });
+
+      // Complete operation timer
+      operationTimer.end({
+        success: true,
+        clientSideFilter: true,
+        originalCount: cachedAllPrograms.length,
+        filteredCount: filteredPrograms.length
+      });
+
+      return filteredPrograms;
+    }
+
+    // Fallback to original implementation for specific template filtering
+    console.log('💾 [FALLBACK] No cached all-programs data found, using original implementation');
+    
+    // Track that we're using the legacy path
+    trackCacheOperation('legacy_miss', 'fallback_path', allProgramsCacheKey, {
+      userId,
+      filters,
+      reason: 'no_unified_cache_data'
+    });
+    
+    // Create cache key based on user ID and filters (original behavior)
+    const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
+    const cacheKey = `user_programs_enhanced_${userId}_${filterKey}`
+
+    console.log('🔍 [FALLBACK] Using original cache key:', {
+      cacheKey,
+      filters
+    });
+
+    return supabaseCache.getWithCache(
+      cacheKey,
+      async () => {
+        console.log('💾 [CACHE_MISS] Cache miss for getUserPrograms fallback, fetching from database:', {
           cacheKey,
           userId,
           filters
@@ -93,7 +534,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
         const queryTime = queryEndTime - queryStartTime;
 
         if (error) {
-          console.error('❌ [DATABASE_ERROR] Error fetching programs:', {
+          console.error('❌ [DATABASE_ERROR] Error fetching programs (fallback):', {
             error: error.message,
             code: error.code,
             details: error.details,
@@ -105,19 +546,19 @@ export const getUserPrograms = async (userId, filters = {}) => {
           throw error;
         }
 
-        console.log('📊 [DATABASE_SUCCESS] Programs fetched successfully:', {
+        console.log('📊 [DATABASE_SUCCESS] Programs fetched successfully (fallback):', {
           programCount: data?.length || 0,
           queryTimeMs: Math.round(queryTime * 100) / 100,
           userId,
           filters
         });
 
-        console.log("📋 [RAW_DATA] Raw program data from database:", data);
+        console.log("📋 [RAW_DATA] Raw program data from database (fallback):", data);
 
         // Transform each program to include weekly_configs
         const transformStartTime = performance.now();
         const transformedPrograms = (data || []).map((program, index) => {
-          console.log(`🔄 [TRANSFORM_START] Processing program ${index + 1}/${data.length}:`, {
+          console.log(`🔄 [TRANSFORM_START] Processing program ${index + 1}/${data.length} (fallback):`, {
             programId: program.id,
             programName: program.name,
             hasWorkouts: !!program.program_workouts,
@@ -135,7 +576,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
               return a.day_number - b.day_number
             })
 
-            console.log(`📅 [WORKOUT_SORT] Sorted workouts for program ${program.id}:`, {
+            console.log(`📅 [WORKOUT_SORT] Sorted workouts for program ${program.id} (fallback):`, {
               originalOrder,
               sortedOrder: program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }))
             });
@@ -147,7 +588,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
                 
                 workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
                 
-                console.log(`💪 [EXERCISE_SORT] Sorted exercises for workout ${workoutIndex + 1}:`, {
+                console.log(`💪 [EXERCISE_SORT] Sorted exercises for workout ${workoutIndex + 1} (fallback):`, {
                   workoutId: workout.id,
                   originalOrder: originalExerciseOrder,
                   sortedOrder: workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }))
@@ -159,7 +600,7 @@ export const getUserPrograms = async (userId, filters = {}) => {
           // Apply transformation to convert normalized data to weekly_configs format
           const transformedProgram = transformSupabaseProgramToWeeklyConfigs(program);
           
-          console.log(`✅ [TRANSFORM_COMPLETE] Program ${index + 1} transformed:`, {
+          console.log(`✅ [TRANSFORM_COMPLETE] Program ${index + 1} transformed (fallback):`, {
             programId: program.id,
             hasWeeklyConfigs: !!transformedProgram.weekly_configs,
             weeklyConfigsKeys: Object.keys(transformedProgram.weekly_configs || {}).length
@@ -171,13 +612,13 @@ export const getUserPrograms = async (userId, filters = {}) => {
         const transformEndTime = performance.now();
         const transformTime = transformEndTime - transformStartTime;
 
-        console.log('🎯 [TRANSFORM_SUMMARY] All programs transformed:', {
+        console.log('🎯 [TRANSFORM_SUMMARY] All programs transformed (fallback):', {
           totalPrograms: data?.length || 0,
           transformTimeMs: Math.round(transformTime * 100) / 100,
           averageTransformTimeMs: data?.length ? Math.round((transformTime / data.length) * 100) / 100 : 0
         });
 
-        console.log("🔄 [TRANSFORMED_DATA] Final transformed programs:", transformedPrograms);
+        console.log("🔄 [TRANSFORMED_DATA] Final transformed programs (fallback):", transformedPrograms);
 
         return transformedPrograms
       },
@@ -190,7 +631,21 @@ export const getUserPrograms = async (userId, filters = {}) => {
           const endTime = performance.now();
           const totalTime = endTime - startTime;
           
-          console.log('🎯 [CACHE_HIT] Cache hit for getUserPrograms:', {
+          // Track legacy cache hit
+          trackCacheOperation('legacy_hit', 'getUserPrograms_fallback', cacheKey, {
+            userId,
+            filters,
+            programCount: cachedData?.length || 0,
+            totalTimeMs: Math.round(totalTime * 100) / 100
+          });
+
+          // Track data flow
+          trackDataFlow('programs_fetched', { 
+            count: cachedData?.length || 0, 
+            source: 'legacy_cache' 
+          }, { userId, filters });
+          
+          console.log('🎯 [CACHE_HIT] Cache hit for getUserPrograms (fallback):', {
             cacheKey,
             userId,
             filters,
@@ -200,7 +655,14 @@ export const getUserPrograms = async (userId, filters = {}) => {
           });
         },
         onCacheSet: (data) => {
-          console.log('💾 [CACHE_SET] Data cached for getUserPrograms:', {
+          // Track legacy cache miss and set
+          trackCacheOperation('legacy_miss', 'getUserPrograms_fallback', cacheKey, {
+            userId,
+            filters,
+            programCount: data?.length || 0
+          });
+
+          console.log('💾 [CACHE_SET] Data cached for getUserPrograms (fallback):', {
             cacheKey,
             userId,
             filters,
@@ -369,17 +831,6 @@ export const createProgram = async (programData) => {
     });
     
     invalidateProgramCache(programData.user_id)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    const cacheKeysToInvalidate = [`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`];
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating specific cache keys:', {
-      keys: cacheKeysToInvalidate,
-      reason: 'program-created'
-    });
-    
-    supabaseCache.invalidate(cacheKeysToInvalidate, {
-      reason: 'program-created'
-    })
 
     console.log('✅ [PROGRAM_CREATED] Program created successfully:', {
       programId: data.id,
@@ -467,17 +918,6 @@ export const createCompleteProgram = async (programData, workoutsData) => {
     });
     
     invalidateProgramCache(programData.user_id)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    const cacheKeysToInvalidate = [`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`];
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating specific cache keys:', {
-      keys: cacheKeysToInvalidate,
-      reason: 'complete-program-created'
-    });
-    
-    supabaseCache.invalidate(cacheKeysToInvalidate, {
-      reason: 'complete-program-created'
-    })
 
     console.log('✅ [COMPLETE_PROGRAM_CREATED] Complete program created successfully:', {
       programId: program.id,
@@ -534,17 +974,6 @@ export const updateProgram = async (programId, updates) => {
     });
     
     invalidateProgramCache(data.user_id)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    const userCacheKeys = [`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`];
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user cache patterns after update:', {
-      keys: userCacheKeys,
-      reason: 'program-updated'
-    });
-    
-    supabaseCache.invalidate(userCacheKeys, {
-      reason: 'program-updated'
-    })
 
     console.log('✅ [PROGRAM_UPDATED] Program updated successfully:', {
       programId,
@@ -581,11 +1010,6 @@ export const setCurrentProgram = async (programId, userId) => {
     
     // Invalidate user program cache (affects all programs since current status changed)
     invalidateProgramCache(userId)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
-      reason: 'program-set-current'
-    })
 
     console.log('Program set as current:', data.name)
     return data
@@ -618,11 +1042,6 @@ export const deactivateProgram = async (programId, userId) => {
     
     // Invalidate user program cache
     invalidateProgramCache(userId)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
-      reason: 'program-deactivated'
-    })
 
     console.log('Program deactivated:', data.name)
     return data
@@ -663,17 +1082,6 @@ export const deleteProgram = async (programId, userId) => {
     });
     
     invalidateProgramCache(userId)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    const userCacheKeys = [`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`];
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user cache patterns after deletion:', {
-      keys: userCacheKeys,
-      reason: 'program-deleted'
-    });
-    
-    supabaseCache.invalidate(userCacheKeys, {
-      reason: 'program-deleted'
-    })
 
     console.log('✅ [PROGRAM_DELETED] Program deleted successfully:', {
       programId,
@@ -760,11 +1168,6 @@ export const copyProgram = async (programId, newProgramData, userId) => {
 
     // Invalidate user program cache to ensure copied program appears
     invalidateProgramCache(userId)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${userId}`, `user_programs_enhanced_${userId}`, `programs_user_${userId}`], {
-      reason: 'program-copied'
-    })
 
     console.log('Program copied:', newProgram.name)
     return newProgram
@@ -795,11 +1198,6 @@ export const updateProgramProgress = async (programId, completedWeeks) => {
     
     // Invalidate user program cache
     invalidateProgramCache(data.user_id)
-    
-    // Also invalidate user cache patterns that include programs (both old and new formats)
-    supabaseCache.invalidate([`user_programs_${data.user_id}`, `user_programs_enhanced_${data.user_id}`, `programs_user_${data.user_id}`], {
-      reason: 'program-progress-updated'
-    })
 
     console.log('Program progress updated:', data.name, 'weeks:', completedWeeks)
     return data
@@ -930,11 +1328,6 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
     if (!programError && programData) {
       // Invalidate user program cache
       invalidateProgramCache(programData.user_id)
-      
-      // Also invalidate user cache patterns that include programs (both old and new formats)
-      supabaseCache.invalidate([`user_programs_${programData.user_id}`, `user_programs_enhanced_${programData.user_id}`, `programs_user_${programData.user_id}`], {
-        reason: 'program-exercise-updated'
-      })
     }
 
     console.log(`Successfully updated exercise ${targetExercise.id} from ${oldExerciseId} to ${newExerciseId}`)

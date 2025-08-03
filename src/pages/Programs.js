@@ -12,6 +12,17 @@ import { parseWeeklyConfigs } from '../utils/programUtils';
 import { useRealtimePrograms, useRealtimeExerciseLibrary } from '../hooks/useRealtimePrograms';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import { 
+  trackDatabaseQuery, 
+  trackCacheOperation, 
+  trackMemoryUsage, 
+  trackDataFlow,
+  createPerformanceTimer,
+  enableOptimizationTracking,
+  getPerformanceStats,
+  logPerformanceSummary
+} from '../utils/performanceMonitor';
+import PerformanceDashboard from '../components/PerformanceDashboard';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 function Programs({ userRole }) {
@@ -34,6 +45,11 @@ function Programs({ userRole }) {
   const [error, setError] = useState(null);
   const [programsError, setProgramsError] = useState(null);
   const [exercisesError, setExercisesError] = useState(null);
+
+  // Performance monitoring state
+  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(
+    process.env.NODE_ENV === 'development' || window.location.search.includes('debug=true')
+  );
 
   // Real-time program updates
   const {
@@ -100,6 +116,17 @@ function Programs({ userRole }) {
       });
 
       if (user) {
+        // Enable optimization tracking for this session
+        enableOptimizationTracking();
+        
+        // Track memory usage before data fetching
+        trackMemoryUsage('before_optimization', { 
+          operation: 'programs_page_load', 
+          userId: user.id 
+        });
+
+        const pageLoadTimer = createPerformanceTimer('programs_page_load', 'page_performance');
+        
         setIsLoading(true);
         setError(null);
         setProgramsError(null);
@@ -117,146 +144,197 @@ function Programs({ userRole }) {
             return null;
           });
 
-          // Fetch user programs using Supabase with error handling
+          // Fetch all programs using optimized single database call
           try {
-            console.log('🔍 [PROGRAMS_PAGE] About to fetch user programs:', {
+            console.log('🔍 [PROGRAMS_PAGE] Fetching all user programs with single optimized call:', {
               userId: user.id,
-              filters: { isTemplate: false },
               timestamp: new Date().toISOString()
             });
 
-            console.log('🔍 [PROGRAMS_PAGE] Calling getUserPrograms service...');
-
             const fetchStartTime = performance.now();
-            const userProgramsData = await getUserPrograms(user.id, { isTemplate: false });
+            const fetchTimer = createPerformanceTimer('programs_unified_fetch', 'data_fetch');
+            const allProgramsData = await getUserPrograms(user.id); // No template filter - fetch all programs
             const fetchEndTime = performance.now();
             const fetchTime = fetchEndTime - fetchStartTime;
+            const fetchResult = fetchTimer.end({
+              success: true,
+              totalCount: allProgramsData?.length || 0
+            });
 
-            console.log('📊 [PROGRAMS_PAGE] User programs fetched:', {
-              programCount: userProgramsData?.length || 0,
+            // Track the unified fetch performance
+            trackDatabaseQuery('unified_programs_fetch', 'programs', fetchStartTime, fetchEndTime, {
+              userId: user.id,
+              totalPrograms: allProgramsData?.length || 0,
+              optimized: true
+            });
+
+            console.log('📊 [PROGRAMS_PAGE] All programs fetched:', {
+              totalCount: allProgramsData?.length || 0,
               fetchTimeMs: Math.round(fetchTime * 100) / 100,
-              data: userProgramsData
+              data: allProgramsData
+            });
+
+            // Client-side filtering to separate user programs from template programs
+            const filterStartTime = performance.now();
+            const filterTimer = createPerformanceTimer('client_side_filtering', 'data_processing');
+            
+            const userProgramsData = allProgramsData.filter(p => !p.is_template);
+            const templateProgramsData = allProgramsData.filter(p => p.is_template);
+            
+            const filterEndTime = performance.now();
+            const filterTime = filterEndTime - filterStartTime;
+            const filterResult = filterTimer.end({
+              totalPrograms: allProgramsData?.length || 0,
+              userPrograms: userProgramsData.length,
+              templatePrograms: templateProgramsData.length
+            });
+
+            // Track client-side filtering performance
+            trackDataFlow('filtering_time', { duration: filterTime }, {
+              userId: user.id,
+              totalPrograms: allProgramsData?.length || 0,
+              userPrograms: userProgramsData.length,
+              templatePrograms: templateProgramsData.length
+            });
+
+            trackDataFlow('user_programs_filtered', { count: userProgramsData.length }, { userId: user.id });
+            trackDataFlow('template_programs_filtered', { count: templateProgramsData.length }, { userId: user.id });
+
+            console.log('🔄 [PROGRAMS_PAGE] Programs filtered:', {
+              totalPrograms: allProgramsData?.length || 0,
+              userPrograms: userProgramsData.length,
+              templatePrograms: templateProgramsData.length,
+              filterTimeMs: Math.round(filterTime * 100) / 100,
+              userProgramIds: userProgramsData.map(p => ({ id: p.id, name: p.name })),
+              templateProgramIds: templateProgramsData.map(p => ({ id: p.id, name: p.name }))
             });
 
             // DEBUGGING: Log the exact data structure returned by the service
             console.log('🔍 [DEBUG] Raw service result analysis:', {
-              isArray: Array.isArray(userProgramsData),
-              type: typeof userProgramsData,
-              isNull: userProgramsData === null,
-              isUndefined: userProgramsData === undefined,
-              length: userProgramsData?.length,
-              firstProgram: userProgramsData?.[0] ? {
-                id: userProgramsData[0].id,
-                name: userProgramsData[0].name,
-                hasWeeklyConfigs: !!userProgramsData[0].weekly_configs,
-                weeklyConfigsType: typeof userProgramsData[0].weekly_configs,
-                weeklyConfigsKeys: userProgramsData[0].weekly_configs ? Object.keys(userProgramsData[0].weekly_configs).length : 0
+              isArray: Array.isArray(allProgramsData),
+              type: typeof allProgramsData,
+              isNull: allProgramsData === null,
+              isUndefined: allProgramsData === undefined,
+              length: allProgramsData?.length,
+              firstProgram: allProgramsData?.[0] ? {
+                id: allProgramsData[0].id,
+                name: allProgramsData[0].name,
+                isTemplate: allProgramsData[0].is_template,
+                hasWeeklyConfigs: !!allProgramsData[0].weekly_configs,
+                weeklyConfigsType: typeof allProgramsData[0].weekly_configs,
+                weeklyConfigsKeys: allProgramsData[0].weekly_configs ? Object.keys(allProgramsData[0].weekly_configs).length : 0
               } : 'no-first-program'
             });
             
+            // Process user programs
             const processedUserPrograms = safelyProcessPrograms(userProgramsData, 'user programs');
             console.log('🔄 [PROGRAMS_PAGE] User programs processed:', {
-              originalCount: userProgramsData?.length || 0,
+              originalCount: userProgramsData.length,
               processedCount: processedUserPrograms.length,
               data: processedUserPrograms
             });
             
+            console.log('📊 [PROGRAMS_PAGE] Setting user programs state:', {
+              programCount: processedUserPrograms.length,
+              programIds: processedUserPrograms.map(p => ({ id: p.id, name: p.name, hasError: p.hasError }))
+            });
             setUserPrograms(processedUserPrograms);
             
+            // Process template programs
+            const processedTemplatePrograms = safelyProcessPrograms(templateProgramsData, 'template programs');
+            console.log('🔄 [PROGRAMS_PAGE] Template programs processed:', {
+              originalCount: templateProgramsData.length,
+              processedCount: processedTemplatePrograms.length,
+              data: processedTemplatePrograms
+            });
+
+            console.log('📊 [PROGRAMS_PAGE] Setting template programs state:', {
+              programCount: processedTemplatePrograms.length,
+              programIds: processedTemplatePrograms.map(p => ({ id: p.id, name: p.name, hasError: p.hasError }))
+            });
+            setTemplatePrograms(processedTemplatePrograms);
+            
             // Check if any programs have errors
-            const programsWithErrors = processedUserPrograms.filter(p => p.hasError);
-            const programsWithWarnings = processedUserPrograms.filter(p => p.hasWarning && !p.hasError);
+            const allProcessedPrograms = [...processedUserPrograms, ...processedTemplatePrograms];
+            const programsWithErrors = allProcessedPrograms.filter(p => p.hasError);
+            const programsWithWarnings = allProcessedPrograms.filter(p => p.hasWarning && !p.hasError);
             
             if (programsWithErrors.length > 0) {
-              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithErrors.length} user programs have errors:`, {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithErrors.length} programs have errors:`, {
                 errorPrograms: programsWithErrors.map(p => ({
                   id: p.id,
                   name: p.name,
+                  isTemplate: p.is_template,
                   error: p.errorMessage
                 }))
               });
             }
 
             if (programsWithWarnings.length > 0) {
-              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithWarnings.length} user programs have warnings:`, {
+              console.warn(`⚠️ [PROGRAMS_PAGE] ${programsWithWarnings.length} programs have warnings:`, {
                 warningPrograms: programsWithWarnings.map(p => ({
                   id: p.id,
                   name: p.name,
+                  isTemplate: p.is_template,
                   warning: p.warningMessage
                 }))
               });
             }
             
           } catch (error) {
-            console.error('❌ [PROGRAMS_PAGE] Error fetching user programs:', {
+            console.error('❌ [PROGRAMS_PAGE] Error fetching programs:', {
               error: error.message,
               stack: error.stack,
               userId: user.id
             });
-            setProgramsError('Failed to load your programs. Please try refreshing the page.');
-            setUserPrograms([]);
-          }
 
-          // Fetch template programs using Supabase with error handling
-          try {
-            console.log('🔍 [PROGRAMS_PAGE] Fetching template programs:', {
-              userId: user.id,
-              filters: { isTemplate: true },
-              timestamp: new Date().toISOString()
-            });
+            // Try to fallback to cached data
+            let fallbackSuccessful = false;
+            try {
+              console.log('🔄 [PROGRAMS_PAGE] Attempting fallback to cached data...');
+              
+              // Import cache service for fallback
+              const { supabaseCache } = await import('../api/supabaseCache');
+              
+              // Try to get cached all programs data
+              const cachedAllPrograms = supabaseCache.get(`user_programs_all_${user.id}`);
+              
+              if (cachedAllPrograms && Array.isArray(cachedAllPrograms)) {
+                console.log('✅ [PROGRAMS_PAGE] Found cached programs data:', {
+                  totalPrograms: cachedAllPrograms.length,
+                  source: 'cache-fallback'
+                });
 
-            const fetchStartTime = performance.now();
-            const templateProgramsData = await getUserPrograms(user.id, { isTemplate: true });
-            const fetchEndTime = performance.now();
-            const fetchTime = fetchEndTime - fetchStartTime;
+                // Client-side filtering from cached data
+                const cachedUserPrograms = cachedAllPrograms.filter(p => !p.is_template);
+                const cachedTemplatePrograms = cachedAllPrograms.filter(p => p.is_template);
 
-            console.log('📊 [PROGRAMS_PAGE] Template programs fetched:', {
-              programCount: templateProgramsData?.length || 0,
-              fetchTimeMs: Math.round(fetchTime * 100) / 100,
-              data: templateProgramsData
-            });
+                // Process cached programs
+                const processedCachedUserPrograms = safelyProcessPrograms(cachedUserPrograms, 'cached user programs');
+                const processedCachedTemplatePrograms = safelyProcessPrograms(cachedTemplatePrograms, 'cached template programs');
 
-            const processedTemplatePrograms = safelyProcessPrograms(templateProgramsData, 'template programs');
-            console.log('🔄 [PROGRAMS_PAGE] Template programs processed:', {
-              originalCount: templateProgramsData?.length || 0,
-              processedCount: processedTemplatePrograms.length,
-              data: processedTemplatePrograms
-            });
+                setUserPrograms(processedCachedUserPrograms);
+                setTemplatePrograms(processedCachedTemplatePrograms);
+                
+                // Set warning message instead of error
+                setProgramsError('Showing cached data. Some information may be outdated. Please refresh to get latest data.');
+                fallbackSuccessful = true;
 
-            setTemplatePrograms(processedTemplatePrograms);
-            
-            // Check if any template programs have errors
-            const templatesWithErrors = processedTemplatePrograms.filter(p => p.hasError);
-            const templatesWithWarnings = processedTemplatePrograms.filter(p => p.hasWarning && !p.hasError);
-            
-            if (templatesWithErrors.length > 0) {
-              console.warn(`⚠️ [PROGRAMS_PAGE] ${templatesWithErrors.length} template programs have errors:`, {
-                errorPrograms: templatesWithErrors.map(p => ({
-                  id: p.id,
-                  name: p.name,
-                  error: p.errorMessage
-                }))
-              });
+                console.log('✅ [PROGRAMS_PAGE] Successfully used cached data as fallback:', {
+                  userPrograms: processedCachedUserPrograms.length,
+                  templatePrograms: processedCachedTemplatePrograms.length
+                });
+              }
+            } catch (fallbackError) {
+              console.error('❌ [PROGRAMS_PAGE] Cache fallback failed:', fallbackError);
             }
 
-            if (templatesWithWarnings.length > 0) {
-              console.warn(`⚠️ [PROGRAMS_PAGE] ${templatesWithWarnings.length} template programs have warnings:`, {
-                warningPrograms: templatesWithWarnings.map(p => ({
-                  id: p.id,
-                  name: p.name,
-                  warning: p.warningMessage
-                }))
-              });
+            // If fallback failed, show error and empty state
+            if (!fallbackSuccessful) {
+              setProgramsError('Failed to load programs. Please try refreshing the page.');
+              setUserPrograms([]);
+              setTemplatePrograms([]);
             }
-            
-          } catch (error) {
-            console.error('❌ [PROGRAMS_PAGE] Error fetching template programs:', {
-              error: error.message,
-              stack: error.stack,
-              userId: user.id
-            });
-            // Template programs are less critical, so we don't set a blocking error
-            setTemplatePrograms([]);
           }
 
           // Fetch exercises using Supabase with error handling
@@ -298,14 +376,120 @@ function Programs({ userRole }) {
               stack: error.stack,
               userId: user.id
             });
-            setExercisesError('Failed to load exercise library. Some features may not work correctly.');
-            setExercises([]);
+
+            // Try to fallback to cached exercises data
+            let exercisesFallbackSuccessful = false;
+            try {
+              console.log('🔄 [PROGRAMS_PAGE] Attempting fallback to cached exercises...');
+              
+              // Import cache service for fallback
+              const { supabaseCache } = await import('../api/supabaseCache');
+              
+              // Try to get cached exercises data
+              const cachedExercises = supabaseCache.get(`exercises_user_${user.id}`) || 
+                                    supabaseCache.get(`exercises_global`) ||
+                                    supabaseCache.get(`exercises_all_${user.id}`);
+              
+              if (cachedExercises && Array.isArray(cachedExercises)) {
+                console.log('✅ [PROGRAMS_PAGE] Found cached exercises data:', {
+                  exerciseCount: cachedExercises.length,
+                  source: 'cache-fallback'
+                });
+
+                const processedCachedExercises = cachedExercises.map(ex => ({
+                  ...ex,
+                  isGlobal: ex.is_global,
+                  source: ex.is_global ? 'global' : 'user',
+                  createdBy: ex.created_by
+                }));
+
+                setExercises(processedCachedExercises);
+                setExercisesError('Showing cached exercise data. Some information may be outdated.');
+                exercisesFallbackSuccessful = true;
+
+                console.log('✅ [PROGRAMS_PAGE] Successfully used cached exercises as fallback:', {
+                  exerciseCount: processedCachedExercises.length
+                });
+              }
+            } catch (fallbackError) {
+              console.error('❌ [PROGRAMS_PAGE] Exercises cache fallback failed:', fallbackError);
+            }
+
+            // If fallback failed, show error and empty state
+            if (!exercisesFallbackSuccessful) {
+              setExercisesError('Failed to load exercise library. Some features may not work correctly.');
+              setExercises([]);
+            }
           }
 
         } catch (error) {
           console.error("Error in fetchData: ", error);
-          setError('Failed to load program data. Please try refreshing the page.');
+          
+          // Try one final fallback attempt for critical data
+          try {
+            console.log('🔄 [PROGRAMS_PAGE] Final fallback attempt...');
+            const { supabaseCache } = await import('../api/supabaseCache');
+            
+            const cachedPrograms = supabaseCache.get(`user_programs_all_${user.id}`);
+            const cachedExercises = supabaseCache.get(`exercises_user_${user.id}`) || 
+                                  supabaseCache.get(`exercises_global`);
+            
+            if (cachedPrograms || cachedExercises) {
+              console.log('✅ [PROGRAMS_PAGE] Final fallback found some cached data');
+              
+              if (cachedPrograms) {
+                const userProgramsData = cachedPrograms.filter(p => !p.is_template);
+                const templateProgramsData = cachedPrograms.filter(p => p.is_template);
+                setUserPrograms(safelyProcessPrograms(userProgramsData, 'fallback user programs'));
+                setTemplatePrograms(safelyProcessPrograms(templateProgramsData, 'fallback template programs'));
+                setProgramsError('Showing cached program data. Please refresh for latest information.');
+              }
+              
+              if (cachedExercises) {
+                const processedExercises = cachedExercises.map(ex => ({
+                  ...ex,
+                  isGlobal: ex.is_global,
+                  source: ex.is_global ? 'global' : 'user',
+                  createdBy: ex.created_by
+                }));
+                setExercises(processedExercises);
+                setExercisesError('Showing cached exercise data. Please refresh for latest information.');
+              }
+              
+              // Don't set the main error if we have some cached data
+              if (!cachedPrograms && !cachedExercises) {
+                setError('Failed to load program data. Please try refreshing the page.');
+              }
+            } else {
+              setError('Failed to load program data. Please try refreshing the page.');
+            }
+          } catch (fallbackError) {
+            console.error('❌ [PROGRAMS_PAGE] Final fallback failed:', fallbackError);
+            setError('Failed to load program data. Please try refreshing the page.');
+          }
         } finally {
+          // Track memory usage after optimization
+          trackMemoryUsage('after_optimization', { 
+            operation: 'programs_page_load_complete', 
+            userId: user?.id 
+          });
+
+          // Complete page load timer and log performance summary
+          if (typeof pageLoadTimer !== 'undefined') {
+            const pageLoadResult = pageLoadTimer.end({
+              success: !error && !programsError,
+              userProgramsCount: userPrograms.length,
+              templateProgramsCount: templatePrograms.length
+            });
+
+            // Log comprehensive performance summary
+            setTimeout(() => {
+              const performanceStats = getPerformanceStats();
+              console.log('📈 [PROGRAMS_PAGE] Performance Summary:', performanceStats);
+              logPerformanceSummary();
+            }, 100);
+          }
+
           setIsLoading(false);
         }
       } else {
@@ -573,9 +757,10 @@ function Programs({ userRole }) {
 
       await copyProgram(program.id, newProgramData, user.id);
 
-      // Refresh programs list
-      const updatedPrograms = await getUserPrograms(user.id, { isTemplate: false });
-      setUserPrograms(updatedPrograms);
+      // Refresh programs list using optimized single call
+      const allPrograms = await getUserPrograms(user.id);
+      const updatedUserPrograms = allPrograms.filter(p => !p.is_template);
+      setUserPrograms(updatedUserPrograms);
 
       alert('Program adopted successfully!');
     } catch (error) {
@@ -590,7 +775,15 @@ function Programs({ userRole }) {
     setIsDeleting(true);
     try {
       await deleteProgram(programId, user.id);
-      setUserPrograms(userPrograms.filter(p => p.id !== programId));
+      
+      // Refresh programs list using optimized single call
+      const allPrograms = await getUserPrograms(user.id);
+      const updatedUserPrograms = allPrograms.filter(p => !p.is_template);
+      const updatedTemplatePrograms = allPrograms.filter(p => p.is_template);
+      
+      setUserPrograms(updatedUserPrograms);
+      setTemplatePrograms(updatedTemplatePrograms);
+      
       alert('Program deleted successfully!');
     } catch (error) {
       console.error("Error deleting program: ", error);
@@ -606,11 +799,13 @@ function Programs({ userRole }) {
     try {
       await setCurrentProgram(programId, user.id);
 
-      // Update local state
-      setUserPrograms(prev => prev.map(p => ({
-        ...p,
-        is_current: p.id === programId
-      })));
+      // Refresh programs list using optimized single call to ensure data consistency
+      const allPrograms = await getUserPrograms(user.id);
+      const updatedUserPrograms = allPrograms.filter(p => !p.is_template);
+      const updatedTemplatePrograms = allPrograms.filter(p => p.is_template);
+      
+      setUserPrograms(updatedUserPrograms);
+      setTemplatePrograms(updatedTemplatePrograms);
 
       alert('Program set as current!');
     } catch (error) {
@@ -2061,9 +2256,16 @@ function Programs({ userRole }) {
   }, [activeTab, selectedProgram]);
 
   return (
-    <Container fluid className="soft-container programs-container">
-      <Row className="justify-content-center">
-        <Col md={10}>
+    <>
+      {/* Performance Dashboard */}
+      <PerformanceDashboard 
+        show={showPerformanceDashboard}
+        onToggle={() => setShowPerformanceDashboard(!showPerformanceDashboard)}
+      />
+      
+      <Container fluid className="soft-container programs-container">
+        <Row className="justify-content-center">
+          <Col md={10}>
           <div className="soft-card programs-card shadow border-0">
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div className="d-flex align-items-center">
@@ -2118,7 +2320,7 @@ function Programs({ userRole }) {
               </Alert>
             )}
 
-            {/* Error handling */}
+            {/* Consolidated Error handling */}
             {error && (
               <Alert variant="danger" className="mb-4">
                 <Alert.Heading>Error Loading Programs</Alert.Heading>
@@ -2133,24 +2335,53 @@ function Programs({ userRole }) {
               </Alert>
             )}
 
+            {/* Programs and Template Programs Error - Consolidated */}
             {programsError && (
-              <Alert variant="warning" className="mb-4">
-                <Alert.Heading>Programs Loading Issue</Alert.Heading>
+              <Alert variant={programsError.includes('cached data') ? 'warning' : 'danger'} className="mb-4">
+                <Alert.Heading>
+                  {programsError.includes('cached data') ? 'Programs Data Warning' : 'Programs Loading Error'}
+                </Alert.Heading>
                 <p>{programsError}</p>
+                {programsError.includes('cached data') && (
+                  <div className="mt-2">
+                    <small className="text-muted">
+                      This affects both your personal programs and template programs sections.
+                    </small>
+                  </div>
+                )}
+                {!programsError.includes('cached data') && (
+                  <Button 
+                    variant="outline-danger" 
+                    size="sm" 
+                    onClick={() => window.location.reload()}
+                    className="mt-2"
+                  >
+                    Refresh Page
+                  </Button>
+                )}
               </Alert>
             )}
 
+            {/* Exercise Library Error */}
             {exercisesError && (
-              <Alert variant="info" className="mb-4">
+              <Alert variant={exercisesError.includes('cached') ? 'info' : 'warning'} className="mb-4">
                 <Alert.Heading>Exercise Library Issue</Alert.Heading>
                 <p>{exercisesError}</p>
+                {!exercisesError.includes('cached') && (
+                  <div className="mt-2">
+                    <small className="text-muted">
+                      This may affect program details and exercise information display.
+                    </small>
+                  </div>
+                )}
               </Alert>
             )}
 
             {isLoading ? (
               <div className="text-center py-4">
                 <Spinner animation="border" className="spinner-blue" />
-                <p className="soft-text mt-2">Loading...</p>
+                <p className="soft-text mt-2">Loading programs and exercises...</p>
+                <small className="text-muted">Fetching your data with optimized single query</small>
               </div>
             ) : !error ? (
               <>
@@ -2241,7 +2472,8 @@ function Programs({ userRole }) {
       </Row>
 
       {renderProgramDetailsModal()}
-    </Container>
+      </Container>
+    </>
   );
 }
 

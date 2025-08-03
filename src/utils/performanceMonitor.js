@@ -1,859 +1,589 @@
 /**
- * Application Performance Monitor
+ * Performance Monitoring Utility for Programs Data Fetching Optimization
  * 
- * This module provides comprehensive performance monitoring for the application including:
- * - Database operation tracking
- * - Cache hit rate monitoring
- * - Query time analysis
- * - Performance dashboards and alerting
- * - Real-time performance metrics
+ * This module provides comprehensive performance monitoring and logging for:
+ * - Database query performance timing
+ * - Cache hit/miss rates for unified cache approach
+ * - Memory usage improvements from reduced cache duplication
+ * - Debugging logs to help identify data flow issues
  */
 
-import { supabaseCache, getEnhancedCacheStats } from '../api/supabaseCache'
-import { queryOptimizer, connectionPoolManager } from './queryOptimizer'
+import { createDebugLogger } from './debugUtils'
 
-// Performance thresholds and configuration
-const PERFORMANCE_THRESHOLDS = {
-  QUERY_TIME: {
-    GOOD: 100,      // < 100ms
-    WARNING: 500,   // 100-500ms
-    CRITICAL: 1000  // > 1000ms
+// Performance monitoring state
+let performanceStats = {
+  // Database query performance
+  databaseQueries: {
+    totalQueries: 0,
+    totalTime: 0,
+    averageTime: 0,
+    slowestQuery: { time: 0, details: null },
+    fastestQuery: { time: Infinity, details: null },
+    queriesByTable: {},
+    queriesByType: {
+      getAllUserPrograms: { count: 0, totalTime: 0, avgTime: 0 },
+      getUserPrograms: { count: 0, totalTime: 0, avgTime: 0 },
+      getUserProgramsFiltered: { count: 0, totalTime: 0, avgTime: 0 }
+    }
   },
-  CACHE_HIT_RATE: {
-    GOOD: 80,       // > 80%
-    WARNING: 60,    // 60-80%
-    CRITICAL: 40    // < 40%
+
+  // Cache performance
+  cachePerformance: {
+    unifiedCacheHits: 0,
+    unifiedCacheMisses: 0,
+    legacyCacheHits: 0,
+    legacyCacheMisses: 0,
+    clientSideFilters: 0,
+    cacheHitRate: 0,
+    unifiedCacheHitRate: 0,
+    legacyCacheHitRate: 0,
+    cacheSizeReduction: 0,
+    duplicateCacheEntriesAvoided: 0
   },
-  DATABASE_READS: {
-    GOOD: 100,      // < 100 reads/minute
-    WARNING: 200,   // 100-200 reads/minute
-    CRITICAL: 300   // > 300 reads/minute
+
+  // Memory usage tracking
+  memoryUsage: {
+    beforeOptimization: 0,
+    afterOptimization: 0,
+    reduction: 0,
+    reductionPercentage: 0,
+    peakUsage: 0,
+    currentUsage: 0,
+    cacheMemoryUsage: 0,
+    duplicateCacheMemorySaved: 0
+  },
+
+  // Data flow debugging
+  dataFlow: {
+    programsFetched: 0,
+    templateProgramsFiltered: 0,
+    userProgramsFiltered: 0,
+    transformationTime: 0,
+    filteringTime: 0,
+    dataFlowErrors: 0,
+    dataInconsistencies: []
+  },
+
+  // Session tracking
+  session: {
+    startTime: Date.now(),
+    optimizationEnabled: false,
+    totalOptimizedQueries: 0,
+    totalLegacyQueries: 0,
+    performanceImprovement: 0
   }
 }
 
-// Performance metrics storage
-let performanceMetrics = {
-  // Application metrics
-  appStartTime: Date.now(),
-  totalPageLoads: 0,
-  averagePageLoadTime: 0,
-  
-  // Database metrics
-  totalDatabaseOperations: 0,
-  databaseOperationsByType: {},
-  averageDatabaseTime: 0,
-  slowDatabaseOperations: 0,
-  
-  // Cache metrics
-  cacheOperations: 0,
-  cacheHitRate: 0,
-  cacheMissRate: 0,
-  
-  // User interaction metrics
-  userInteractions: 0,
-  averageInteractionTime: 0,
-  
-  // Error tracking
-  errors: [],
-  errorsByType: {},
-  
-  // Performance alerts
-  alerts: [],
-  alertsByType: {},
-  
-  // Real-time metrics (last 5 minutes)
-  realtimeMetrics: {
-    timestamp: Date.now(),
-    queriesPerMinute: 0,
-    cacheHitsPerMinute: 0,
-    errorsPerMinute: 0,
-    averageResponseTime: 0
+// Performance measurement utilities
+class PerformanceTimer {
+  constructor(name, category = 'general') {
+    this.name = name
+    this.category = category
+    this.startTime = performance.now()
+    this.logger = createDebugLogger('PERFORMANCE_MONITOR', category.toUpperCase())
+  }
+
+  end(details = {}) {
+    const endTime = performance.now()
+    const duration = endTime - this.startTime
+
+    this.logger.debug(`Performance measurement completed`, {
+      name: this.name,
+      category: this.category,
+      durationMs: Math.round(duration * 100) / 100,
+      details
+    })
+
+    return {
+      name: this.name,
+      category: this.category,
+      duration,
+      details,
+      timestamp: Date.now()
+    }
   }
 }
 
 /**
- * Performance Monitor Class
+ * Track database query performance
  */
-export class PerformanceMonitor {
-  constructor() {
-    this.metricsHistory = []
-    this.maxHistorySize = 1000
-    this.alertCallbacks = []
-    this.isMonitoring = false
-    this.monitoringInterval = null
-    
-    // Start real-time monitoring
-    this.startRealtimeMonitoring()
+export function trackDatabaseQuery(queryType, table, startTime, endTime, details = {}) {
+  const duration = endTime - startTime
+  const stats = performanceStats.databaseQueries
+
+  // Update overall stats
+  stats.totalQueries++
+  stats.totalTime += duration
+  stats.averageTime = stats.totalTime / stats.totalQueries
+
+  // Track slowest and fastest queries
+  if (duration > stats.slowestQuery.time) {
+    stats.slowestQuery = { time: duration, details: { queryType, table, ...details } }
+  }
+  if (duration < stats.fastestQuery.time) {
+    stats.fastestQuery = { time: duration, details: { queryType, table, ...details } }
   }
 
-  /**
-   * Start real-time performance monitoring
-   */
-  startRealtimeMonitoring() {
-    if (this.isMonitoring) return
-    
-    this.isMonitoring = true
-    this.monitoringInterval = setInterval(() => {
-      this.updateRealtimeMetrics()
-      this.checkPerformanceThresholds()
-    }, 60000) // Update every minute
-    
-    console.log('📊 Performance monitoring started')
+  // Track by table
+  if (!stats.queriesByTable[table]) {
+    stats.queriesByTable[table] = { count: 0, totalTime: 0, avgTime: 0 }
+  }
+  stats.queriesByTable[table].count++
+  stats.queriesByTable[table].totalTime += duration
+  stats.queriesByTable[table].avgTime = stats.queriesByTable[table].totalTime / stats.queriesByTable[table].count
+
+  // Track by query type
+  if (stats.queriesByType[queryType]) {
+    stats.queriesByType[queryType].count++
+    stats.queriesByType[queryType].totalTime += duration
+    stats.queriesByType[queryType].avgTime = stats.queriesByType[queryType].totalTime / stats.queriesByType[queryType].count
   }
 
-  /**
-   * Stop real-time performance monitoring
-   */
-  stopRealtimeMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval)
-      this.monitoringInterval = null
-      this.isMonitoring = false
-      console.log('📊 Performance monitoring stopped')
-    }
+  console.log(`📊 [DB_QUERY_PERFORMANCE] ${queryType} on ${table}:`, {
+    durationMs: Math.round(duration * 100) / 100,
+    avgTimeMs: Math.round(stats.averageTime * 100) / 100,
+    totalQueries: stats.totalQueries,
+    details
+  })
+
+  return {
+    duration,
+    queryType,
+    table,
+    details,
+    timestamp: Date.now()
+  }
+}
+
+/**
+ * Track cache hit/miss rates for unified cache approach
+ */
+export function trackCacheOperation(operation, cacheType, cacheKey, details = {}) {
+  const stats = performanceStats.cachePerformance
+  const logger = createDebugLogger('PERFORMANCE_MONITOR', 'CACHE_TRACKING')
+
+  switch (operation) {
+    case 'unified_hit':
+      stats.unifiedCacheHits++
+      break
+    case 'unified_miss':
+      stats.unifiedCacheMisses++
+      break
+    case 'legacy_hit':
+      stats.legacyCacheHits++
+      break
+    case 'legacy_miss':
+      stats.legacyCacheMisses++
+      break
+    case 'client_filter':
+      stats.clientSideFilters++
+      break
+    case 'duplicate_avoided':
+      stats.duplicateCacheEntriesAvoided++
+      break
   }
 
-  /**
-   * Track database operation performance
-   */
-  trackDatabaseOperation(operation, table, duration, success = true, metadata = {}) {
-    performanceMetrics.totalDatabaseOperations++
-    
-    // Update average database time
-    performanceMetrics.averageDatabaseTime = 
-      (performanceMetrics.averageDatabaseTime * (performanceMetrics.totalDatabaseOperations - 1) + duration) / 
-      performanceMetrics.totalDatabaseOperations
-    
-    // Track by operation type
-    const operationType = `${table}.${operation}`
-    if (!performanceMetrics.databaseOperationsByType[operationType]) {
-      performanceMetrics.databaseOperationsByType[operationType] = {
-        count: 0,
-        totalTime: 0,
-        averageTime: 0,
-        slowOperations: 0,
-        errors: 0
-      }
-    }
-    
-    const opStats = performanceMetrics.databaseOperationsByType[operationType]
-    opStats.count++
-    opStats.totalTime += duration
-    opStats.averageTime = opStats.totalTime / opStats.count
-    
-    if (!success) {
-      opStats.errors++
-    }
-    
-    // Track slow operations
-    if (duration > PERFORMANCE_THRESHOLDS.QUERY_TIME.CRITICAL) {
-      performanceMetrics.slowDatabaseOperations++
-      opStats.slowOperations++
-      
-      this.createAlert('slow_query', {
-        operation: operationType,
-        duration,
-        threshold: PERFORMANCE_THRESHOLDS.QUERY_TIME.CRITICAL,
-        metadata
+  // Calculate hit rates
+  const totalUnified = stats.unifiedCacheHits + stats.unifiedCacheMisses
+  const totalLegacy = stats.legacyCacheHits + stats.legacyCacheMisses
+  const totalCache = totalUnified + totalLegacy
+
+  stats.unifiedCacheHitRate = totalUnified > 0 ? (stats.unifiedCacheHits / totalUnified) * 100 : 0
+  stats.legacyCacheHitRate = totalLegacy > 0 ? (stats.legacyCacheHits / totalLegacy) * 100 : 0
+  stats.cacheHitRate = totalCache > 0 ? ((stats.unifiedCacheHits + stats.legacyCacheHits) / totalCache) * 100 : 0
+
+  // Calculate cache size reduction
+  const potentialDuplicates = stats.unifiedCacheHits + stats.unifiedCacheMisses
+  stats.cacheSizeReduction = potentialDuplicates > 0 ? (stats.duplicateCacheEntriesAvoided / potentialDuplicates) * 100 : 0
+
+  logger.debug(`Cache operation tracked`, {
+    operation,
+    cacheType,
+    cacheKey: cacheKey?.substring(0, 50) + (cacheKey?.length > 50 ? '...' : ''),
+    unifiedHitRate: `${stats.unifiedCacheHitRate.toFixed(2)}%`,
+    legacyHitRate: `${stats.legacyCacheHitRate.toFixed(2)}%`,
+    overallHitRate: `${stats.cacheHitRate.toFixed(2)}%`,
+    cacheSizeReduction: `${stats.cacheSizeReduction.toFixed(2)}%`,
+    details
+  })
+
+  console.log(`🎯 [CACHE_PERFORMANCE] ${operation} (${cacheType}):`, {
+    cacheKey: cacheKey?.substring(0, 50) + (cacheKey?.length > 50 ? '...' : ''),
+    unifiedHitRate: `${stats.unifiedCacheHitRate.toFixed(2)}%`,
+    legacyHitRate: `${stats.legacyCacheHitRate.toFixed(2)}%`,
+    overallHitRate: `${stats.cacheHitRate.toFixed(2)}%`,
+    duplicatesAvoided: stats.duplicateCacheEntriesAvoided,
+    details
+  })
+
+  return {
+    operation,
+    cacheType,
+    cacheKey,
+    stats: {
+      unifiedHitRate: stats.unifiedCacheHitRate,
+      legacyHitRate: stats.legacyCacheHitRate,
+      overallHitRate: stats.cacheHitRate,
+      cacheSizeReduction: stats.cacheSizeReduction
+    },
+    details,
+    timestamp: Date.now()
+  }
+}
+
+/**
+ * Track memory usage improvements
+ */
+export function trackMemoryUsage(phase, details = {}) {
+  const currentUsage = getMemoryUsage()
+  const stats = performanceStats.memoryUsage
+  const logger = createDebugLogger('PERFORMANCE_MONITOR', 'MEMORY_TRACKING')
+
+  stats.currentUsage = currentUsage
+  if (currentUsage > stats.peakUsage) {
+    stats.peakUsage = currentUsage
+  }
+
+  switch (phase) {
+    case 'before_optimization':
+      stats.beforeOptimization = currentUsage
+      break
+    case 'after_optimization':
+      stats.afterOptimization = currentUsage
+      stats.reduction = stats.beforeOptimization - stats.afterOptimization
+      stats.reductionPercentage = stats.beforeOptimization > 0 ? 
+        (stats.reduction / stats.beforeOptimization) * 100 : 0
+      break
+    case 'cache_memory_saved':
+      stats.duplicateCacheMemorySaved += details.savedBytes || 0
+      break
+  }
+
+  logger.debug(`Memory usage tracked`, {
+    phase,
+    currentUsage: formatBytes(currentUsage),
+    peakUsage: formatBytes(stats.peakUsage),
+    reduction: formatBytes(stats.reduction),
+    reductionPercentage: `${stats.reductionPercentage.toFixed(2)}%`,
+    details
+  })
+
+  console.log(`💾 [MEMORY_USAGE] ${phase}:`, {
+    current: formatBytes(currentUsage),
+    peak: formatBytes(stats.peakUsage),
+    reduction: formatBytes(stats.reduction),
+    reductionPercentage: `${stats.reductionPercentage.toFixed(2)}%`,
+    cacheSaved: formatBytes(stats.duplicateCacheMemorySaved),
+    details
+  })
+
+  return {
+    phase,
+    currentUsage,
+    peakUsage: stats.peakUsage,
+    reduction: stats.reduction,
+    reductionPercentage: stats.reductionPercentage,
+    details,
+    timestamp: Date.now()
+  }
+}
+
+/**
+ * Track data flow for debugging
+ */
+export function trackDataFlow(operation, data, details = {}) {
+  const stats = performanceStats.dataFlow
+  const logger = createDebugLogger('PERFORMANCE_MONITOR', 'DATA_FLOW')
+
+  switch (operation) {
+    case 'programs_fetched':
+      stats.programsFetched += data.count || 0
+      break
+    case 'template_programs_filtered':
+      stats.templateProgramsFiltered += data.count || 0
+      break
+    case 'user_programs_filtered':
+      stats.userProgramsFiltered += data.count || 0
+      break
+    case 'transformation_time':
+      stats.transformationTime += data.duration || 0
+      break
+    case 'filtering_time':
+      stats.filteringTime += data.duration || 0
+      break
+    case 'data_flow_error':
+      stats.dataFlowErrors++
+      break
+    case 'data_inconsistency':
+      stats.dataInconsistencies.push({
+        type: data.type,
+        description: data.description,
+        details: data.details,
+        timestamp: Date.now()
       })
-    }
-    
-    // Add to metrics history
-    this.addToHistory({
-      type: 'database_operation',
-      operation: operationType,
-      duration,
-      success,
-      timestamp: Date.now(),
-      metadata
-    })
+      break
   }
 
-  /**
-   * Track cache operation performance
-   */
-  trackCacheOperation(operation, hit, duration, metadata = {}) {
-    performanceMetrics.cacheOperations++
-    
-    // Update cache hit/miss rates
-    const cacheStats = getEnhancedCacheStats()
-    if (cacheStats.cachePerformance) {
-      const hitRate = parseFloat(cacheStats.cachePerformance.readReductionRate.replace('%', ''))
-      performanceMetrics.cacheHitRate = hitRate
-      performanceMetrics.cacheMissRate = 100 - hitRate
-      
-      // Check cache performance thresholds
-      if (hitRate < PERFORMANCE_THRESHOLDS.CACHE_HIT_RATE.CRITICAL) {
-        this.createAlert('low_cache_hit_rate', {
-          currentRate: hitRate,
-          threshold: PERFORMANCE_THRESHOLDS.CACHE_HIT_RATE.CRITICAL,
-          suggestion: 'Consider increasing cache TTL or warming more data'
-        })
-      }
-    }
-    
-    // Add to metrics history
-    this.addToHistory({
-      type: 'cache_operation',
-      operation,
-      hit,
-      duration,
-      timestamp: Date.now(),
-      metadata
-    })
-  }
+  logger.debug(`Data flow tracked`, {
+    operation,
+    data,
+    totalProgramsFetched: stats.programsFetched,
+    totalTemplateFiltered: stats.templateProgramsFiltered,
+    totalUserFiltered: stats.userProgramsFiltered,
+    avgTransformTime: stats.transformationTime,
+    avgFilterTime: stats.filteringTime,
+    errors: stats.dataFlowErrors,
+    inconsistencies: stats.dataInconsistencies.length,
+    details
+  })
 
-  /**
-   * Track user interaction performance
-   */
-  trackUserInteraction(interaction, duration, metadata = {}) {
-    performanceMetrics.userInteractions++
-    
-    // Update average interaction time
-    performanceMetrics.averageInteractionTime = 
-      (performanceMetrics.averageInteractionTime * (performanceMetrics.userInteractions - 1) + duration) / 
-      performanceMetrics.userInteractions
-    
-    // Add to metrics history
-    this.addToHistory({
-      type: 'user_interaction',
-      interaction,
-      duration,
-      timestamp: Date.now(),
-      metadata
-    })
-  }
+  console.log(`🔄 [DATA_FLOW] ${operation}:`, {
+    data,
+    totalFetched: stats.programsFetched,
+    templateFiltered: stats.templateProgramsFiltered,
+    userFiltered: stats.userProgramsFiltered,
+    transformTime: `${stats.transformationTime.toFixed(2)}ms`,
+    filterTime: `${stats.filteringTime.toFixed(2)}ms`,
+    errors: stats.dataFlowErrors,
+    details
+  })
 
-  /**
-   * Track page load performance
-   */
-  trackPageLoad(page, duration, metadata = {}) {
-    performanceMetrics.totalPageLoads++
-    
-    // Update average page load time
-    performanceMetrics.averagePageLoadTime = 
-      (performanceMetrics.averagePageLoadTime * (performanceMetrics.totalPageLoads - 1) + duration) / 
-      performanceMetrics.totalPageLoads
-    
-    // Check page load thresholds
-    if (duration > 3000) { // 3 seconds
-      this.createAlert('slow_page_load', {
-        page,
-        duration,
-        threshold: 3000,
-        suggestion: 'Consider optimizing page load performance'
-      })
-    }
-    
-    // Add to metrics history
-    this.addToHistory({
-      type: 'page_load',
-      page,
-      duration,
-      timestamp: Date.now(),
-      metadata
-    })
+  return {
+    operation,
+    data,
+    stats,
+    details,
+    timestamp: Date.now()
   }
+}
 
-  /**
-   * Record load time (alias for trackPageLoad for backward compatibility)
-   */
-  recordLoadTime(component, duration, metadata = {}) {
-    this.trackPageLoad(component, duration, metadata)
+/**
+ * Create a performance timer for measuring operations
+ */
+export function createPerformanceTimer(name, category = 'general') {
+  return new PerformanceTimer(name, category)
+}
+
+/**
+ * Get current memory usage (approximation)
+ */
+function getMemoryUsage() {
+  if (performance.memory) {
+    return performance.memory.usedJSHeapSize
   }
+  // Fallback estimation
+  return 0
+}
 
-  /**
-   * Record parallel loading operations
-   */
-  recordParallelLoading(operationCount, metadata = {}) {
-    this.addToHistory({
-      type: 'parallel_loading',
-      operationCount,
-      timestamp: Date.now(),
-      metadata
-    })
-    
-    console.log(`📊 Recording ${operationCount} parallel loading operations`)
-  }
+/**
+ * Format bytes to human readable format
+ */
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
 
-  /**
-   * Record cache warming operation
-   */
-  recordCacheWarming(operation, metadata = {}) {
-    this.addToHistory({
-      type: 'cache_warming',
-      operation,
-      timestamp: Date.now(),
-      metadata
-    })
-    
-    console.log(`📊 Cache warming recorded: ${operation}`)
-  }
+/**
+ * Get comprehensive performance statistics
+ */
+export function getPerformanceStats() {
+  const sessionDuration = Date.now() - performanceStats.session.startTime
+  const dbStats = performanceStats.databaseQueries
+  const cacheStats = performanceStats.cachePerformance
+  const memStats = performanceStats.memoryUsage
+  const dataStats = performanceStats.dataFlow
 
-  /**
-   * Record cache hit
-   */
-  recordCacheHit(resource, metadata = {}) {
-    this.trackCacheOperation(`hit_${resource}`, true, 0, metadata)
-    console.log(`📊 Cache hit recorded: ${resource}`)
-  }
-
-  /**
-   * Record cache miss
-   */
-  recordCacheMiss(resource, metadata = {}) {
-    this.trackCacheOperation(`miss_${resource}`, false, 0, metadata)
-    console.log(`📊 Cache miss recorded: ${resource}`)
-  }
-
-  /**
-   * Record database read operation
-   */
-  recordDatabaseRead(resource, source, metadata = {}) {
-    if (source === 'error') {
-      this.addToHistory({
-        type: 'database_read_error',
-        resource,
-        timestamp: Date.now(),
-        metadata
-      })
-      console.log(`📊 Database read error recorded: ${resource}`)
-    } else {
-      this.addToHistory({
-        type: 'database_read',
-        resource,
-        source,
-        timestamp: Date.now(),
-        metadata
-      })
-      console.log(`📊 Database read recorded: ${resource} from ${source}`)
-    }
-  }
-
-  /**
-   * Track application errors
-   */
-  trackError(error, context = {}) {
-    const errorInfo = {
-      message: error.message,
-      stack: error.stack,
-      type: error.constructor.name,
-      timestamp: Date.now(),
-      context
-    }
-    
-    performanceMetrics.errors.push(errorInfo)
-    
-    // Keep only last 100 errors
-    if (performanceMetrics.errors.length > 100) {
-      performanceMetrics.errors.shift()
-    }
-    
-    // Track by error type
-    if (!performanceMetrics.errorsByType[errorInfo.type]) {
-      performanceMetrics.errorsByType[errorInfo.type] = 0
-    }
-    performanceMetrics.errorsByType[errorInfo.type]++
-    
-    // Create alert for critical errors
-    this.createAlert('application_error', {
-      error: errorInfo,
-      context
-    })
-    
-    // Add to metrics history
-    this.addToHistory({
-      type: 'error',
-      error: errorInfo,
-      timestamp: Date.now()
-    })
-  }
-
-  /**
-   * Update real-time metrics
-   */
-  updateRealtimeMetrics() {
-    const now = Date.now()
-    const fiveMinutesAgo = now - (5 * 60 * 1000)
-    
-    // Filter recent metrics
-    const recentMetrics = this.metricsHistory.filter(m => m.timestamp > fiveMinutesAgo)
-    
-    // Calculate per-minute rates
-    const databaseOps = recentMetrics.filter(m => m.type === 'database_operation')
-    const cacheOps = recentMetrics.filter(m => m.type === 'cache_operation')
-    const errors = recentMetrics.filter(m => m.type === 'error')
-    
-    performanceMetrics.realtimeMetrics = {
-      timestamp: now,
-      queriesPerMinute: (databaseOps.length / 5).toFixed(1),
-      cacheHitsPerMinute: (cacheOps.filter(op => op.hit).length / 5).toFixed(1),
-      errorsPerMinute: (errors.length / 5).toFixed(1),
-      averageResponseTime: databaseOps.length > 0 ? 
-        (databaseOps.reduce((sum, op) => sum + op.duration, 0) / databaseOps.length).toFixed(2) : 0
-    }
-  }
-
-  /**
-   * Check performance thresholds and create alerts
-   */
-  checkPerformanceThresholds() {
-    const realtimeMetrics = performanceMetrics.realtimeMetrics
-    
-    // Check database read rate
-    const queriesPerMinute = parseFloat(realtimeMetrics.queriesPerMinute)
-    if (queriesPerMinute > PERFORMANCE_THRESHOLDS.DATABASE_READS.CRITICAL) {
-      this.createAlert('high_database_load', {
-        currentRate: queriesPerMinute,
-        threshold: PERFORMANCE_THRESHOLDS.DATABASE_READS.CRITICAL,
-        suggestion: 'Consider implementing more aggressive caching or query optimization'
-      })
-    }
-    
-    // Check average response time
-    const avgResponseTime = parseFloat(realtimeMetrics.averageResponseTime)
-    if (avgResponseTime > PERFORMANCE_THRESHOLDS.QUERY_TIME.CRITICAL) {
-      this.createAlert('slow_response_time', {
-        currentTime: avgResponseTime,
-        threshold: PERFORMANCE_THRESHOLDS.QUERY_TIME.CRITICAL,
-        suggestion: 'Database queries are running slowly. Check for missing indexes or optimize queries.'
-      })
-    }
-  }
-
-  /**
-   * Create performance alert
-   */
-  createAlert(type, data) {
-    const alert = {
-      id: `${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      severity: this.getAlertSeverity(type, data),
-      message: this.generateAlertMessage(type, data),
-      data,
-      timestamp: Date.now(),
-      acknowledged: false
-    }
-    
-    performanceMetrics.alerts.push(alert)
-    
-    // Keep only last 50 alerts
-    if (performanceMetrics.alerts.length > 50) {
-      performanceMetrics.alerts.shift()
-    }
-    
-    // Track by alert type
-    if (!performanceMetrics.alertsByType[type]) {
-      performanceMetrics.alertsByType[type] = 0
-    }
-    performanceMetrics.alertsByType[type]++
-    
-    // Notify alert callbacks
-    this.notifyAlertCallbacks(alert)
-    
-    console.warn(`🚨 Performance Alert [${alert.severity}]: ${alert.message}`)
-    
-    return alert
-  }
-
-  /**
-   * Get alert severity based on type and data
-   */
-  getAlertSeverity(type, data) {
-    switch (type) {
-      case 'slow_query':
-        return data.duration > 2000 ? 'critical' : 'warning'
-      case 'low_cache_hit_rate':
-        return data.currentRate < 40 ? 'critical' : 'warning'
-      case 'high_database_load':
-        return data.currentRate > 500 ? 'critical' : 'warning'
-      case 'slow_response_time':
-        return data.currentTime > 2000 ? 'critical' : 'warning'
-      case 'application_error':
-        return 'error'
-      case 'slow_page_load':
-        return 'warning'
-      default:
-        return 'info'
-    }
-  }
-
-  /**
-   * Generate alert message
-   */
-  generateAlertMessage(type, data) {
-    switch (type) {
-      case 'slow_query':
-        return `Slow query detected: ${data.operation} took ${data.duration}ms (threshold: ${data.threshold}ms)`
-      case 'low_cache_hit_rate':
-        return `Low cache hit rate: ${data.currentRate}% (threshold: ${data.threshold}%)`
-      case 'high_database_load':
-        return `High database load: ${data.currentRate} queries/minute (threshold: ${data.threshold})`
-      case 'slow_response_time':
-        return `Slow response time: ${data.currentTime}ms average (threshold: ${data.threshold}ms)`
-      case 'application_error':
-        return `Application error: ${data.error.type} - ${data.error.message}`
-      case 'slow_page_load':
-        return `Slow page load: ${data.page} took ${data.duration}ms (threshold: ${data.threshold}ms)`
-      default:
-        return `Performance alert: ${type}`
-    }
-  }
-
-  /**
-   * Add metric to history
-   */
-  addToHistory(metric) {
-    this.metricsHistory.push(metric)
-    
-    // Keep only recent history
-    if (this.metricsHistory.length > this.maxHistorySize) {
-      this.metricsHistory.shift()
-    }
-  }
-
-  /**
-   * Register alert callback
-   */
-  onAlert(callback) {
-    this.alertCallbacks.push(callback)
-  }
-
-  /**
-   * Notify alert callbacks
-   */
-  notifyAlertCallbacks(alert) {
-    this.alertCallbacks.forEach(callback => {
-      try {
-        callback(alert)
-      } catch (error) {
-        console.error('Error in alert callback:', error)
-      }
-    })
-  }
-
-  /**
-   * Acknowledge alert
-   */
-  acknowledgeAlert(alertId) {
-    const alert = performanceMetrics.alerts.find(a => a.id === alertId)
-    if (alert) {
-      alert.acknowledged = true
-      alert.acknowledgedAt = Date.now()
-    }
-  }
-
-  /**
-   * Get performance dashboard data
-   */
-  getPerformanceDashboard() {
-    const cacheStats = getEnhancedCacheStats()
-    const queryStats = queryOptimizer.performanceMonitor.getPerformanceStats()
-    const connectionStats = connectionPoolManager.getConnectionStats()
-    
-    return {
-      // Overview metrics
-      overview: {
-        appUptime: this.formatDuration(Date.now() - performanceMetrics.appStartTime),
-        totalDatabaseOperations: performanceMetrics.totalDatabaseOperations,
-        averageDatabaseTime: `${performanceMetrics.averageDatabaseTime.toFixed(2)}ms`,
-        cacheHitRate: `${performanceMetrics.cacheHitRate.toFixed(1)}%`,
-        totalErrors: performanceMetrics.errors.length,
-        activeAlerts: performanceMetrics.alerts.filter(a => !a.acknowledged).length
+  return {
+    // Database Performance Summary
+    databasePerformance: {
+      totalQueries: dbStats.totalQueries,
+      averageQueryTime: `${dbStats.averageTime.toFixed(2)}ms`,
+      slowestQuery: {
+        time: `${dbStats.slowestQuery.time.toFixed(2)}ms`,
+        details: dbStats.slowestQuery.details
       },
-      
-      // Real-time metrics
-      realtime: performanceMetrics.realtimeMetrics,
-      
-      // Database performance
-      database: {
-        operationsByType: performanceMetrics.databaseOperationsByType,
-        slowOperations: performanceMetrics.slowDatabaseOperations,
-        connectionPool: connectionStats,
-        queryPerformance: queryStats.tableStats
+      fastestQuery: {
+        time: `${dbStats.fastestQuery.time.toFixed(2)}ms`,
+        details: dbStats.fastestQuery.details
       },
-      
-      // Cache performance
-      cache: {
-        hitRate: performanceMetrics.cacheHitRate,
-        missRate: performanceMetrics.cacheMissRate,
-        operations: performanceMetrics.cacheOperations,
-        detailed: cacheStats
-      },
-      
-      // User experience
-      userExperience: {
-        totalPageLoads: performanceMetrics.totalPageLoads,
-        averagePageLoadTime: `${performanceMetrics.averagePageLoadTime.toFixed(2)}ms`,
-        userInteractions: performanceMetrics.userInteractions,
-        averageInteractionTime: `${performanceMetrics.averageInteractionTime.toFixed(2)}ms`
-      },
-      
-      // Error tracking
-      errors: {
-        total: performanceMetrics.errors.length,
-        byType: performanceMetrics.errorsByType,
-        recent: performanceMetrics.errors.slice(-10)
-      },
-      
-      // Alerts
-      alerts: {
-        total: performanceMetrics.alerts.length,
-        unacknowledged: performanceMetrics.alerts.filter(a => !a.acknowledged).length,
-        byType: performanceMetrics.alertsByType,
-        recent: performanceMetrics.alerts.slice(-10)
-      },
-      
-      // Performance trends (last hour)
-      trends: this.getPerformanceTrends(),
-      
-      // Recommendations
-      recommendations: this.getPerformanceRecommendations()
+      queriesByTable: Object.fromEntries(
+        Object.entries(dbStats.queriesByTable).map(([table, stats]) => [
+          table,
+          {
+            count: stats.count,
+            avgTime: `${stats.avgTime.toFixed(2)}ms`,
+            totalTime: `${stats.totalTime.toFixed(2)}ms`
+          }
+        ])
+      ),
+      queriesByType: Object.fromEntries(
+        Object.entries(dbStats.queriesByType).map(([type, stats]) => [
+          type,
+          {
+            count: stats.count,
+            avgTime: `${stats.avgTime.toFixed(2)}ms`,
+            totalTime: `${stats.totalTime.toFixed(2)}ms`
+          }
+        ])
+      )
+    },
+
+    // Cache Performance Summary
+    cachePerformance: {
+      unifiedCacheHitRate: `${cacheStats.unifiedCacheHitRate.toFixed(2)}%`,
+      legacyCacheHitRate: `${cacheStats.legacyCacheHitRate.toFixed(2)}%`,
+      overallCacheHitRate: `${cacheStats.cacheHitRate.toFixed(2)}%`,
+      cacheSizeReduction: `${cacheStats.cacheSizeReduction.toFixed(2)}%`,
+      unifiedCacheHits: cacheStats.unifiedCacheHits,
+      unifiedCacheMisses: cacheStats.unifiedCacheMisses,
+      legacyCacheHits: cacheStats.legacyCacheHits,
+      legacyCacheMisses: cacheStats.legacyCacheMisses,
+      clientSideFilters: cacheStats.clientSideFilters,
+      duplicateCacheEntriesAvoided: cacheStats.duplicateCacheEntriesAvoided
+    },
+
+    // Memory Usage Summary
+    memoryUsage: {
+      currentUsage: formatBytes(memStats.currentUsage),
+      peakUsage: formatBytes(memStats.peakUsage),
+      beforeOptimization: formatBytes(memStats.beforeOptimization),
+      afterOptimization: formatBytes(memStats.afterOptimization),
+      reduction: formatBytes(memStats.reduction),
+      reductionPercentage: `${memStats.reductionPercentage.toFixed(2)}%`,
+      duplicateCacheMemorySaved: formatBytes(memStats.duplicateCacheMemorySaved)
+    },
+
+    // Data Flow Summary
+    dataFlow: {
+      totalProgramsFetched: dataStats.programsFetched,
+      templateProgramsFiltered: dataStats.templateProgramsFiltered,
+      userProgramsFiltered: dataStats.userProgramsFiltered,
+      averageTransformationTime: `${dataStats.transformationTime.toFixed(2)}ms`,
+      averageFilteringTime: `${dataStats.filteringTime.toFixed(2)}ms`,
+      dataFlowErrors: dataStats.dataFlowErrors,
+      dataInconsistencies: dataStats.dataInconsistencies.length,
+      recentInconsistencies: dataStats.dataInconsistencies.slice(-5)
+    },
+
+    // Session Summary
+    session: {
+      duration: formatDuration(sessionDuration),
+      optimizationEnabled: performanceStats.session.optimizationEnabled,
+      totalOptimizedQueries: performanceStats.session.totalOptimizedQueries,
+      totalLegacyQueries: performanceStats.session.totalLegacyQueries,
+      performanceImprovement: `${performanceStats.session.performanceImprovement.toFixed(2)}%`,
+      queriesPerMinute: sessionDuration > 0 ? 
+        ((dbStats.totalQueries / (sessionDuration / 60000)).toFixed(2)) : '0'
     }
   }
+}
 
-  /**
-   * Get performance trends
-   */
-  getPerformanceTrends() {
-    const oneHourAgo = Date.now() - (60 * 60 * 1000)
-    const recentMetrics = this.metricsHistory.filter(m => m.timestamp > oneHourAgo)
-    
-    // Group by 10-minute intervals
-    const intervals = {}
-    recentMetrics.forEach(metric => {
-      const interval = Math.floor(metric.timestamp / (10 * 60 * 1000)) * (10 * 60 * 1000)
-      if (!intervals[interval]) {
-        intervals[interval] = {
-          timestamp: interval,
-          databaseOps: 0,
-          cacheHits: 0,
-          errors: 0,
-          avgResponseTime: 0,
-          responseTimes: []
-        }
+/**
+ * Format duration in milliseconds to human readable format
+ */
+function formatDuration(ms) {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`
+  return `${seconds}s`
+}
+
+/**
+ * Log performance summary
+ */
+export function logPerformanceSummary() {
+  const stats = getPerformanceStats()
+  const logger = createDebugLogger('PERFORMANCE_MONITOR', 'SUMMARY')
+
+  logger.info('Performance Summary Report', {
+    databaseQueries: stats.databasePerformance.totalQueries,
+    avgQueryTime: stats.databasePerformance.averageQueryTime,
+    cacheHitRate: stats.cachePerformance.overallCacheHitRate,
+    memoryReduction: stats.memoryUsage.reductionPercentage,
+    sessionDuration: stats.session.duration
+  })
+
+  console.log('📈 [PERFORMANCE_SUMMARY] Complete Performance Report:', stats)
+
+  return stats
+}
+
+/**
+ * Reset performance statistics
+ */
+export function resetPerformanceStats() {
+  performanceStats = {
+    databaseQueries: {
+      totalQueries: 0,
+      totalTime: 0,
+      averageTime: 0,
+      slowestQuery: { time: 0, details: null },
+      fastestQuery: { time: Infinity, details: null },
+      queriesByTable: {},
+      queriesByType: {
+        getAllUserPrograms: { count: 0, totalTime: 0, avgTime: 0 },
+        getUserPrograms: { count: 0, totalTime: 0, avgTime: 0 },
+        getUserProgramsFiltered: { count: 0, totalTime: 0, avgTime: 0 }
       }
-      
-      const intervalData = intervals[interval]
-      
-      if (metric.type === 'database_operation') {
-        intervalData.databaseOps++
-        intervalData.responseTimes.push(metric.duration)
-      } else if (metric.type === 'cache_operation' && metric.hit) {
-        intervalData.cacheHits++
-      } else if (metric.type === 'error') {
-        intervalData.errors++
-      }
-    })
-    
-    // Calculate average response times
-    Object.values(intervals).forEach(interval => {
-      if (interval.responseTimes.length > 0) {
-        interval.avgResponseTime = interval.responseTimes.reduce((sum, time) => sum + time, 0) / interval.responseTimes.length
-      }
-      delete interval.responseTimes
-    })
-    
-    return Object.values(intervals).sort((a, b) => a.timestamp - b.timestamp)
-  }
-
-  /**
-   * Get performance recommendations
-   */
-  getPerformanceRecommendations() {
-    const recommendations = []
-    
-    // Database recommendations
-    if (performanceMetrics.averageDatabaseTime > PERFORMANCE_THRESHOLDS.QUERY_TIME.WARNING) {
-      recommendations.push({
-        type: 'database',
-        priority: 'high',
-        title: 'Optimize Database Queries',
-        description: `Average query time is ${performanceMetrics.averageDatabaseTime.toFixed(2)}ms. Consider adding indexes or optimizing slow queries.`,
-        action: 'Review slow queries and add appropriate indexes'
-      })
-    }
-    
-    // Cache recommendations
-    if (performanceMetrics.cacheHitRate < PERFORMANCE_THRESHOLDS.CACHE_HIT_RATE.WARNING) {
-      recommendations.push({
-        type: 'cache',
-        priority: 'medium',
-        title: 'Improve Cache Hit Rate',
-        description: `Cache hit rate is ${performanceMetrics.cacheHitRate.toFixed(1)}%. Consider increasing cache TTL or warming more data.`,
-        action: 'Review caching strategy and increase cache coverage'
-      })
-    }
-    
-    // Error rate recommendations
-    const errorRate = performanceMetrics.errors.length / performanceMetrics.totalDatabaseOperations * 100
-    if (errorRate > 1) {
-      recommendations.push({
-        type: 'errors',
-        priority: 'high',
-        title: 'Reduce Error Rate',
-        description: `Error rate is ${errorRate.toFixed(2)}%. Review and fix common error patterns.`,
-        action: 'Investigate and fix recurring errors'
-      })
-    }
-    
-    return recommendations
-  }
-
-  /**
-   * Format duration for display
-   */
-  formatDuration(ms) {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
-    const days = Math.floor(hours / 24)
-    
-    if (days > 0) return `${days}d ${hours % 24}h`
-    if (hours > 0) return `${hours}h ${minutes % 60}m`
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`
-    return `${seconds}s`
-  }
-
-  /**
-   * Export performance data
-   */
-  exportPerformanceData(format = 'json') {
-    const data = {
-      metrics: performanceMetrics,
-      history: this.metricsHistory,
-      dashboard: this.getPerformanceDashboard(),
-      exportedAt: new Date().toISOString()
-    }
-    
-    if (format === 'csv') {
-      return this.convertToCSV(data)
-    }
-    
-    return JSON.stringify(data, null, 2)
-  }
-
-  /**
-   * Convert data to CSV format
-   */
-  convertToCSV(data) {
-    // Simplified CSV export for metrics history
-    const headers = ['timestamp', 'type', 'operation', 'duration', 'success']
-    const rows = data.history.map(metric => [
-      new Date(metric.timestamp).toISOString(),
-      metric.type,
-      metric.operation || metric.interaction || metric.page || 'unknown',
-      metric.duration || 0,
-      metric.success !== false
-    ])
-    
-    return [headers, ...rows].map(row => row.join(',')).join('\n')
-  }
-
-  /**
-   * Reset performance metrics
-   */
-  resetMetrics() {
-    performanceMetrics = {
-      appStartTime: Date.now(),
-      totalPageLoads: 0,
-      averagePageLoadTime: 0,
-      totalDatabaseOperations: 0,
-      databaseOperationsByType: {},
-      averageDatabaseTime: 0,
-      slowDatabaseOperations: 0,
-      cacheOperations: 0,
+    },
+    cachePerformance: {
+      unifiedCacheHits: 0,
+      unifiedCacheMisses: 0,
+      legacyCacheHits: 0,
+      legacyCacheMisses: 0,
+      clientSideFilters: 0,
       cacheHitRate: 0,
-      cacheMissRate: 0,
-      userInteractions: 0,
-      averageInteractionTime: 0,
-      errors: [],
-      errorsByType: {},
-      alerts: [],
-      alertsByType: {},
-      realtimeMetrics: {
-        timestamp: Date.now(),
-        queriesPerMinute: 0,
-        cacheHitsPerMinute: 0,
-        errorsPerMinute: 0,
-        averageResponseTime: 0
-      }
+      unifiedCacheHitRate: 0,
+      legacyCacheHitRate: 0,
+      cacheSizeReduction: 0,
+      duplicateCacheEntriesAvoided: 0
+    },
+    memoryUsage: {
+      beforeOptimization: 0,
+      afterOptimization: 0,
+      reduction: 0,
+      reductionPercentage: 0,
+      peakUsage: 0,
+      currentUsage: 0,
+      cacheMemoryUsage: 0,
+      duplicateCacheMemorySaved: 0
+    },
+    dataFlow: {
+      programsFetched: 0,
+      templateProgramsFiltered: 0,
+      userProgramsFiltered: 0,
+      transformationTime: 0,
+      filteringTime: 0,
+      dataFlowErrors: 0,
+      dataInconsistencies: []
+    },
+    session: {
+      startTime: Date.now(),
+      optimizationEnabled: false,
+      totalOptimizedQueries: 0,
+      totalLegacyQueries: 0,
+      performanceImprovement: 0
     }
-    
-    this.metricsHistory = []
-    console.log('📊 Performance metrics reset')
   }
+
+  console.log('🔄 [PERFORMANCE_MONITOR] Performance statistics reset')
 }
 
-// Create global performance monitor instance
-export const performanceMonitor = new PerformanceMonitor()
-
-// Convenience functions for tracking
-export const trackDatabaseOperation = (operation, table, duration, success, metadata) => 
-  performanceMonitor.trackDatabaseOperation(operation, table, duration, success, metadata)
-
-export const trackCacheOperation = (operation, hit, duration, metadata) => 
-  performanceMonitor.trackCacheOperation(operation, hit, duration, metadata)
-
-export const trackUserInteraction = (interaction, duration, metadata) => 
-  performanceMonitor.trackUserInteraction(interaction, duration, metadata)
-
-export const trackPageLoad = (page, duration, metadata) => 
-  performanceMonitor.trackPageLoad(page, duration, metadata)
-
-export const recordLoadTime = (component, duration, metadata) => 
-  performanceMonitor.recordLoadTime(component, duration, metadata)
-
-export const trackError = (error, context) =>
-  performanceMonitor.trackError(error, context)
-
-// Export new convenience functions
-export const recordParallelLoading = (operationCount, metadata) =>
-  performanceMonitor.recordParallelLoading(operationCount, metadata)
-
-export const recordCacheWarming = (operation, metadata) =>
-  performanceMonitor.recordCacheWarming(operation, metadata)
-
-export const recordCacheHit = (resource, metadata) =>
-  performanceMonitor.recordCacheHit(resource, metadata)
-
-export const recordCacheMiss = (resource, metadata) =>
-  performanceMonitor.recordCacheMiss(resource, metadata)
-
-export const recordDatabaseRead = (resource, source, metadata) =>
-  performanceMonitor.recordDatabaseRead(resource, source, metadata)
-
-// Export performance dashboard
-export const getPerformanceDashboard = () =>
-  performanceMonitor.getPerformanceDashboard()
-
-// Export performance data
-export const exportPerformanceData = (format) => 
-  performanceMonitor.exportPerformanceData(format)
-
-// Auto-start monitoring in browser environment
-if (typeof window !== 'undefined') {
-  // Track page load performance
-  window.addEventListener('load', () => {
-    const loadTime = performance.timing.loadEventEnd - performance.timing.navigationStart
-    trackPageLoad(window.location.pathname, loadTime)
-  })
-  
-  // Track unhandled errors
-  window.addEventListener('error', (event) => {
-    trackError(new Error(event.message), {
-      filename: event.filename,
-      lineno: event.lineno,
-      colno: event.colno
-    })
-  })
-  
-  // Track unhandled promise rejections
-  window.addEventListener('unhandledrejection', (event) => {
-    trackError(new Error(event.reason), {
-      type: 'unhandled_promise_rejection'
-    })
-  })
+/**
+ * Enable optimization tracking
+ */
+export function enableOptimizationTracking() {
+  performanceStats.session.optimizationEnabled = true
+  console.log('✅ [PERFORMANCE_MONITOR] Optimization tracking enabled')
 }
 
-export default performanceMonitor
+/**
+ * Export performance stats for external monitoring
+ */
+export { performanceStats }
