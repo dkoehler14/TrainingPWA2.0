@@ -12,17 +12,6 @@ import { parseWeeklyConfigs } from '../utils/programUtils';
 import { useRealtimePrograms, useRealtimeExerciseLibrary } from '../hooks/useRealtimePrograms';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-import { 
-  trackDatabaseQuery, 
-  trackCacheOperation, 
-  trackMemoryUsage, 
-  trackDataFlow,
-  createPerformanceTimer,
-  enableOptimizationTracking,
-  getPerformanceStats,
-  logPerformanceSummary
-} from '../utils/performanceMonitor';
-import PerformanceDashboard from '../components/PerformanceDashboard';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 function Programs({ userRole }) {
@@ -45,11 +34,6 @@ function Programs({ userRole }) {
   const [error, setError] = useState(null);
   const [programsError, setProgramsError] = useState(null);
   const [exercisesError, setExercisesError] = useState(null);
-
-  // Performance monitoring state
-  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(
-    process.env.NODE_ENV === 'development' || window.location.search.includes('debug=true')
-  );
 
   // Real-time program updates
   const {
@@ -116,16 +100,6 @@ function Programs({ userRole }) {
       });
 
       if (user) {
-        // Enable optimization tracking for this session
-        enableOptimizationTracking();
-        
-        // Track memory usage before data fetching
-        trackMemoryUsage('before_optimization', { 
-          operation: 'programs_page_load', 
-          userId: user.id 
-        });
-
-        const pageLoadTimer = createPerformanceTimer('programs_page_load', 'page_performance');
         
         setIsLoading(true);
         setError(null);
@@ -133,81 +107,22 @@ function Programs({ userRole }) {
         setExercisesError(null);
         
         try {
-          // Cache warming for Programs page
-          const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
-          const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
-            lastVisitedPage: 'Programs',
-            timeOfDay: new Date().getHours(),
-            priority: 'normal'
-          }).catch(error => {
-            console.warn('Cache warming failed:', error);
-            return null;
-          });
-
           // Fetch all programs using optimized single database call
           try {
             console.log('🔍 [PROGRAMS_PAGE] Fetching all user programs with single optimized call:', {
               userId: user.id,
               timestamp: new Date().toISOString()
             });
-
-            const fetchStartTime = performance.now();
-            const fetchTimer = createPerformanceTimer('programs_unified_fetch', 'data_fetch');
+            
             const allProgramsData = await getUserPrograms(user.id); // No template filter - fetch all programs
-            const fetchEndTime = performance.now();
-            const fetchTime = fetchEndTime - fetchStartTime;
-            const fetchResult = fetchTimer.end({
-              success: true,
-              totalCount: allProgramsData?.length || 0
-            });
-
-            // Track the unified fetch performance
-            trackDatabaseQuery('unified_programs_fetch', 'programs', fetchStartTime, fetchEndTime, {
-              userId: user.id,
-              totalPrograms: allProgramsData?.length || 0,
-              optimized: true
-            });
 
             console.log('📊 [PROGRAMS_PAGE] All programs fetched:', {
               totalCount: allProgramsData?.length || 0,
-              fetchTimeMs: Math.round(fetchTime * 100) / 100,
               data: allProgramsData
             });
-
-            // Client-side filtering to separate user programs from template programs
-            const filterStartTime = performance.now();
-            const filterTimer = createPerformanceTimer('client_side_filtering', 'data_processing');
-            
+  
             const userProgramsData = allProgramsData.filter(p => !p.is_template);
             const templateProgramsData = allProgramsData.filter(p => p.is_template);
-            
-            const filterEndTime = performance.now();
-            const filterTime = filterEndTime - filterStartTime;
-            const filterResult = filterTimer.end({
-              totalPrograms: allProgramsData?.length || 0,
-              userPrograms: userProgramsData.length,
-              templatePrograms: templateProgramsData.length
-            });
-
-            // Track client-side filtering performance
-            trackDataFlow('filtering_time', { duration: filterTime }, {
-              userId: user.id,
-              totalPrograms: allProgramsData?.length || 0,
-              userPrograms: userProgramsData.length,
-              templatePrograms: templateProgramsData.length
-            });
-
-            trackDataFlow('user_programs_filtered', { count: userProgramsData.length }, { userId: user.id });
-            trackDataFlow('template_programs_filtered', { count: templateProgramsData.length }, { userId: user.id });
-
-            console.log('🔄 [PROGRAMS_PAGE] Programs filtered:', {
-              totalPrograms: allProgramsData?.length || 0,
-              userPrograms: userProgramsData.length,
-              templatePrograms: templateProgramsData.length,
-              filterTimeMs: Math.round(filterTime * 100) / 100,
-              userProgramIds: userProgramsData.map(p => ({ id: p.id, name: p.name })),
-              templateProgramIds: templateProgramsData.map(p => ({ id: p.id, name: p.name }))
-            });
 
             // DEBUGGING: Log the exact data structure returned by the service
             console.log('🔍 [DEBUG] Raw service result analysis:', {
@@ -468,28 +383,6 @@ function Programs({ userRole }) {
             setError('Failed to load program data. Please try refreshing the page.');
           }
         } finally {
-          // Track memory usage after optimization
-          trackMemoryUsage('after_optimization', { 
-            operation: 'programs_page_load_complete', 
-            userId: user?.id 
-          });
-
-          // Complete page load timer and log performance summary
-          if (typeof pageLoadTimer !== 'undefined') {
-            const pageLoadResult = pageLoadTimer.end({
-              success: !error && !programsError,
-              userProgramsCount: userPrograms.length,
-              templateProgramsCount: templatePrograms.length
-            });
-
-            // Log comprehensive performance summary
-            setTimeout(() => {
-              const performanceStats = getPerformanceStats();
-              console.log('📈 [PROGRAMS_PAGE] Performance Summary:', performanceStats);
-              logPerformanceSummary();
-            }, 100);
-          }
-
           setIsLoading(false);
         }
       } else {
@@ -512,12 +405,6 @@ function Programs({ userRole }) {
   // Helper function to safely process programs with error handling
   const safelyProcessPrograms = (programs, context = 'programs') => {
     const startTime = performance.now();
-    
-    console.log(`🔍 [PROGRAM_PROCESSING] Starting to process ${context}:`, {
-      programCount: Array.isArray(programs) ? programs.length : 'not-array',
-      context,
-      timestamp: new Date().toISOString()
-    });
 
     if (!Array.isArray(programs)) {
       console.error(`❌ [PROGRAM_PROCESSING] Invalid ${context} data - not an array:`, {
@@ -605,29 +492,20 @@ function Programs({ userRole }) {
           };
         }
 
-        console.log(`🔄 [PROGRAM_PROCESSING] Parsing weekly configs for "${program.name}":`, {
-          programId: program.id,
-          weeklyConfigsKeys: weeklyConfigsKeys.length,
-          duration: program.duration,
-          daysPerWeek: program.days_per_week,
-          sampleKeys: weeklyConfigsKeys.slice(0, 3),
-          weeklyConfigsStructure: program.weekly_configs
-        });
+        // console.log(`🔄 [PROGRAM_PROCESSING] Parsing weekly configs for "${program.name}":`, {
+        //   programId: program.id,
+        //   weeklyConfigsKeys: weeklyConfigsKeys.length,
+        //   duration: program.duration,
+        //   daysPerWeek: program.days_per_week,
+        //   sampleKeys: weeklyConfigsKeys.slice(0, 3),
+        //   weeklyConfigsStructure: program.weekly_configs
+        // });
 
         // Safely parse weekly configs
         const parseStartTime = performance.now();
         const weeklyConfigs = parseWeeklyConfigs(program.weekly_configs, program.duration, program.days_per_week);
         const parseEndTime = performance.now();
         const parseTime = parseEndTime - parseStartTime;
-        
-        console.log(`📊 [PROGRAM_PROCESSING] Parse result for "${program.name}":`, {
-          programId: program.id,
-          parseTimeMs: Math.round(parseTime * 100) / 100,
-          resultType: typeof weeklyConfigs,
-          resultIsArray: Array.isArray(weeklyConfigs),
-          resultLength: weeklyConfigs?.length || 0,
-          isEmpty: !weeklyConfigs || weeklyConfigs.length === 0
-        });
         
         console.log(`📊 [PROGRAM_PROCESSING] Weekly configs parsed:`, {
           programId: program.id,
@@ -2257,12 +2135,6 @@ function Programs({ userRole }) {
 
   return (
     <>
-      {/* Performance Dashboard */}
-      <PerformanceDashboard 
-        show={showPerformanceDashboard}
-        onToggle={() => setShowPerformanceDashboard(!showPerformanceDashboard)}
-      />
-      
       <Container fluid className="soft-container programs-container">
         <Row className="justify-content-center">
           <Col md={10}>

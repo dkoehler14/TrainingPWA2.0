@@ -13,7 +13,7 @@ import {
 } from '../utils/developmentDebugger';
 import { getStoredErrors, clearStoredErrors } from '../utils/developmentErrorHandler';
 import PerformanceDashboard from './PerformanceDashboard';
-import { getPerformanceDashboard } from '../utils/performanceMonitor';
+import { getPerformanceStats } from '../utils/performanceMonitor';
 
 const DevelopmentDebugPanel = () => {
   const [debugStatus, setDebugStatus] = useState(null);
@@ -32,7 +32,7 @@ const DevelopmentDebugPanel = () => {
       setStoredErrors(errors);
       
       // Get performance data
-      const perfData = getPerformanceDashboard();
+      const perfData = getPerformanceStats();
       setPerformanceData(perfData);
     } catch (error) {
       console.error('Failed to refresh debug info:', error);
@@ -312,81 +312,101 @@ const DevelopmentDebugPanel = () => {
       
       {performanceData ? (
         <div>
-          <h6>Overview</h6>
+          <h6>Database Performance</h6>
           <Table size="sm" striped>
             <tbody>
               <tr>
-                <td>App Uptime</td>
-                <td>{performanceData.overview?.appUptime || 'N/A'}</td>
-              </tr>
-              <tr>
-                <td>DB Operations</td>
-                <td>{performanceData.overview?.totalDatabaseOperations?.toLocaleString() || '0'}</td>
+                <td>Total Queries</td>
+                <td>{performanceData.databasePerformance?.totalQueries || '0'}</td>
               </tr>
               <tr>
                 <td>Avg Query Time</td>
-                <td>{performanceData.overview?.averageDatabaseTime || 'N/A'}</td>
+                <td>{performanceData.databasePerformance?.averageQueryTime || 'N/A'}</td>
               </tr>
               <tr>
-                <td>Cache Hit Rate</td>
-                <td>
-                  <Badge bg={parseFloat(performanceData.overview?.cacheHitRate || '0') > 80 ? 'success' : 'warning'}>
-                    {performanceData.overview?.cacheHitRate || '0%'}
-                  </Badge>
-                </td>
+                <td>Slowest Query</td>
+                <td>{performanceData.databasePerformance?.slowestQuery?.time || 'N/A'}</td>
               </tr>
               <tr>
-                <td>Active Alerts</td>
-                <td>
-                  <Badge bg={performanceData.overview?.activeAlerts > 0 ? 'danger' : 'success'}>
-                    {performanceData.overview?.activeAlerts || 0}
-                  </Badge>
-                </td>
+                <td>Fastest Query</td>
+                <td>{performanceData.databasePerformance?.fastestQuery?.time || 'N/A'}</td>
               </tr>
             </tbody>
           </Table>
 
-          <h6 className="mt-3">Real-time (Last 5 min)</h6>
+          <h6 className="mt-3">Cache Performance</h6>
           <Table size="sm" striped>
             <tbody>
               <tr>
-                <td>Queries/min</td>
-                <td>{performanceData.realtime?.queriesPerMinute || '0'}</td>
-              </tr>
-              <tr>
-                <td>Cache Hits/min</td>
-                <td>{performanceData.realtime?.cacheHitsPerMinute || '0'}</td>
-              </tr>
-              <tr>
-                <td>Errors/min</td>
+                <td>Overall Hit Rate</td>
                 <td>
-                  <Badge bg={parseFloat(performanceData.realtime?.errorsPerMinute || '0') > 0 ? 'warning' : 'success'}>
-                    {performanceData.realtime?.errorsPerMinute || '0'}
+                  <Badge bg={parseFloat(performanceData.cachePerformance?.overallCacheHitRate || '0') > 80 ? 'success' : 'warning'}>
+                    {performanceData.cachePerformance?.overallCacheHitRate || '0%'}
                   </Badge>
                 </td>
               </tr>
               <tr>
-                <td>Avg Response</td>
-                <td>{performanceData.realtime?.averageResponseTime || '0'}ms</td>
+                <td>Unified Cache Hits</td>
+                <td>{performanceData.cachePerformance?.unifiedCacheHits || '0'}</td>
+              </tr>
+              <tr>
+                <td>Legacy Cache Hits</td>
+                <td>{performanceData.cachePerformance?.legacyCacheHits || '0'}</td>
+              </tr>
+              <tr>
+                <td>Cache Size Reduction</td>
+                <td>
+                  <Badge bg="info">
+                    {performanceData.cachePerformance?.cacheSizeReduction || '0%'}
+                  </Badge>
+                </td>
               </tr>
             </tbody>
           </Table>
 
-          {performanceData.recommendations && performanceData.recommendations.length > 0 && (
-            <>
-              <h6 className="mt-3">Top Recommendations</h6>
-              <div style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                {performanceData.recommendations.slice(0, 3).map((rec, index) => (
-                  <Alert key={index} variant={rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'info'} className="mb-2 p-2">
-                    <div style={{ fontSize: '0.85em' }}>
-                      <strong>{rec.title}</strong>
-                      <div className="mt-1">{rec.description}</div>
-                    </div>
-                  </Alert>
-                ))}
-              </div>
-            </>
-          )}
+          <h6 className="mt-3">Memory Usage</h6>
+          <Table size="sm" striped>
+            <tbody>
+              <tr>
+                <td>Current Usage</td>
+                <td>{performanceData.memoryUsage?.currentUsage || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>Peak Usage</td>
+                <td>{performanceData.memoryUsage?.peakUsage || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>Memory Reduction</td>
+                <td>
+                  <Badge bg="success">
+                    {performanceData.memoryUsage?.reductionPercentage || '0%'}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </Table>
+
+          <h6 className="mt-3">Session Info</h6>
+          <Table size="sm" striped>
+            <tbody>
+              <tr>
+                <td>Session Duration</td>
+                <td>{performanceData.session?.duration || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td>Queries/min</td>
+                <td>{performanceData.session?.queriesPerMinute || '0'}</td>
+              </tr>
+              <tr>
+                <td>Optimization Enabled</td>
+                <td>
+                  <Badge bg={performanceData.session?.optimizationEnabled ? 'success' : 'secondary'}>
+                    {performanceData.session?.optimizationEnabled ? 'Yes' : 'No'}
+                  </Badge>
+                </td>
+              </tr>
+            </tbody>
+          </Table>
         </div>
       ) : (
         <Alert variant="info">Performance data not available</Alert>
@@ -479,10 +499,10 @@ const DevelopmentDebugPanel = () => {
       </Collapse>
       
       {/* Performance Dashboard Modal */}
-      <PerformanceDashboard 
+      {/* <PerformanceDashboard 
         isVisible={showPerformanceDashboard}
         onClose={() => setShowPerformanceDashboard(false)}
-      />
+      /> */}
     </div>
   );
 };

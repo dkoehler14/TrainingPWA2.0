@@ -433,7 +433,7 @@ function LogWorkout() {
             // Fetch programs with caching
             workoutDebugger.trackOperation(
               WORKOUT_OPERATIONS.LOAD_PROGRAMS,
-              () => getUserPrograms(user.id, { isActive: true }),
+              () => getUserPrograms(user.id, { is_active: true }),
               { userId: user.id }
             ),
             // Fetch exercises with caching
@@ -1408,7 +1408,7 @@ function LogWorkout() {
                     <option value="">Select a program</option>
                     {programs.map(program => (
                       <option key={program.id} value={program.id}>
-                        {program.name} {program.isCurrent ? "(Current)" : ""}
+                        {program.name} {program.is_current ? "(Current)" : ""}
                       </option>
                     ))}
                   </Form.Control>

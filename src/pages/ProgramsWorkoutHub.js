@@ -16,7 +16,6 @@ import { Container, Row, Col, Spinner } from 'react-bootstrap';
 import ViewSelector from '../components/ViewSelector';
 import ProgramsWorkoutHubErrorBoundary from '../components/ProgramsWorkoutHubErrorBoundary';
 import '../styles/ProgramsWorkoutHub.css';
-import performanceMonitor from '../utils/performanceMonitor';
 import { useViewStateCache } from '../utils/viewStateCache';
 
 // Lazy load view wrapper components for better performance
@@ -49,8 +48,6 @@ function ProgramsWorkoutHub({ userRole }) {
   const navigate = useNavigate();
 
   // Performance monitoring and state caching hooks
-  // Performance monitoring is available as a singleton
-  // const performanceMonitor is already imported above
   const stateCache = useViewStateCache();
 
   // State for active view and loading
@@ -141,12 +138,8 @@ function ProgramsWorkoutHub({ userRole }) {
       
       // Track view switch performance using the correct API
       const switchDuration = Date.now() - viewSwitchStartTime.current;
-      performanceMonitor.trackUserInteraction(`view_switch_${activeView}_to_${newView}`, switchDuration, {
-        fromView: activeView,
-        toView: newView
-      });
     }, 100);
-  }, [activeView, location.pathname, location.search, navigate, performanceMonitor]);
+  }, [activeView, location.pathname, location.search, navigate]);
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -165,18 +158,10 @@ function ProgramsWorkoutHub({ userRole }) {
 
   // Performance monitoring and cleanup effects
   useEffect(() => {
-    // Monitor initial component mount time
-    const mountDuration = Date.now() - componentMountTime.current;
-    performanceMonitor.trackPageLoad('ProgramsWorkoutHub', mountDuration, {
-      component: 'ProgramsWorkoutHub',
-      initialView: activeView
-    });
-
     // Cleanup function
     return () => {
       // Log performance summary on unmount
       if (process.env.NODE_ENV === 'development') {
-        console.log('[ProgramsWorkoutHub] Performance Dashboard:', performanceMonitor.getPerformanceDashboard());
         console.log('[ProgramsWorkoutHub] Cache Stats:', stateCache.getStats());
       }
     };
@@ -206,11 +191,6 @@ function ProgramsWorkoutHub({ userRole }) {
   // State preservation functions with enhanced caching
   const saveViewState = useCallback((view, state) => {
     stateCache.mergeState(view, state);
-    // Track cache operation using the correct API
-    performanceMonitor.trackCacheOperation(`${view}_state_save`, true, 0, {
-      view,
-      stateSize: JSON.stringify(state).length
-    });
   }, [stateCache]);
 
   const getViewState = useCallback((view) => {

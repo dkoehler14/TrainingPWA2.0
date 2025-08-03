@@ -12,7 +12,7 @@ import workoutLogService from '../services/workoutLogService';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 
-import performanceMonitor from '../utils/performanceMonitor';
+// Performance monitoring simplified - using console.log for now
 
 function QuickWorkout() {
     const [exercisesList, setExercisesList] = useState([]);
@@ -185,7 +185,7 @@ function QuickWorkout() {
 
                 try {
                     // Phase 1 Optimization: Performance monitoring
-                    performanceMonitor.recordParallelLoading(4); // 4 parallel operations
+                    console.log('🔄 Starting parallel loading of 4 operations');
 
                     // Phase 1 Optimization: Start smart cache warming immediately
                     const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
@@ -194,7 +194,7 @@ function QuickWorkout() {
                         timeOfDay: new Date().getHours(),
                         priority: 'high'
                     }).then(() => {
-                        performanceMonitor.recordCacheWarming('QuickWorkout initialization');
+                        console.log('🔥 Cache warming completed for QuickWorkout initialization');
                         return null;
                     }).catch(error => {
                         console.warn('Cache warming failed:', error);
@@ -205,17 +205,15 @@ function QuickWorkout() {
                     const [exercisesData, draft] = await Promise.all([
                         // Fetch available exercises using Supabase
                         getAvailableExercises(user.id).then(data => {
-                            performanceMonitor.recordCacheHit('exercises');
-                            performanceMonitor.recordDatabaseRead('exercises', 'supabase');
+                            console.log('✅ Cache hit for exercises, database read from supabase');
                             return data;
                         }).catch(error => {
-                            performanceMonitor.recordCacheMiss('exercises');
-                            performanceMonitor.recordDatabaseRead('exercises', 'error');
+                            console.log('❌ Cache miss for exercises, database read error');
                             throw error;
                         }),
                         // Draft data
                         fetchSingleDraft().then(data => {
-                            if (data) performanceMonitor.recordCacheHit('workout_draft');
+                            if (data) console.log('✅ Cache hit for workout_draft');
                             return data;
                         })
                     ]);
@@ -242,7 +240,7 @@ function QuickWorkout() {
 
                     // Phase 1: Record performance metrics
                     const loadTime = Date.now() - startTime;
-                    performanceMonitor.recordLoadTime('QuickWorkout', loadTime);
+                    console.log(`⏱️ QuickWorkout load time: ${loadTime}ms`);
 
                     console.log(`✅ Quick Workout initialized: ${enhancedExercises.length} exercises loaded in ${loadTime}ms`);
                 } catch (error) {
@@ -251,7 +249,7 @@ function QuickWorkout() {
 
                     // Record failed load time
                     const loadTime = Date.now() - startTime;
-                    performanceMonitor.recordLoadTime('QuickWorkout_Error', loadTime);
+                    console.log(`⏱️ QuickWorkout error load time: ${loadTime}ms`);
                 } finally {
                     setIsLoading(false);
                 }

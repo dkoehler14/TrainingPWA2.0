@@ -12,6 +12,7 @@
 import { supabase } from '../config/supabase'
 import { getCollectionCached } from './supabaseCacheMigration'
 import { createDebugLogger, logCacheOperation } from '../utils/debugUtils'
+import { transformSupabaseProgramToWeeklyConfigs } from '../utils/dataTransformations'
 
 // Cache storage and configuration
 const cache = new Map()
@@ -280,6 +281,61 @@ function extractUserId(queryBuilder) {
 }
 
 /**
+ * Helper function to fetch and transform programs with complete structure
+ */
+async function fetchAndTransformPrograms(query) {
+  const { data, error } = await query
+
+  if (error) throw error
+
+  // Transform programs to include weekly_configs
+  const transformedPrograms = (data || []).map(program => {
+    // Sort workouts by week and day before transformation
+    if (program.program_workouts) {
+      program.program_workouts.sort((a, b) => {
+        if (a.week_number !== b.week_number) {
+          return a.week_number - b.week_number
+        }
+        return a.day_number - b.day_number
+      })
+
+      // Sort exercises within each workout by order_index
+      program.program_workouts.forEach(workout => {
+        if (workout.program_exercises) {
+          workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+        }
+      })
+    }
+
+    return transformSupabaseProgramToWeeklyConfigs(program)
+  })
+
+  return transformedPrograms
+}
+
+/**
+ * Helper function to create complete program query
+ */
+function createCompleteProgramQuery(baseQuery) {
+  return baseQuery.select(`
+    *,
+    program_workouts (
+      *,
+      program_exercises (
+        *,
+        exercises (
+          id,
+          name,
+          primary_muscle_group,
+          exercise_type,
+          instructions
+        )
+      )
+    )
+  `)
+}
+
+/**
  * Utility functions
  */
 function formatBytes(bytes) {
@@ -358,7 +414,7 @@ export class SupabaseCache {
 
         trackCacheHit(table, dataSize, queryTime, userId)
         updateCacheStats(true, queryTime)
-        
+
         // Call onCacheHit callback if provided
         if (onCacheHit && typeof onCacheHit === 'function') {
           try {
@@ -367,7 +423,7 @@ export class SupabaseCache {
             logger.error('onCacheHit callback failed', { error: error.message });
           }
         }
-        
+
         return cached.data
       } else if (cached && isExpired(cached)) {
         logger.warn('Cache entry expired', {
@@ -405,7 +461,7 @@ export class SupabaseCache {
     const safeData = result.data || []
     const dataSize = JSON.stringify(safeData).length
     const documentCount = Array.isArray(safeData) ? safeData.length : 1
-    
+
     logger.success('Database query completed', {
       table,
       documentCount,
@@ -820,12 +876,12 @@ export function invalidateProgramCache(userId) {
   const cacheKeysToInvalidate = [
     // New unified cache keys
     `user_programs_all_${userId}`,
-    
+
     // Old cache key patterns (for backward compatibility during transition)
     `user_programs_enhanced_${userId}`,
     `user_programs_${userId}`,
     `programs_user_${userId}`,
-    
+
     // Pattern-based invalidation for any filtered versions
     `user_programs_all_${userId}_`,
     `user_programs_enhanced_${userId}_`
@@ -867,12 +923,45 @@ export async function warmUserCache(userId, priority = 'normal') {
         )
       )
 
-      // User programs
+      // All user programs (both user and template) with complete workout structure
+      // This matches the unified cache key expected by Programs.js
       warmingPromises.push(
         supabaseCache.getWithCache(
-          `programs_user_${userId}`,
-          () => supabase.from('programs').select('*').eq('user_id', userId),
-          { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user'], userId }
+          `user_programs_all_${userId}`,
+          () => fetchAndTransformPrograms(
+            createCompleteProgramQuery(supabase.from('programs'))
+              .eq('user_id', userId)
+              .order('created_at', { ascending: false })
+          ),
+          { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user', 'all_programs'], userId }
+        )
+      )
+
+      // User-specific exercises (both global and user-created)
+      warmingPromises.push(
+        supabaseCache.getWithCache(
+          `exercises_user_${userId}`,
+          async () => {
+            // Fetch both global exercises and user-created exercises
+            const { data: globalExercises, error: globalError } = await supabase
+              .from('exercises')
+              .select('*')
+              .eq('is_global', true)
+
+            if (globalError) throw globalError
+
+            const { data: userExercises, error: userError } = await supabase
+              .from('exercises')
+              .select('*')
+              .eq('created_by', userId)
+              .eq('is_global', false)
+
+            if (userError) throw userError
+
+            // Combine and return all available exercises for the user
+            return [...(globalExercises || []), ...(userExercises || [])]
+          },
+          { ttl: 30 * 60 * 1000, table: 'exercises', tags: ['exercises', 'user'], userId }
         )
       )
 
@@ -917,6 +1006,17 @@ export async function warmAppCache() {
       'exercises_global_all',
       () => supabase.from('exercises').select('*').eq('is_global', true),
       { ttl: 60 * 60 * 1000, table: 'exercises', tags: ['exercises', 'global'] }
+    )
+
+    // Also warm template programs with complete structure
+    await supabaseCache.getWithCache(
+      'template_programs_all',
+      () => fetchAndTransformPrograms(
+        createCompleteProgramQuery(supabase.from('programs'))
+          .eq('is_template', true)
+          .order('created_at', { ascending: false })
+      ),
+      { ttl: 60 * 60 * 1000, table: 'programs', tags: ['programs', 'templates'] }
     )
 
     console.log('✅ App cache warming completed')
@@ -1212,13 +1312,19 @@ export class CacheWarmingManager {
       })
     }
 
-    // Normal priority: User programs
+    // Normal priority: User programs with complete structure
     tasks.push({
       name: `programs-${userId}`,
       priority: 'normal',
-      execute: () => getCollectionCached('programs', {
-        where: [['user_id', '==', userId]]
-      }, 30 * 60 * 1000)
+      execute: () => supabaseCache.getWithCache(
+        `user_programs_all_${userId}`,
+        () => fetchAndTransformPrograms(
+          createCompleteProgramQuery(supabase.from('programs'))
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+        ),
+        { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user'], userId }
+      )
     })
 
     // Low priority: Analytics data
@@ -1263,4 +1369,61 @@ export function queueCacheWarming(task) {
 
 export function warmUserCacheIntelligent(userId, userActivity = {}) {
   return cacheWarmingManager.warmUserCacheIntelligent(userId, userActivity)
+}
+
+/**
+ * Get available exercises for a user (both global and user-created) with caching
+ * This function matches the pattern used by the Programs.js component
+ */
+export async function getAvailableExercisesCached(userId) {
+  return supabaseCache.getWithCache(
+    `exercises_user_${userId}`,
+    async () => {
+      // Fetch both global exercises and user-created exercises
+      const { data: globalExercises, error: globalError } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('is_global', true)
+
+      if (globalError) throw globalError
+
+      const { data: userExercises, error: userError } = await supabase
+        .from('exercises')
+        .select('*')
+        .eq('created_by', userId)
+        .eq('is_global', false)
+
+      if (userError) throw userError
+
+      // Combine and return all available exercises for the user
+      return [...(globalExercises || []), ...(userExercises || [])]
+    },
+    {
+      ttl: 30 * 60 * 1000,
+      table: 'exercises',
+      tags: ['exercises', 'user'],
+      userId
+    }
+  )
+}
+
+/**
+ * Get all programs for a user (both user and template programs) with caching
+ * This function matches the unified cache approach used by the Programs.js component
+ */
+export async function getAllUserProgramsCached(userId) {
+  return supabaseCache.getWithCache(
+    `user_programs_all_${userId}`,
+    () => fetchAndTransformPrograms(
+      createCompleteProgramQuery(supabase.from('programs'))
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+    ),
+    {
+      ttl: 30 * 60 * 1000,
+      table: 'programs',
+      tags: ['programs', 'user', 'all_programs'],
+      userId
+    }
+  )
 }

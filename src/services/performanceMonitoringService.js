@@ -9,7 +9,7 @@
  * - Automated performance reporting
  */
 
-import { performanceMonitor } from '../utils/performanceMonitor'
+import { getPerformanceStats, trackDataFlow } from '../utils/performanceMonitor'
 import { optimizedSupabase } from '../utils/optimizedSupabaseClient'
 import { supabaseCache } from '../api/supabaseCache'
 
@@ -59,7 +59,8 @@ export class PerformanceMonitoringService {
     // Monitor initial page load
     window.addEventListener('load', () => {
       const loadTime = performance.timing.loadEventEnd - performance.timing.navigationStart
-      performanceMonitor.trackPageLoad(window.location.pathname, loadTime, {
+      trackDataFlow('page_load', { 
+        duration: loadTime,
         type: 'initial_load',
         referrer: document.referrer
       })
@@ -71,7 +72,8 @@ export class PerformanceMonitoringService {
       const currentPath = window.location.pathname
       if (currentPath !== lastPath) {
         const navigationTime = performance.now()
-        performanceMonitor.trackPageLoad(currentPath, navigationTime, {
+        trackDataFlow('page_load', { 
+          duration: navigationTime,
           type: 'route_change',
           previousPath: lastPath
         })
@@ -101,7 +103,9 @@ export class PerformanceMonitoringService {
         const target = event.target
         const interaction = this.getInteractionName(target)
         
-        performanceMonitor.trackUserInteraction(interaction, duration, {
+        trackDataFlow('user_interaction', { 
+          duration: duration,
+          interaction: interaction,
           element: target.tagName,
           className: target.className,
           id: target.id
@@ -116,7 +120,8 @@ export class PerformanceMonitoringService {
       
       setTimeout(() => {
         const duration = performance.now() - startTime
-        performanceMonitor.trackUserInteraction('form_submit', duration, {
+        trackDataFlow('form_submit', { 
+          duration: duration,
           formId: form.id,
           formAction: form.action
         })
@@ -211,7 +216,7 @@ export class PerformanceMonitoringService {
 
     } catch (error) {
       console.error('❌ Health check failed:', error)
-      performanceMonitor.trackError(error, { operation: 'health_check' })
+      trackDataFlow('data_flow_error', { error: error.message, operation: 'health_check' })
     }
   }
 
@@ -245,7 +250,9 @@ export class PerformanceMonitoringService {
   trackCustomMetric(name, value, metadata = {}) {
     if (!this.isEnabled) return
 
-    performanceMonitor.trackUserInteraction(`custom_${name}`, value, {
+    trackDataFlow('custom_metric', { 
+      name: name,
+      value: value,
       type: 'custom_metric',
       ...metadata
     })
@@ -257,7 +264,8 @@ export class PerformanceMonitoringService {
   trackBusinessMetric(metric, value, metadata = {}) {
     if (!this.isEnabled) return
 
-    performanceMonitor.trackUserInteraction(`business_${metric}`, 0, {
+    trackDataFlow('business_metric', { 
+      metric: metric,
       type: 'business_metric',
       value,
       ...metadata
@@ -270,7 +278,9 @@ export class PerformanceMonitoringService {
   trackFeatureUsage(feature, duration = 0, metadata = {}) {
     if (!this.isEnabled) return
 
-    performanceMonitor.trackUserInteraction(`feature_${feature}`, duration, {
+    trackDataFlow('feature_usage', { 
+      feature: feature,
+      duration: duration,
       type: 'feature_usage',
       ...metadata
     })
@@ -282,7 +292,8 @@ export class PerformanceMonitoringService {
   trackError(error, context = {}) {
     if (!this.isEnabled) return
 
-    performanceMonitor.trackError(error, {
+    trackDataFlow('data_flow_error', { 
+      error: error.message,
       service: 'performance_monitoring',
       ...context
     })
@@ -294,7 +305,7 @@ export class PerformanceMonitoringService {
   getPerformanceSummary() {
     if (!this.isEnabled) return null
 
-    return performanceMonitor.getPerformanceDashboard()
+    return getPerformanceStats()
   }
 
   /**
@@ -303,7 +314,7 @@ export class PerformanceMonitoringService {
   exportPerformanceData(format = 'json') {
     if (!this.isEnabled) return null
 
-    return performanceMonitor.exportPerformanceData(format)
+    return getPerformanceStats() // Simplified export
   }
 
   /**
@@ -312,7 +323,7 @@ export class PerformanceMonitoringService {
   resetMetrics() {
     if (!this.isEnabled) return
 
-    performanceMonitor.resetMetrics()
+    // Reset metrics functionality simplified
     console.log('📊 Performance metrics reset')
   }
 

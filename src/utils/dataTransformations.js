@@ -14,12 +14,6 @@ import { parseWeeklyConfigs } from './programUtils';
  */
 export const transformSupabaseProgramToWeeklyConfigs = (program) => {
   const startTime = performance.now();
-  console.log('🔄 [DATA_TRANSFORM] Starting transformation for program:', {
-    programId: program?.id,
-    programName: program?.name,
-    hasWorkouts: !!program?.program_workouts,
-    workoutCount: program?.program_workouts?.length || 0
-  });
 
   // Handle missing or invalid program data
   if (!program || typeof program !== 'object') {
@@ -63,22 +57,8 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
     let skippedWorkouts = 0;
     let totalExercises = 0;
 
-    console.log('📊 [DATA_TRANSFORM] Processing workouts:', {
-      totalWorkouts: program.program_workouts.length,
-      programDuration: program.duration,
-      programDaysPerWeek: program.days_per_week
-    });
-
     // Transform each workout to the expected flattened format
     program.program_workouts.forEach((workout, index) => {
-      console.log(`🏋️ [DATA_TRANSFORM] Processing workout ${index + 1}/${program.program_workouts.length}:`, {
-        workoutId: workout?.id,
-        weekNumber: workout?.week_number,
-        dayNumber: workout?.day_number,
-        name: workout?.name,
-        exerciseCount: workout?.program_exercises?.length || 0
-      });
-
       // Validate workout structure
       if (!workout || typeof workout !== 'object') {
         console.error('❌ [DATA_TRANSFORM] Invalid workout object:', {
@@ -115,9 +95,7 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
 
       // Transform exercises with proper error handling
       let exercises = [];
-      if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
-        console.log(`💪 [DATA_TRANSFORM] Processing ${workout.program_exercises.length} exercises for ${key}`);
-        
+      if (workout.program_exercises && Array.isArray(workout.program_exercises)) {        
         const validExercises = workout.program_exercises.filter(ex => ex !== null && typeof ex === 'object');
         const invalidExercises = workout.program_exercises.length - validExercises.length;
         
@@ -134,8 +112,6 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
               reps: typeof ex.reps === 'number' ? ex.reps : 8,
               notes: ex.notes || ''
             };
-
-            console.log(`  📝 [DATA_TRANSFORM] Exercise ${exIndex + 1}: ${ex.exercise_id} (${ex.sets || 3} sets x ${ex.reps || 8} reps)`);
             
             return transformedExercise;
           });
@@ -156,25 +132,10 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       };
 
       processedWorkouts++;
-      console.log(`✅ [DATA_TRANSFORM] Successfully processed workout ${key} with ${exercises.length} exercises`);
     });
 
     const endTime = performance.now();
     const transformationTime = endTime - startTime;
-
-    console.log('🎯 [DATA_TRANSFORM] Transformation completed:', {
-      programId: program.id,
-      programName: program.name,
-      processedWorkouts,
-      skippedWorkouts,
-      totalExercises,
-      weeklyConfigsKeys: Object.keys(weekly_configs).length,
-      transformationTimeMs: Math.round(transformationTime * 100) / 100,
-      success: true
-    });
-
-    console.log("📋 [DATA_TRANSFORM] Final program data:", program);
-    console.log("📅 [DATA_TRANSFORM] Final weekly_configs:", weekly_configs);
 
     return {
       ...program,

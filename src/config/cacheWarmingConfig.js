@@ -3,6 +3,10 @@
  * 
  * This file allows you to easily control cache warming features.
  * Set any option to false to disable that feature gracefully.
+ * 
+ * Environment variables can override these settings:
+ * - REACT_APP_CACHE_WARMING_SIMPLIFIED_MODE=true
+ * - REACT_APP_DISABLE_PAGE_CONTEXT_WARMING=true
  */
 
 export const cacheWarmingConfig = {
@@ -12,13 +16,13 @@ export const cacheWarmingConfig = {
   
   // === INDIVIDUAL FEATURE CONTROLS ===
   // Day-based warming (Monday-Friday priority boost)
-  enableDayBasedWarming: true,
+  enableDayBasedWarming: false,
   
   // Time-based warming (morning/evening workout hours)
-  enableTimeBasedWarming: true,
+  enableTimeBasedWarming: false,
   
   // Context analysis (page-based priority)
-  enableContextAnalysis: true,
+  enableContextAnalysis: false,
   
   // === PERFORMANCE CONTROLS ===
   // Queue management
@@ -85,5 +89,24 @@ export const pageOnlyConfig = {
   enableDetailedLogging: false
 };
 
-// Default export uses the main configuration
-export default cacheWarmingConfig;
+// Testing configuration - disables page-context warming only
+export const testingConfig = {
+  simplifiedMode: process.env.REACT_APP_CACHE_WARMING_SIMPLIFIED_MODE === 'true' || true,
+  enableDayBasedWarming: false, // Keep if you want day-based warming
+  enableTimeBasedWarming: false, // Keep if you want time-based warming
+  enableContextAnalysis: process.env.REACT_APP_DISABLE_PAGE_CONTEXT_WARMING !== 'true', // Disabled by env var
+  maxQueueSize: 30,
+  maxConcurrentWarming: 2,
+  maxRetries: 2,
+  retryDelays: [1000, 2000],
+  maintenanceInterval: 30,
+  enablePersistence: false,
+  enableMemoryTracking: false,
+  enableBandwidthTracking: false,
+  enableCostAnalysis: false,
+  enableErrorRateMonitoring: false,
+  enableDetailedLogging: false
+};
+
+// Default export uses the testing configuration to disable page-context warming
+export default testingConfig;

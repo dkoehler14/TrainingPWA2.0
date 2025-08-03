@@ -12,7 +12,7 @@
 import { supabase } from '../config/supabase'
 import { supabaseCache } from '../api/supabaseCache'
 import { executeOptimizedQuery, queryOptimizer, connectionPoolManager } from './queryOptimizer'
-import { performanceMonitor } from './performanceMonitor'
+import { trackDatabaseQuery, getPerformanceStats } from './performanceMonitor'
 
 /**
  * Optimized Supabase Client Class
@@ -46,7 +46,7 @@ export class OptimizedSupabaseClient {
     
     try {
       if (mergedOptions.usePerformanceMonitoring) {
-        performanceMonitor.trackDatabaseOperation('rpc', functionName, 0, true, { params })
+        trackDatabaseQuery('rpc', functionName, 0, 0, { params })
       }
 
       const result = mergedOptions.useConnectionPool
@@ -56,7 +56,7 @@ export class OptimizedSupabaseClient {
       const duration = performance.now() - startTime
       
       if (mergedOptions.usePerformanceMonitoring) {
-        performanceMonitor.trackDatabaseOperation('rpc', functionName, duration, !result.error, { 
+        trackDatabaseQuery('rpc', functionName, 0, duration, { 
           params,
           rowCount: result.data ? (Array.isArray(result.data) ? result.data.length : 1) : 0
         })
@@ -67,8 +67,7 @@ export class OptimizedSupabaseClient {
       const duration = performance.now() - startTime
       
       if (mergedOptions.usePerformanceMonitoring) {
-        performanceMonitor.trackDatabaseOperation('rpc', functionName, duration, false, { params, error: error.message })
-        performanceMonitor.trackError(error, { operation: 'rpc', functionName, params })
+        trackDatabaseQuery('rpc', functionName, 0, duration, { params, error: error.message })
       }
 
       throw error
@@ -141,10 +140,10 @@ export class OptimizedSupabaseClient {
         try {
           const result = callback(...args)
           const duration = performance.now() - startTime
-          performanceMonitor.trackUserInteraction(`realtime_${event}`, duration, { channel: name, filter })
+          // Performance tracking for realtime events (simplified)
           return result
         } catch (error) {
-          performanceMonitor.trackError(error, { operation: 'realtime_callback', channel: name, event })
+          // Error tracking for realtime events (simplified)
           throw error
         }
       }
@@ -161,7 +160,7 @@ export class OptimizedSupabaseClient {
     return {
       queryOptimizer: queryOptimizer.performanceMonitor.getPerformanceStats(),
       connectionPool: connectionPoolManager.getConnectionStats(),
-      performance: performanceMonitor.getPerformanceDashboard(),
+      performance: getPerformanceStats(),
       cache: supabaseCache.getEnhancedStats()
     }
   }

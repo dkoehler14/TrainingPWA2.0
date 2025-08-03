@@ -41,10 +41,11 @@ function Home() {
         // Get current program
         let currentProgram = null;
         try {
-          const programs = await getUserPrograms(user.id, { 
-            isCurrent: true
+          const programs = await getUserPrograms(user.id, {
+            is_current: true
           });
           currentProgram = programs.length > 0 ? programs[0] : null;
+          console.log("home.js currentProgram: ", currentProgram);
         } catch (programError) {
           console.warn('Failed to fetch current program:', programError);
         }
@@ -54,13 +55,13 @@ function Home() {
         try {
           const oneMonthAgo = new Date();
           oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-          
+
           const { data: analytics } = await supabase
             .from('user_analytics')
             .select('*')
             .eq('user_id', user.id)
             .gte('pr_date', oneMonthAgo.toISOString().split('T')[0]);
-          
+
           prsThisMonth = analytics?.length || 0;
         } catch (analyticsError) {
           console.warn('Failed to fetch PR data:', analyticsError);
@@ -91,7 +92,7 @@ function Home() {
     // Calculate total volume for the week using real-time workout data
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
+
     const recentWorkoutsThisWeek = recentWorkouts.filter(log => {
       const logDate = new Date(log.completed_date || log.date);
       return logDate >= sevenDaysAgo;
@@ -99,17 +100,17 @@ function Home() {
 
     const volumeThisWeek = recentWorkoutsThisWeek.reduce((total, log) => {
       if (!log.workout_log_exercises) return total;
-      
+
       return total + log.workout_log_exercises.reduce((vol, ex) => {
         if (!ex.completed || !ex.weights || !ex.reps) return vol;
-        
+
         // Sum volume for completed sets
         return vol + ex.completed.reduce((setVol, isCompleted, index) => {
           if (isCompleted && ex.weights[index] && ex.reps[index]) {
             const weight = Number(ex.weights[index]) || 0;
             const reps = Number(ex.reps[index]) || 0;
             const bodyweight = Number(ex.bodyweight) || 0;
-            
+
             // Handle different exercise types
             let effectiveWeight = weight;
             if (ex.exercises?.exercise_type === 'Bodyweight') {
@@ -117,7 +118,7 @@ function Home() {
             } else if (ex.exercises?.exercise_type === 'Bodyweight Loadable') {
               effectiveWeight = bodyweight + weight;
             }
-            
+
             return setVol + (effectiveWeight * reps);
           }
           return setVol;
@@ -201,10 +202,10 @@ function Home() {
                         <li key={activity.id} className="recent-activity-item">
                           <span>{activity.name || 'Workout'}</span>
                           <span className="soft-text-secondary">
-                            {activity.completed_date ? 
-                              new Date(activity.completed_date).toLocaleDateString() : 
-                              activity.date ? 
-                                new Date(activity.date).toLocaleDateString() : 
+                            {activity.completed_date ?
+                              new Date(activity.completed_date).toLocaleDateString() :
+                              activity.date ?
+                                new Date(activity.date).toLocaleDateString() :
                                 ''
                             }
                           </span>

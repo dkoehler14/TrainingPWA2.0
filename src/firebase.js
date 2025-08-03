@@ -139,21 +139,21 @@ try {
  */
 async function connectToEmulatorsWithErrorHandling() {
   const services = [
-    {
-      name: 'firestore',
-      connect: () => connectFirestoreEmulator(db, 'localhost', 8080),
-      port: 8080
-    },
-    {
-      name: 'auth',
-      connect: () => connectAuthEmulator(auth, 'http://localhost:9099'),
-      port: 9099
-    },
-    {
-      name: 'functions',
-      connect: () => connectFunctionsEmulator(functions, 'localhost', 5001),
-      port: 5001
-    }
+    // {
+    //   name: 'firestore',
+    //   connect: () => connectFirestoreEmulator(db, 'localhost', 8080),
+    //   port: 8080
+    // },
+    // {
+    //   name: 'auth',
+    //   connect: () => connectAuthEmulator(auth, 'http://localhost:9099'),
+    //   port: 9099
+    // },
+    // {
+    //   name: 'functions',
+    //   connect: () => connectFunctionsEmulator(functions, 'localhost', 5001),
+    //   port: 5001
+    // }
   ];
 
   let connectedServices = 0;
