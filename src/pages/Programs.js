@@ -302,8 +302,7 @@ function Programs({ userRole }) {
               
               // Try to get cached exercises data
               const cachedExercises = supabaseCache.get(`exercises_user_${user.id}`) || 
-                                    supabaseCache.get(`exercises_global`) ||
-                                    supabaseCache.get(`exercises_all_${user.id}`);
+                                    supabaseCache.get(`exercises_global`);
               
               if (cachedExercises && Array.isArray(cachedExercises)) {
                 console.log('✅ [PROGRAMS_PAGE] Found cached exercises data:', {
@@ -395,7 +394,7 @@ function Programs({ userRole }) {
       }
     };
     fetchData();
-  }, [user/*, setRealtimePrograms, setRealtimeExercises*/]);
+  }, [user, setRealtimePrograms, setRealtimeExercises]);
 
 
   const getExerciseName = (exerciseId) => {

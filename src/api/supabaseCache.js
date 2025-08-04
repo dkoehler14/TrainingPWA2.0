@@ -877,14 +877,8 @@ export function invalidateProgramCache(userId) {
     // New unified cache keys
     `user_programs_all_${userId}`,
 
-    // Old cache key patterns (for backward compatibility during transition)
-    `user_programs_enhanced_${userId}`,
-    `user_programs_${userId}`,
-    `programs_user_${userId}`,
-
     // Pattern-based invalidation for any filtered versions
     `user_programs_all_${userId}_`,
-    `user_programs_enhanced_${userId}_`
   ];
 
   console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache with unified approach:', {
@@ -915,13 +909,14 @@ export async function warmUserCache(userId, priority = 'normal') {
     // High priority: Essential data
     if (priority === 'high' || priority === 'normal') {
       // Global exercises (long TTL)
-      warmingPromises.push(
-        supabaseCache.getWithCache(
-          `exercises_global`,
-          () => supabase.from('exercises').select('*').eq('is_global', true),
-          { ttl: 60 * 60 * 1000, table: 'exercises', tags: ['exercises', 'global'] }
-        )
-      )
+      // These are cached in the AppCache functions
+      // warmingPromises.push(
+      //   supabaseCache.getWithCache(
+      //     `exercises_global`,
+      //     () => supabase.from('exercises').select('*').eq('is_global', true),
+      //     { ttl: 60 * 60 * 1000, table: 'exercises', tags: ['exercises', 'global'] }
+      //   )
+      // )
 
       // All user programs (both user and template) with complete workout structure
       // This matches the unified cache key expected by Programs.js

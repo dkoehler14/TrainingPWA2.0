@@ -32,7 +32,7 @@ async function cleanupAllTestUsers() {
     
     const { data: dbUsers, error: dbError } = await supabase
       .from('users')
-      .select('auth_id, email, id');
+      .select('email, id');
     
     if (dbError) {
       console.log(`   ⚠️  Could not fetch database users: ${dbError.message}`);
@@ -42,8 +42,8 @@ async function cleanupAllTestUsers() {
       // Delete auth users first
       for (const user of dbUsers) {
         try {
-          await supabase.auth.admin.deleteUser(user.auth_id);
-          console.log(`   ✅ Deleted auth user: ${user.email} (${user.auth_id})`);
+          await supabase.auth.admin.deleteUser(user.id);
+          console.log(`   ✅ Deleted auth user: ${user.email} (${user.id})`);
         } catch (authError) {
           console.log(`   ⚠️  Could not delete auth user ${user.email}: ${authError.message}`);
         }
