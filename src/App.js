@@ -101,6 +101,11 @@ function AppContent() {
 
       // Warm user cache in background
       cacheWarmingService.smartWarmCache(user.id, context)
+        .then(result => {
+          if (result && !result.success && !result.alreadyQueued) {
+            console.warn('⚠️ Cache warming could not be queued:', result.message);
+          }
+        })
         .catch(error => console.warn('⚠️ Cache warming failed:', error));
     }
   }, [user, cacheInitialized, isReady]);
@@ -114,6 +119,11 @@ function AppContent() {
       // Progressive warming for heavy pages
       if (['progress-tracker', 'log-workout', 'programs'].includes(pageName)) {
         cacheWarmingService.progressiveWarmCache(user.id)
+          .then(result => {
+            if (result && !result.success && !result.alreadyQueued) {
+              console.warn('⚠️ Progressive cache warming could not be queued:', result.message);
+            }
+          })
           .catch(error => console.warn('⚠️ Progressive cache warming failed:', error));
       }
     }

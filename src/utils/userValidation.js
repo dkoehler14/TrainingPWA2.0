@@ -203,7 +203,7 @@ export const validateWeight = (weight, unit = 'LB') => {
 /**
  * Validate height (in centimeters or inches)
  */
-export const validateHeight = (height, unit = 'CM') => {
+export const validateHeight = (height, unit = 'IN') => {
   if (height === null || height === undefined || height === '') {
     return { isValid: true, value: null } // Height is optional
   }

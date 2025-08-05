@@ -96,7 +96,7 @@ class WarmingQueueManager {
     if (totalQueueSize >= this.config.maxQueueSize) {
       console.warn(`⚠️ Queue overflow: ${totalQueueSize}/${this.config.maxQueueSize} items`);
       this.stats.overflowCount++;
-      
+
       // Try to make room by removing oldest low-priority items
       if (this.queues.low.length > 0) {
         const removed = this.queues.low.shift();
@@ -144,7 +144,7 @@ class WarmingQueueManager {
    * @returns {boolean} True if user is in queue
    */
   isUserInQueue(userId) {
-    return Object.values(this.queues).some(queue => 
+    return Object.values(this.queues).some(queue =>
       queue.some(item => item.userId === userId)
     );
   }
@@ -242,7 +242,7 @@ class WarmingQueueManager {
 
     } catch (error) {
       console.error(`❌ Queue item processing failed: ${userId}`, error);
-      
+
       // Get service instance for error handling
       const service = SupabaseCacheWarmingService.instance;
       if (service && service.errorHandler) {
@@ -258,7 +258,7 @@ class WarmingQueueManager {
         if (recoveryResult.action === 'retry' && queueItem.retryCount < queueItem.maxRetries) {
           queueItem.retryCount++;
           console.log(`🔄 Retrying queue item: ${userId} (attempt ${queueItem.retryCount}/${queueItem.maxRetries})`);
-          
+
           // Use error handler's retry delay
           const delay = recoveryResult.delay || Math.pow(2, queueItem.retryCount) * 1000;
           setTimeout(() => {
@@ -276,7 +276,7 @@ class WarmingQueueManager {
         if (queueItem.retryCount < queueItem.maxRetries) {
           queueItem.retryCount++;
           console.log(`🔄 Retrying queue item: ${userId} (attempt ${queueItem.retryCount}/${queueItem.maxRetries})`);
-          
+
           setTimeout(() => {
             this.queues[priority].unshift(queueItem);
           }, Math.pow(2, queueItem.retryCount) * 1000);
@@ -298,9 +298,9 @@ class WarmingQueueManager {
    */
   async executeWarmingRequest(queueItem) {
     const { userId, priority, context, options } = queueItem;
-    
+
     console.log(`🔥 Executing warming request for: ${userId} (method: ${context.method || 'default'})`);
-    
+
     // Get reference to the service instance to call warming methods
     const service = SupabaseCacheWarmingService.instance;
     if (!service) {
@@ -309,32 +309,32 @@ class WarmingQueueManager {
 
     // Determine which warming method to use based on context
     const method = context.method || 'warmUserCacheWithRetry';
-    
+
     try {
       let result;
-      
+
       switch (method) {
         case 'warmUserCacheWithRetry':
           result = await service.executeUserCacheWarming(userId, priority, options);
           break;
-          
+
         case 'smartWarmCache':
           result = await service.executeSmartCacheWarming(userId, priority, context, options);
           break;
-          
+
         case 'progressiveWarmCache':
           result = await service.executeProgressiveCacheWarming(userId, priority, context, options);
           break;
-          
+
         default:
           // Default to basic user cache warming
           result = await service.executeUserCacheWarming(userId, priority, options);
           break;
       }
-      
+
       console.log(`✅ Queue warming request completed for: ${userId}`);
       return result;
-      
+
     } catch (error) {
       console.error(`❌ Queue warming request failed for: ${userId}`, error);
       throw error;
@@ -403,7 +403,7 @@ class WarmingQueueManager {
     Object.keys(this.queues).forEach(priority => {
       const initialLength = this.queues[priority].length;
       this.queues[priority] = this.queues[priority].filter(item => item.userId !== userId);
-      
+
       if (this.queues[priority].length < initialLength) {
         removed = true;
         console.log(`🗑️ Removed user from ${priority} queue: ${userId}`);
@@ -464,7 +464,7 @@ class WarmingQueueManager {
       }
 
       const queueData = JSON.parse(stored);
-      
+
       // Check if data is not too old (max 1 hour)
       const maxAge = 60 * 60 * 1000; // 1 hour
       if (Date.now() - queueData.timestamp > maxAge) {
@@ -480,7 +480,7 @@ class WarmingQueueManager {
       const totalRestored = this.getTotalQueueSize();
       if (totalRestored > 0) {
         console.log(`📥 Restored ${totalRestored} items from persisted queue`);
-        
+
         // Start processing if we have items
         if (!this.processingQueue) {
           this.startQueueProcessing();
@@ -541,7 +541,7 @@ class ContextAnalyzer {
    */
   static analyzeTimeOfDay(date = new Date(), config = {}) {
     const hour = date.getHours();
-    
+
     // If time-based warming is disabled, return neutral analysis
     if (config.enableTimeBasedWarming === false) {
       return {
@@ -554,16 +554,16 @@ class ContextAnalyzer {
         timeCategory: 'standard'
       };
     }
-    
+
     // Workout hours: 6-9 AM and 5-8 PM
     const isMorningWorkoutHour = hour >= 6 && hour <= 9;
     const isEveningWorkoutHour = hour >= 17 && hour <= 20;
     const isWorkoutHour = isMorningWorkoutHour || isEveningWorkoutHour;
-    
+
     // Determine time-based priority
     let priority = 'normal';
     let context = 'standard';
-    
+
     if (isWorkoutHour) {
       priority = 'high';
       context = isMorningWorkoutHour ? 'morning-workout' : 'evening-workout';
@@ -571,7 +571,7 @@ class ContextAnalyzer {
       priority = 'low';
       context = 'off-hours';
     }
-    
+
     return {
       hour,
       isWorkoutHour,
@@ -582,7 +582,7 @@ class ContextAnalyzer {
       timeCategory: this.getTimeCategory(hour)
     };
   }
-  
+
   /**
    * Get time category for detailed analysis
    * @param {number} hour - Hour of the day (0-23)
@@ -597,7 +597,7 @@ class ContextAnalyzer {
     if (hour >= 21 && hour <= 23) return 'evening';
     return 'night';
   }
-  
+
   /**
    * Analyze workout day patterns (Monday-Friday priority boost)
    * @param {Date} date - Date to analyze (defaults to current date)
@@ -607,7 +607,7 @@ class ContextAnalyzer {
   static analyzeWorkoutDay(date = new Date(), config = {}) {
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
+
     // If day-based warming is disabled, return neutral analysis
     if (config.enableDayBasedWarming === false) {
       return {
@@ -619,14 +619,14 @@ class ContextAnalyzer {
         context: 'day-analysis-disabled'
       };
     }
-    
+
     // Monday-Friday are typical workout days
     const isWorkoutDay = dayOfWeek >= 1 && dayOfWeek <= 5;
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    
+
     let priority = 'normal';
     let context = 'standard';
-    
+
     if (isWorkoutDay) {
       priority = 'high';
       context = 'workout-day';
@@ -634,7 +634,7 @@ class ContextAnalyzer {
       priority = 'normal';
       context = 'weekend';
     }
-    
+
     return {
       dayOfWeek,
       dayName: dayNames[dayOfWeek],
@@ -644,7 +644,7 @@ class ContextAnalyzer {
       context
     };
   }
-  
+
   /**
    * Analyze page-based priority for cache warming
    * @param {string} pageName - Current page or component name
@@ -665,7 +665,7 @@ class ContextAnalyzer {
       'ProgramsWorkoutHub',
       'programs-workout-hub'
     ];
-    
+
     // Medium-priority fitness-related pages
     const fitnessPages = [
       'Exercises',
@@ -677,7 +677,7 @@ class ContextAnalyzer {
       'QuickWorkoutHistory',
       'quick-workout-history'
     ];
-    
+
     // Low-priority general pages
     const generalPages = [
       'Home',
@@ -689,14 +689,14 @@ class ContextAnalyzer {
       'Admin',
       'admin'
     ];
-    
+
     const normalizedPage = pageName?.toLowerCase() || '';
     const normalizedPrevious = previousPage?.toLowerCase() || '';
-    
+
     let priority = 'normal';
     let context = 'general';
     let warmingStrategy = 'standard';
-    
+
     // Determine priority based on current page
     if (workoutPages.some(page => normalizedPage.includes(page.toLowerCase()))) {
       priority = 'high';
@@ -711,17 +711,17 @@ class ContextAnalyzer {
       context = 'general';
       warmingStrategy = 'basic';
     }
-    
+
     // Boost priority if coming from workout-related page
-    const wasOnWorkoutPage = workoutPages.some(page => 
+    const wasOnWorkoutPage = workoutPages.some(page =>
       normalizedPrevious.includes(page.toLowerCase())
     );
-    
+
     if (wasOnWorkoutPage && priority !== 'high') {
       priority = priority === 'low' ? 'normal' : 'high';
       context += '-post-workout';
     }
-    
+
     return {
       pageName,
       previousPage,
@@ -733,7 +733,7 @@ class ContextAnalyzer {
       warmingStrategy
     };
   }
-  
+
   /**
    * Determine overall priority by combining all context factors
    * @param {Object} options - Context analysis options
@@ -754,7 +754,7 @@ class ContextAnalyzer {
       behaviorPatterns = {},
       config = {}
     } = options;
-    
+
     // If simplified mode is enabled, return basic priority
     if (config.simplifiedMode) {
       return {
@@ -776,54 +776,54 @@ class ContextAnalyzer {
         }]
       };
     }
-    
+
     // Analyze individual context factors
     const timeAnalysis = this.analyzeTimeOfDay(date, config);
     const dayAnalysis = this.analyzeWorkoutDay(date, config);
     const pageAnalysis = this.analyzePageContext(pageName, previousPage);
-    
+
     // Priority scoring system (higher = more important)
     const priorityScores = {
       'low': 1,
       'normal': 2,
       'high': 3
     };
-    
+
     // Calculate weighted priority score
     let totalScore = 0;
     let maxScore = 0;
-    
+
     // Time factor (weight: 0.3)
     const timeWeight = 0.3;
     totalScore += priorityScores[timeAnalysis.priority] * timeWeight;
     maxScore += 3 * timeWeight;
-    
+
     // Day factor (weight: 0.2)
     const dayWeight = 0.2;
     totalScore += priorityScores[dayAnalysis.priority] * dayWeight;
     maxScore += 3 * dayWeight;
-    
+
     // Page factor (weight: 0.4)
     const pageWeight = 0.4;
     totalScore += priorityScores[pageAnalysis.priority] * pageWeight;
     maxScore += 3 * pageWeight;
-    
+
     // User preferences factor (weight: 0.1)
     const prefWeight = 0.1;
     const prefScore = userPreferences.priorityBoost || 2; // Default to normal
     totalScore += prefScore * prefWeight;
     maxScore += 3 * prefWeight;
-    
+
     // Calculate final priority
     const normalizedScore = totalScore / maxScore;
     let finalPriority = 'normal';
-    
+
     if (normalizedScore >= 0.75) {
       finalPriority = 'high';
     } else if (normalizedScore <= 0.4) {
       finalPriority = 'low';
     }
-    
+
     // Determine warming strategy
     let warmingStrategy = 'standard';
     if (pageAnalysis.isWorkoutPage && timeAnalysis.isWorkoutHour) {
@@ -831,7 +831,7 @@ class ContextAnalyzer {
     } else if (pageAnalysis.isWorkoutPage || timeAnalysis.isWorkoutHour) {
       warmingStrategy = 'targeted';
     }
-    
+
     return {
       finalPriority,
       priorityScore: normalizedScore,
@@ -852,7 +852,7 @@ class ContextAnalyzer {
       })
     };
   }
-  
+
   /**
    * Generate warming recommendations based on context analysis
    * @param {Object} analysis - Combined analysis results
@@ -861,7 +861,7 @@ class ContextAnalyzer {
   static generateRecommendations(analysis) {
     const recommendations = [];
     const { timeAnalysis, dayAnalysis, pageAnalysis, finalPriority, warmingStrategy } = analysis;
-    
+
     // Time-based recommendations
     if (timeAnalysis.isWorkoutHour) {
       recommendations.push({
@@ -871,7 +871,7 @@ class ContextAnalyzer {
         priority: 'high'
       });
     }
-    
+
     // Day-based recommendations
     if (dayAnalysis.isWorkoutDay) {
       recommendations.push({
@@ -881,7 +881,7 @@ class ContextAnalyzer {
         priority: 'high'
       });
     }
-    
+
     // Page-based recommendations
     if (pageAnalysis.isWorkoutPage) {
       recommendations.push({
@@ -891,7 +891,7 @@ class ContextAnalyzer {
         priority: 'high'
       });
     }
-    
+
     // Strategy recommendations
     if (warmingStrategy === 'progressive') {
       recommendations.push({
@@ -901,7 +901,7 @@ class ContextAnalyzer {
         priority: 'high'
       });
     }
-    
+
     return recommendations;
   }
 }
@@ -920,13 +920,13 @@ class SupabaseCacheWarmingService {
       maintenanceInterval: options.maintenanceInterval || 15, // minutes
       maxHistorySize: options.maxHistorySize || 50,
       queueProcessingDelay: options.queueProcessingDelay || 100, // ms
-      
+
       // Simplified cache warming options
       enableDayBasedWarming: options.enableDayBasedWarming !== false, // Default: enabled
       enableTimeBasedWarming: options.enableTimeBasedWarming !== false, // Default: enabled
       enableContextAnalysis: options.enableContextAnalysis !== false, // Default: enabled
       simplifiedMode: options.simplifiedMode || false, // Default: disabled
-      
+
       // Queue manager configuration
       queueConfig: {
         maxQueueSize: options.maxQueueSize || 100,
@@ -935,7 +935,7 @@ class SupabaseCacheWarmingService {
         enablePersistence: options.enablePersistence || false,
         ...options.queueConfig
       },
-      
+
       ...options
     };
 
@@ -944,10 +944,10 @@ class SupabaseCacheWarmingService {
     this.warmingHistory = [];
     this.maintenanceSchedule = null;
     this.isStarted = false;
-    
+
     // Initialize queue manager
     this.queueManager = new WarmingQueueManager(this.config.queueConfig);
-    
+
     // Initialize statistics tracker
     this.statsTracker = new WarmingStatsTracker({
       maxHistorySize: this.config.maxHistorySize,
@@ -957,7 +957,7 @@ class SupabaseCacheWarmingService {
       enableCostAnalysis: options.enableCostAnalysis !== false,
       ...options.statsConfig
     });
-    
+
     // Initialize error handler
     this.errorHandler = new CacheWarmingErrorHandler({
       maxRetries: this.config.maxRetries,
@@ -968,10 +968,10 @@ class SupabaseCacheWarmingService {
       enableGracefulDegradation: options.enableGracefulDegradation !== false,
       ...options.errorHandlerConfig
     });
-    
+
     // Initialize graceful degradation manager
     this.degradationManager = gracefulDegradationManager;
-    
+
     // Context analysis state
     this.contextAnalyzer = ContextAnalyzer;
     this.currentPageContext = null;
@@ -1267,6 +1267,12 @@ class SupabaseCacheWarmingService {
    * Warms global data that all users need
    */
   async initializeAppCache() {
+    // Ensure service is started before initializing cache
+    if (!this.isStarted) {
+      console.log('🚀 Starting cache warming service during app initialization...');
+      this.start();
+    }
+
     if (this.isWarming) {
       console.log('🔥 Cache warming already in progress...');
       return;
@@ -1274,17 +1280,17 @@ class SupabaseCacheWarmingService {
 
     // Check for degradation and apply fallback if needed
     const fallbackResult = this.checkDegradationAndApplyFallback(
-      ServiceAspect.CACHE_WARMING, 
+      ServiceAspect.CACHE_WARMING,
       'app-init'
     );
 
     if (fallbackResult.degraded && !fallbackResult.canProceed) {
       console.log(`🛡️ App cache initialization blocked due to critical degradation`);
-      return { 
-        success: false, 
-        blocked: true, 
+      return {
+        success: false,
+        blocked: true,
         reason: 'Service critically degraded',
-        fallback: fallbackResult.fallback 
+        fallback: fallbackResult.fallback
       };
     }
 
@@ -1321,7 +1327,7 @@ class SupabaseCacheWarmingService {
       const duration = Date.now() - startTime;
       console.error('❌ App cache initialization failed:', error);
       this.recordWarmingEvent('app-init', duration, false, error.message);
-      
+
       // Handle error with comprehensive error handling system
       const recoveryResult = await this.errorHandler.handleError(error, {
         operation: 'app-init',
@@ -1329,14 +1335,14 @@ class SupabaseCacheWarmingService {
         priority: 'high',
         retryCount: 0
       });
-      
+
       if (recoveryResult.action === 'abort') {
         throw error;
       } else if (recoveryResult.action === 'fallback') {
         console.log('🔄 App initialization continuing with fallback strategy');
         return { success: false, duration, fallback: true, error: error.message };
       }
-      
+
       throw error;
     } finally {
       this.isWarming = false;
@@ -1369,17 +1375,17 @@ class SupabaseCacheWarmingService {
     };
 
     const queued = this.queueManager.addToQueue(userId, priority, context, queueOptions);
-    
+
     if (!queued) {
       throw new Error(`Failed to queue cache warming for user: ${userId}`);
     }
 
     console.log(`📋 User cache warming queued: ${userId} (priority: ${priority})`);
-    
-    return { 
-      success: true, 
-      message: 'Queued for processing', 
-      userId, 
+
+    return {
+      success: true,
+      message: 'Queued for processing',
+      userId,
       priority,
       queuePosition: this.queueManager.getTotalQueueSize()
     };
@@ -1396,18 +1402,18 @@ class SupabaseCacheWarmingService {
 
     // Check for degradation and apply fallback if needed
     const fallbackResult = this.checkDegradationAndApplyFallback(
-      ServiceAspect.CACHE_WARMING, 
-      'user-cache', 
+      ServiceAspect.CACHE_WARMING,
+      'user-cache',
       { userId, priority, ...options }
     );
 
     if (fallbackResult.degraded && !fallbackResult.canProceed) {
       console.log(`🛡️ Cache warming blocked due to critical degradation`);
-      return { 
-        success: false, 
-        blocked: true, 
+      return {
+        success: false,
+        blocked: true,
         reason: 'Service critically degraded',
-        fallback: fallbackResult.fallback 
+        fallback: fallbackResult.fallback
       };
     }
 
@@ -1430,9 +1436,9 @@ class SupabaseCacheWarmingService {
         const duration = Date.now() - startTime;
 
         console.log(`✅ User cache warming completed in ${duration}ms:`, result);
-        this.recordWarmingEvent('user-cache', duration, true, null, { 
-          userId, 
-          priority, 
+        this.recordWarmingEvent('user-cache', duration, true, null, {
+          userId,
+          priority,
           result,
           attempt: attempt + 1,
           queueProcessed: true
@@ -1459,19 +1465,19 @@ class SupabaseCacheWarmingService {
 
         if (attempt >= maxRetries || recoveryResult.action === 'abort') {
           const duration = Date.now() - startTime;
-          this.recordWarmingEvent('user-cache', duration, false, error.message, { 
-            userId, 
+          this.recordWarmingEvent('user-cache', duration, false, error.message, {
+            userId,
             priority,
             attempt,
             queueProcessed: true,
             recoveryResult
           });
-          
+
           if (recoveryResult.action === 'skip' || recoveryResult.action === 'fallback') {
             console.log(`🔄 User cache warming failed but continuing: ${recoveryResult.reason}`);
             return { success: false, fallback: true, error: error.message, recoveryResult };
           }
-          
+
           throw error;
         }
 
@@ -1497,6 +1503,12 @@ class SupabaseCacheWarmingService {
   async smartWarmCache(userId, context = {}, options = {}) {
     if (!userId) {
       throw new Error('User ID is required for smart cache warming');
+    }
+
+    // Ensure service is started before attempting queue operations
+    if (!this.isStarted) {
+      console.log('🚀 Auto-starting cache warming service for smart warming...');
+      this.start();
     }
 
     console.log(`🧠 Starting smart cache warming for user: ${userId}`);
@@ -1540,17 +1552,56 @@ class SupabaseCacheWarmingService {
     };
 
     const queued = this.queueManager.addToQueue(userId, contextAnalysis.finalPriority, queueContext, queueOptions);
-    
+
     if (!queued) {
-      throw new Error(`Failed to queue smart cache warming for user: ${userId}`);
+      // Check if user is already being warmed (most common case)
+      if (this.queueManager.isUserInQueue(userId) || this.queueManager.activeWarming.has(userId)) {
+        console.log(`🔄 Smart cache warming already in progress for user: ${userId}`);
+        return {
+          success: true,
+          message: 'Already in progress',
+          userId,
+          priority: contextAnalysis.finalPriority,
+          strategy: contextAnalysis.warmingStrategy,
+          contextAnalysis,
+          queuePosition: this.queueManager.getTotalQueueSize(),
+          alreadyQueued: true
+        };
+      }
+
+      // Check if queue is full
+      const queueStatus = this.queueManager.getQueueStatus();
+      if (queueStatus.totalSize >= this.queueManager.config.maxQueueSize) {
+        console.warn(`⚠️ Queue is full, skipping smart cache warming for user: ${userId}`);
+        return {
+          success: false,
+          message: 'Queue is full',
+          userId,
+          priority: contextAnalysis.finalPriority,
+          strategy: contextAnalysis.warmingStrategy,
+          contextAnalysis,
+          queueFull: true
+        };
+      }
+
+      // Generic failure case
+      console.warn(`⚠️ Failed to queue smart cache warming for user: ${userId} - unknown reason`);
+      return {
+        success: false,
+        message: 'Failed to queue',
+        userId,
+        priority: contextAnalysis.finalPriority,
+        strategy: contextAnalysis.warmingStrategy,
+        contextAnalysis
+      };
     }
 
     console.log(`📋 Smart cache warming queued: ${userId} (priority: ${contextAnalysis.finalPriority}, strategy: ${contextAnalysis.warmingStrategy})`);
-    
-    return { 
-      success: true, 
-      message: 'Queued for smart processing', 
-      userId, 
+
+    return {
+      success: true,
+      message: 'Queued for smart processing',
+      userId,
       priority: contextAnalysis.finalPriority,
       strategy: contextAnalysis.warmingStrategy,
       contextAnalysis,
@@ -1577,7 +1628,7 @@ class SupabaseCacheWarmingService {
 
       // Apply context-based warming strategy
       let warmingResult;
-      
+
       switch (warmingStrategy) {
         case 'progressive':
           console.log('📈 Executing progressive warming strategy');
@@ -1604,7 +1655,7 @@ class SupabaseCacheWarmingService {
 
       // Calculate total duration
       const totalDuration = Date.now() - startTime;
-      
+
       // Record smart warming event
       this.recordWarmingEvent('smart-warm', totalDuration, true, null, warmingMetadata);
 
@@ -1622,14 +1673,14 @@ class SupabaseCacheWarmingService {
     } catch (error) {
       const duration = Date.now() - startTime;
       console.error('❌ Smart cache warming execution failed:', error);
-      
+
       this.recordWarmingEvent('smart-warm', duration, false, error.message, {
         userId,
         context,
         error: error.message,
         queueProcessed: true
       });
-      
+
       throw error;
     }
   }
@@ -1642,12 +1693,12 @@ class SupabaseCacheWarmingService {
    */
   async applyContextOptimizations(userId, contextAnalysis, metadata) {
     const { context, recommendations } = contextAnalysis;
-    
+
     // Apply time-based optimizations
     if (context.time.isWorkoutHour) {
       console.log('⏰ Applying workout hour optimizations');
       metadata.smartDecisions.push('workout-hour-optimization');
-      
+
       // Could trigger additional workout-specific data warming here
       // This would integrate with the progressive warming in task 3.3
     }
@@ -1662,7 +1713,7 @@ class SupabaseCacheWarmingService {
     if (context.page.isWorkoutPage) {
       console.log('📄 Applying workout page optimizations');
       metadata.smartDecisions.push('workout-page-optimization');
-      
+
       // Boost priority for workout-related data
       if (context.page.warmingStrategy === 'progressive') {
         metadata.smartDecisions.push('progressive-boost-applied');
@@ -1689,23 +1740,23 @@ class SupabaseCacheWarmingService {
     for (const recommendation of recommendations) {
       console.log(`💡 Processing recommendation: ${recommendation.action} (${recommendation.reason})`);
       metadata.smartDecisions.push(`recommendation-${recommendation.action}`);
-      
+
       switch (recommendation.action) {
         case 'prioritize-workout-data':
           // This would be implemented with specific workout data warming
           console.log('🏋️ Prioritizing workout data warming');
           break;
-          
+
         case 'boost-cache-warming':
           // This could trigger additional warming cycles
           console.log('⚡ Boosting cache warming intensity');
           break;
-          
+
         case 'progressive-warming':
           // This will be implemented in task 3.3
           console.log('📈 Progressive warming recommended');
           break;
-          
+
         case 'multi-phase-warming':
           // This will be implemented in task 3.3
           console.log('🔄 Multi-phase warming recommended');
@@ -1727,6 +1778,12 @@ class SupabaseCacheWarmingService {
       throw new Error('User ID is required for progressive cache warming');
     }
 
+    // Ensure service is started before attempting queue operations
+    if (!this.isStarted) {
+      console.log('🚀 Auto-starting cache warming service for progressive warming...');
+      this.start();
+    }
+
     console.log(`📈 Starting progressive cache warming for user: ${userId}`);
 
     // Configuration for progressive warming phases
@@ -1738,7 +1795,7 @@ class SupabaseCacheWarmingService {
         description: 'Essential user data and recent workouts'
       },
       analytics: {
-        name: 'Analytics Data', 
+        name: 'Analytics Data',
         delay: options.analyticsDelay || 2000, // 2 seconds
         priority: 'normal',
         description: 'Progress tracking and statistics'
@@ -1777,17 +1834,56 @@ class SupabaseCacheWarmingService {
     };
 
     const queued = this.queueManager.addToQueue(userId, priority, queueContext, queueOptions);
-    
+
     if (!queued) {
-      throw new Error(`Failed to queue progressive cache warming for user: ${userId}`);
+      // Check if user is already being warmed (most common case)
+      if (this.queueManager.isUserInQueue(userId) || this.queueManager.activeWarming.has(userId)) {
+        console.log(`🔄 Progressive cache warming already in progress for user: ${userId}`);
+        return {
+          success: true,
+          message: 'Already in progress',
+          userId,
+          priority,
+          phaseConfig,
+          contextAnalysis,
+          queuePosition: this.queueManager.getTotalQueueSize(),
+          alreadyQueued: true
+        };
+      }
+
+      // Check if queue is full
+      const queueStatus = this.queueManager.getQueueStatus();
+      if (queueStatus.totalSize >= this.queueManager.config.maxQueueSize) {
+        console.warn(`⚠️ Queue is full, skipping progressive cache warming for user: ${userId}`);
+        return {
+          success: false,
+          message: 'Queue is full',
+          userId,
+          priority,
+          phaseConfig,
+          contextAnalysis,
+          queueFull: true
+        };
+      }
+
+      // Generic failure case
+      console.warn(`⚠️ Failed to queue progressive cache warming for user: ${userId} - unknown reason`);
+      return {
+        success: false,
+        message: 'Failed to queue',
+        userId,
+        priority,
+        phaseConfig,
+        contextAnalysis
+      };
     }
 
     console.log(`📋 Progressive cache warming queued: ${userId} (priority: ${priority})`);
-    
-    return { 
-      success: true, 
-      message: 'Queued for progressive processing', 
-      userId, 
+
+    return {
+      success: true,
+      message: 'Queued for progressive processing',
+      userId,
       priority,
       phaseConfig,
       contextAnalysis,
@@ -1804,7 +1900,7 @@ class SupabaseCacheWarmingService {
     console.log(`📈 Executing progressive cache warming for user: ${userId}`);
 
     const { phaseConfig, contextAnalysis } = context;
-    
+
     const results = {
       userId,
       startTime,
@@ -1840,15 +1936,15 @@ class SupabaseCacheWarmingService {
       results.overallSuccess = results.failedPhases === 0;
 
       // Record progressive warming event
-      this.recordWarmingEvent('progressive-warm', results.totalDuration, results.overallSuccess, 
+      this.recordWarmingEvent('progressive-warm', results.totalDuration, results.overallSuccess,
         results.errors.length > 0 ? results.errors.join('; ') : null, {
-          userId,
-          phases: Object.keys(results.phases),
-          successfulPhases: results.successfulPhases,
-          failedPhases: results.failedPhases,
-          contextAnalysis: contextAnalysis.finalPriority,
-          queueProcessed: true
-        });
+        userId,
+        phases: Object.keys(results.phases),
+        successfulPhases: results.successfulPhases,
+        failedPhases: results.failedPhases,
+        contextAnalysis: contextAnalysis.finalPriority,
+        queueProcessed: true
+      });
 
       console.log(`✅ Progressive cache warming executed in ${results.totalDuration}ms`);
       console.log(`📊 Results: ${results.successfulPhases}/${Object.keys(phaseConfig).length} phases successful`);
@@ -1861,14 +1957,14 @@ class SupabaseCacheWarmingService {
       results.errors.push(error.message);
 
       console.error('❌ Progressive cache warming execution failed:', error);
-      
+
       this.recordWarmingEvent('progressive-warm', results.totalDuration, false, error.message, {
         userId,
         phases: Object.keys(results.phases),
         error: error.message,
         queueProcessed: true
       });
-      
+
       throw error;
     }
   }
@@ -1888,7 +1984,7 @@ class SupabaseCacheWarmingService {
     try {
       // Adjust phase priority based on context
       let adjustedPriority = phaseConfig.priority;
-      
+
       // Boost priority during workout hours or on workout pages
       if (contextAnalysis.finalPriority === 'high' && phaseName === 'critical') {
         adjustedPriority = 'high';
@@ -1957,12 +2053,12 @@ class SupabaseCacheWarmingService {
    */
   async warmCriticalData(userId, priority) {
     console.log('🔥 Warming critical data...');
-    
+
     try {
       // Use the existing warmUserCache function for critical data
       // This would typically include recent workouts, active programs, user profile
       const result = await warmUserCache(userId, priority);
-      
+
       console.log('✅ Critical data warming completed');
       return {
         type: 'critical',
@@ -1984,12 +2080,12 @@ class SupabaseCacheWarmingService {
    */
   async warmAnalyticsData(userId, priority) {
     console.log('📊 Warming analytics data...');
-    
+
     try {
       // This would warm analytics-specific data
       // For now, we'll use the same warmUserCache but with different context
       const result = await warmUserCache(userId, priority);
-      
+
       console.log('✅ Analytics data warming completed');
       return {
         type: 'analytics',
@@ -2011,12 +2107,12 @@ class SupabaseCacheWarmingService {
    */
   async warmExtendedData(userId, priority) {
     console.log('📚 Warming extended data...');
-    
+
     try {
       // This would warm historical and extended data
       // For now, we'll use the same warmUserCache but with different context
       const result = await warmUserCache(userId, priority);
-      
+
       console.log('✅ Extended data warming completed');
       return {
         type: 'extended',
@@ -2085,7 +2181,7 @@ class SupabaseCacheWarmingService {
    */
   async performEnhancedMaintenance() {
     console.log('🔧 Performing enhanced cache maintenance...');
-    
+
     const maintenanceStartTime = Date.now();
     const results = {
       startTime: maintenanceStartTime,
@@ -2136,7 +2232,7 @@ class SupabaseCacheWarmingService {
       results.duration = Date.now() - maintenanceStartTime;
       results.success = false;
       results.errors.push(error.message);
-      
+
       console.error('❌ Enhanced maintenance failed:', error);
       throw error;
     }
@@ -2148,7 +2244,7 @@ class SupabaseCacheWarmingService {
    */
   async monitorCacheHealth() {
     const healthStartTime = Date.now();
-    
+
     try {
       // Get current cache statistics from Supabase cache
       const cacheStats = getCacheStats();
@@ -2157,7 +2253,7 @@ class SupabaseCacheWarmingService {
       // Analyze cache performance metrics
       const hitRate = parseFloat(cacheStats.hitRate) || 0;
       const missRate = 100 - hitRate;
-      
+
       // Get queue health metrics
       const queueStatus = this.getQueueStatus();
       const queueHealth = this.analyzeQueueHealth(queueStatus);
@@ -2176,7 +2272,7 @@ class SupabaseCacheWarmingService {
       // Determine health status
       let healthStatus = 'healthy';
       const issues = [];
-      
+
       if (hitRate < 60) {
         healthStatus = 'critical';
         issues.push(`Very low cache hit rate: ${hitRate}%`);
@@ -2333,7 +2429,7 @@ class SupabaseCacheWarmingService {
     };
 
     const hitRateScore = Math.min(100, metrics.hitRate * 1.25); // Scale hit rate to 0-100
-    
+
     const totalScore = (
       (hitRateScore * weights.hitRate) +
       (metrics.queueHealth * weights.queueHealth) +
@@ -2398,7 +2494,7 @@ class SupabaseCacheWarmingService {
    */
   async performAdvancedQueueMaintenance() {
     const maintenanceStartTime = Date.now();
-    
+
     try {
       const results = {
         queueCleanup: null,
@@ -2418,7 +2514,7 @@ class SupabaseCacheWarmingService {
       // 1. Remove stale queue items (older than 1 hour)
       const staleThreshold = Date.now() - (60 * 60 * 1000); // 1 hour
       let staleRemoved = 0;
-      
+
       if (this.queueManager) {
         // This would require extending the queue manager to support stale item removal
         // For now, we'll simulate the operation
@@ -2486,10 +2582,10 @@ class SupabaseCacheWarmingService {
    */
   async optimizeQueuePriorities() {
     console.log('⚡ Optimizing queue priorities...');
-    
+
     // Analyze current context
     const contextAnalysis = this.analyzeCurrentContext();
-    
+
     // This would involve reordering queue items based on current priority
     // For now, return analysis results
     return {
@@ -2505,7 +2601,7 @@ class SupabaseCacheWarmingService {
    */
   async removeDuplicateQueueItems() {
     console.log('🔍 Checking for duplicate queue items...');
-    
+
     // The queue manager already prevents duplicates, but this is a safety check
     return 0;
   }
@@ -2516,7 +2612,7 @@ class SupabaseCacheWarmingService {
    */
   async performQueueCleanup() {
     console.log('🧹 Performing general queue cleanup...');
-    
+
     return {
       stuckItemsCleared: 0,
       processingStateReset: true,
@@ -2530,7 +2626,7 @@ class SupabaseCacheWarmingService {
    */
   async performMemoryCleanup() {
     const cleanupStartTime = Date.now();
-    
+
     try {
       const results = {
         historyCleanup: null,
@@ -2545,7 +2641,7 @@ class SupabaseCacheWarmingService {
         const removed = initialHistorySize - this.config.maxHistorySize;
         this.warmingHistory = this.warmingHistory.slice(-this.config.maxHistorySize);
         console.log(`🧹 Cleaned up ${removed} old warming history entries`);
-        
+
         results.historyCleanup = {
           removed,
           remaining: this.warmingHistory.length
@@ -2570,13 +2666,13 @@ class SupabaseCacheWarmingService {
         const memBefore = process.memoryUsage();
         global.gc();
         const memAfter = process.memoryUsage();
-        
+
         results.memoryOptimization = {
           before: memBefore,
           after: memAfter,
           freed: memBefore.heapUsed - memAfter.heapUsed
         };
-        
+
         console.log(`🧹 Garbage collection freed ${results.memoryOptimization.freed} bytes`);
       } else {
         results.memoryOptimization = { message: 'Garbage collection not available' };
@@ -2587,7 +2683,7 @@ class SupabaseCacheWarmingService {
 
       results.duration = Date.now() - cleanupStartTime;
       console.log(`🧹 Memory cleanup completed in ${results.duration}ms`);
-      
+
       return results;
 
     } catch (error) {
@@ -2605,11 +2701,11 @@ class SupabaseCacheWarmingService {
    */
   async performCacheCleanup() {
     console.log('🧹 Performing cache cleanup...');
-    
+
     // Clear any stale behavior patterns (older than 24 hours)
     const staleThreshold = Date.now() - (24 * 60 * 60 * 1000);
     let patternsCleared = 0;
-    
+
     if (this.behaviorPatterns.lastUpdated && this.behaviorPatterns.lastUpdated < staleThreshold) {
       this.behaviorPatterns = {};
       patternsCleared = 1;
@@ -2629,7 +2725,7 @@ class SupabaseCacheWarmingService {
    */
   async performAutomaticWarming(cacheHealth) {
     const warmingStartTime = Date.now();
-    
+
     try {
       const results = {
         triggered: false,
@@ -2640,7 +2736,7 @@ class SupabaseCacheWarmingService {
 
       // Check if automatic warming should be triggered
       const shouldWarm = this.shouldTriggerAutomaticWarming(cacheHealth);
-      
+
       if (!shouldWarm.trigger) {
         results.reason = shouldWarm.reason;
         results.duration = Date.now() - warmingStartTime;
@@ -2657,7 +2753,7 @@ class SupabaseCacheWarmingService {
       if (currentUser) {
         // Determine warming strategy based on health metrics
         const strategy = this.determineWarmingStrategy(cacheHealth);
-        
+
         const warmingRequest = {
           userId: currentUser.id,
           strategy,
@@ -2679,14 +2775,14 @@ class SupabaseCacheWarmingService {
               healthScore: cacheHealth.score
             });
             break;
-            
+
           case 'smart':
             warmingResult = await this.smartWarmCache(currentUser.id, {
               trigger: 'maintenance',
               healthScore: cacheHealth.score
             });
             break;
-            
+
           default:
             warmingResult = await this.warmUserCacheWithRetry(currentUser.id, shouldWarm.priority, null, {
               trigger: 'maintenance',
@@ -2780,11 +2876,11 @@ class SupabaseCacheWarmingService {
     if (cacheHealth.status === 'critical' || cacheHealth.hitRate < 50) {
       return 'progressive';
     }
-    
+
     if (cacheHealth.status === 'warning' || cacheHealth.hitRate < 75) {
       return 'smart';
     }
-    
+
     return 'basic';
   }
 
@@ -2794,7 +2890,7 @@ class SupabaseCacheWarmingService {
    */
   async performPerformanceOptimization() {
     const optimizationStartTime = Date.now();
-    
+
     try {
       const results = {
         configOptimization: null,
@@ -2817,7 +2913,7 @@ class SupabaseCacheWarmingService {
 
       results.duration = Date.now() - optimizationStartTime;
       console.log(`⚡ Performance optimization completed in ${results.duration}ms`);
-      
+
       return results;
 
     } catch (error) {
@@ -2835,7 +2931,7 @@ class SupabaseCacheWarmingService {
    */
   async optimizeConfiguration() {
     console.log('⚙️ Optimizing service configuration...');
-    
+
     const stats = this.getWarmingStats();
     const optimizations = [];
 
@@ -2872,7 +2968,7 @@ class SupabaseCacheWarmingService {
    */
   async optimizeQueueSettings() {
     console.log('🔄 Optimizing queue settings...');
-    
+
     const queueStatus = this.getQueueStatus();
     if (!queueStatus) {
       return { message: 'Queue status unavailable' };
@@ -2903,7 +2999,7 @@ class SupabaseCacheWarmingService {
    */
   async optimizeMemoryUsage() {
     console.log('💾 Optimizing memory usage...');
-    
+
     const memoryUsage = process.memoryUsage();
     const optimizations = [];
 
@@ -2965,7 +3061,7 @@ class SupabaseCacheWarmingService {
    */
   async generateMaintenanceReport(maintenanceResults) {
     const reportStartTime = Date.now();
-    
+
     try {
       const report = {
         timestamp: Date.now(),
@@ -3047,12 +3143,12 @@ class SupabaseCacheWarmingService {
     }
 
     // Remove duplicates and sort by priority
-    const uniqueRecommendations = allRecommendations.filter((rec, index, self) => 
+    const uniqueRecommendations = allRecommendations.filter((rec, index, self) =>
       index === self.findIndex(r => r.action === rec.action)
     );
 
     const priorityOrder = { 'high': 3, 'medium': 2, 'low': 1 };
-    return uniqueRecommendations.sort((a, b) => 
+    return uniqueRecommendations.sort((a, b) =>
       (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0)
     );
   }
@@ -3121,19 +3217,19 @@ class SupabaseCacheWarmingService {
       config: this.config, // Pass service configuration to context analyzer
       ...options
     };
-    
+
     const analysis = this.contextAnalyzer.determinePriority(contextOptions);
-    
+
     console.log('🧠 Context analysis completed:', {
       priority: analysis.finalPriority,
       strategy: analysis.warmingStrategy,
       score: analysis.priorityScore.toFixed(3),
       recommendations: analysis.recommendations.length
     });
-    
+
     return analysis;
   }
-  
+
   /**
    * Update current page context for analysis
    * @param {string} pageName - Current page name
@@ -3141,30 +3237,30 @@ class SupabaseCacheWarmingService {
    */
   updatePageContext(pageName, previousPage = null) {
     const oldContext = this.currentPageContext;
-    
+
     this.currentPageContext = {
       current: pageName,
       previous: previousPage || oldContext?.current || null,
       timestamp: Date.now()
     };
-    
+
     console.log('📄 Page context updated:', this.currentPageContext);
-    
+
     // Update behavior patterns
     this.updateBehaviorPatterns(pageName);
   }
-  
+
   /**
    * Update user behavior patterns based on page visits
    * @param {string} pageName - Visited page name
    */
   updateBehaviorPatterns(pageName) {
     if (!pageName) return;
-    
+
     const now = Date.now();
     const hour = new Date().getHours();
     const dayOfWeek = new Date().getDay();
-    
+
     // Initialize patterns if not exists
     if (!this.behaviorPatterns.pageVisits) {
       this.behaviorPatterns.pageVisits = {};
@@ -3175,27 +3271,27 @@ class SupabaseCacheWarmingService {
     if (!this.behaviorPatterns.dayPatterns) {
       this.behaviorPatterns.dayPatterns = {};
     }
-    
+
     // Track page visits
     if (!this.behaviorPatterns.pageVisits[pageName]) {
       this.behaviorPatterns.pageVisits[pageName] = [];
     }
     this.behaviorPatterns.pageVisits[pageName].push(now);
-    
+
     // Track time patterns
     const timeKey = `hour_${hour}`;
     if (!this.behaviorPatterns.timePatterns[timeKey]) {
       this.behaviorPatterns.timePatterns[timeKey] = 0;
     }
     this.behaviorPatterns.timePatterns[timeKey]++;
-    
+
     // Track day patterns
     const dayKey = `day_${dayOfWeek}`;
     if (!this.behaviorPatterns.dayPatterns[dayKey]) {
       this.behaviorPatterns.dayPatterns[dayKey] = 0;
     }
     this.behaviorPatterns.dayPatterns[dayKey]++;
-    
+
     // Keep only recent visits (last 30 days)
     const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
     Object.keys(this.behaviorPatterns.pageVisits).forEach(page => {
@@ -3203,7 +3299,7 @@ class SupabaseCacheWarmingService {
         .filter(timestamp => timestamp > thirtyDaysAgo);
     });
   }
-  
+
   /**
    * Set user preferences for cache warming
    * @param {Object} preferences - User preferences object
@@ -3216,10 +3312,10 @@ class SupabaseCacheWarmingService {
       aggressiveCaching: preferences.aggressiveCaching || false,
       ...preferences
     };
-    
+
     console.log('⚙️ User preferences updated:', this.userPreferences);
   }
-  
+
   /**
    * Get behavior pattern insights
    * @returns {Object} Behavior pattern analysis
@@ -3231,7 +3327,7 @@ class SupabaseCacheWarmingService {
       activeDays: [],
       patterns: this.behaviorPatterns
     };
-    
+
     // Analyze most visited pages
     if (this.behaviorPatterns.pageVisits) {
       insights.mostVisitedPages = Object.entries(this.behaviorPatterns.pageVisits)
@@ -3239,33 +3335,33 @@ class SupabaseCacheWarmingService {
         .sort((a, b) => b.count - a.count)
         .slice(0, 5);
     }
-    
+
     // Analyze peak hours
     if (this.behaviorPatterns.timePatterns) {
       insights.peakHours = Object.entries(this.behaviorPatterns.timePatterns)
-        .map(([hourKey, count]) => ({ 
-          hour: parseInt(hourKey.split('_')[1]), 
-          count 
+        .map(([hourKey, count]) => ({
+          hour: parseInt(hourKey.split('_')[1]),
+          count
         }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 3);
     }
-    
+
     // Analyze active days
     if (this.behaviorPatterns.dayPatterns) {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       insights.activeDays = Object.entries(this.behaviorPatterns.dayPatterns)
         .map(([dayKey, count]) => {
           const dayNum = parseInt(dayKey.split('_')[1]);
-          return { 
-            day: dayNames[dayNum], 
+          return {
+            day: dayNames[dayNum],
             dayOfWeek: dayNum,
-            count 
+            count
           };
         })
         .sort((a, b) => b.count - a.count);
     }
-    
+
     return insights;
   }
 
@@ -3287,7 +3383,7 @@ class SupabaseCacheWarmingService {
       // Event categorization
       category: this.categorizeEvent(type, metadata),
       tags: this.generateEventTags(type, success, metadata),
-      
+
       // Context information
       pageContext: this.currentPageContext,
       userPreferences: this.userPreferences,
@@ -3296,24 +3392,24 @@ class SupabaseCacheWarmingService {
         activeWarming: this.queueManager.activeWarming.size,
         isProcessing: this.queueManager.processingQueue
       } : null,
-      
+
       // Performance context
       performanceContext: {
         memoryPressure: this.detectMemoryPressure(),
         networkCondition: this.estimateNetworkCondition(),
         systemLoad: this.estimateSystemLoad()
       },
-      
+
       // Correlation data
       correlationId: this.generateCorrelationId(type, metadata),
       sequenceNumber: this.getNextSequenceNumber(),
       parentEventId: metadata.parentEventId || null,
-      
+
       // Timing details
       recordedAt: timestamp,
       processingDelay: metadata.queueWaitTime || 0,
       retryAttempt: metadata.attempt || 1,
-      
+
       // Additional tracking
       sessionId: this.getSessionId(),
       serviceVersion: this.getServiceVersion(),
@@ -3345,7 +3441,7 @@ class SupabaseCacheWarmingService {
     // Enhanced logging with context
     const logLevel = success ? 'info' : 'error';
     const contextInfo = this.buildContextInfo(type, enhancedMetadata);
-    
+
     console.log(`📝 [${logLevel.toUpperCase()}] Recorded warming event: ${type} (${success ? 'success' : 'failed'}) - ${duration}ms ${contextInfo}`);
 
     // Trigger event correlation analysis
@@ -3453,7 +3549,7 @@ class SupabaseCacheWarmingService {
     const userId = metadata.userId || 'anonymous';
     const sessionId = this.getSessionId();
     const timestamp = Date.now();
-    
+
     return `${type}_${userId}_${sessionId}_${timestamp}`;
   }
 
@@ -3510,7 +3606,7 @@ class SupabaseCacheWarmingService {
       const used = performance.memory.usedJSHeapSize;
       const limit = performance.memory.jsHeapSizeLimit;
       const ratio = used / limit;
-      
+
       if (ratio > 0.9) return 'high';
       if (ratio > 0.7) return 'medium';
       return 'low';
@@ -3526,7 +3622,7 @@ class SupabaseCacheWarmingService {
     if (typeof navigator !== 'undefined' && navigator.connection) {
       const connection = navigator.connection;
       const effectiveType = connection.effectiveType;
-      
+
       if (effectiveType === '4g') return 'good';
       if (effectiveType === '3g') return 'fair';
       return 'poor';
@@ -3542,9 +3638,9 @@ class SupabaseCacheWarmingService {
     // Simple heuristic based on recent event processing times
     const recentEvents = this.warmingHistory.slice(-5);
     if (recentEvents.length < 3) return 'unknown';
-    
+
     const averageDuration = recentEvents.reduce((sum, e) => sum + e.duration, 0) / recentEvents.length;
-    
+
     if (averageDuration > 5000) return 'high';
     if (averageDuration > 2000) return 'medium';
     return 'low';
@@ -3558,23 +3654,23 @@ class SupabaseCacheWarmingService {
    */
   buildContextInfo(type, metadata) {
     const contextParts = [];
-    
+
     if (metadata.userId) {
       contextParts.push(`user:${metadata.userId.substr(0, 8)}`);
     }
-    
+
     if (metadata.priority) {
       contextParts.push(`priority:${metadata.priority}`);
     }
-    
+
     if (metadata.category) {
       contextParts.push(`category:${metadata.category}`);
     }
-    
+
     if (metadata.tags && metadata.tags.length > 0) {
       contextParts.push(`tags:[${metadata.tags.slice(0, 3).join(',')}]`);
     }
-    
+
     return contextParts.length > 0 ? `[${contextParts.join(' ')}]` : '';
   }
 
@@ -3586,10 +3682,10 @@ class SupabaseCacheWarmingService {
     // Simple correlation analysis - in production, this would be more sophisticated
     const recentEvents = this.warmingHistory.slice(-10);
     const sameTypeEvents = recentEvents.filter(e => e.type === event.type);
-    
+
     if (sameTypeEvents.length >= 3) {
       const successRate = sameTypeEvents.filter(e => e.success).length / sameTypeEvents.length;
-      
+
       if (successRate < 0.5) {
         console.warn(`🔍 Pattern detected: Low success rate for ${event.type} events (${(successRate * 100).toFixed(1)}%)`);
       }
@@ -3603,10 +3699,10 @@ class SupabaseCacheWarmingService {
   detectEventPatterns(event) {
     // Detect unusual duration patterns
     const sameTypeEvents = this.warmingHistory.filter(e => e.type === event.type).slice(-5);
-    
+
     if (sameTypeEvents.length >= 3) {
       const averageDuration = sameTypeEvents.reduce((sum, e) => sum + e.duration, 0) / sameTypeEvents.length;
-      
+
       if (event.duration > averageDuration * 2) {
         console.warn(`🔍 Anomaly detected: ${event.type} took ${event.duration}ms (avg: ${averageDuration.toFixed(0)}ms)`);
       }
@@ -3621,7 +3717,7 @@ class SupabaseCacheWarmingService {
     // Update behavior patterns for context analysis
     if (event.metadata.userId && event.success) {
       const userId = event.metadata.userId;
-      
+
       if (!this.behaviorPatterns[userId]) {
         this.behaviorPatterns[userId] = {
           totalEvents: 0,
@@ -3630,18 +3726,18 @@ class SupabaseCacheWarmingService {
           commonPages: {}
         };
       }
-      
+
       const userPattern = this.behaviorPatterns[userId];
       userPattern.totalEvents++;
-      
+
       if (event.success) {
         userPattern.successfulEvents++;
       }
-      
+
       // Track time patterns
       const hour = new Date(event.timestamp).getHours();
       userPattern.preferredTimes[hour] = (userPattern.preferredTimes[hour] || 0) + 1;
-      
+
       // Track page patterns
       if (event.metadata.pageContext && event.metadata.pageContext.pageName) {
         const page = event.metadata.pageContext.pageName;
@@ -3817,8 +3913,8 @@ class SupabaseCacheWarmingService {
     const secondHalfSuccess = secondHalf.filter(e => e.success).length / secondHalf.length;
 
     const change = Math.abs((secondHalfSuccess - firstHalfSuccess) * 100);
-    const direction = secondHalfSuccess > firstHalfSuccess ? 'improving' : 
-                     secondHalfSuccess < firstHalfSuccess ? 'declining' : 'stable';
+    const direction = secondHalfSuccess > firstHalfSuccess ? 'improving' :
+      secondHalfSuccess < firstHalfSuccess ? 'declining' : 'stable';
 
     return {
       trend: direction,
@@ -3856,10 +3952,10 @@ class SupabaseCacheWarmingService {
     });
 
     const hours = Object.keys(hourlyDistribution).map(Number);
-    const mostActiveHour = hours.reduce((a, b) => 
+    const mostActiveHour = hours.reduce((a, b) =>
       hourlyDistribution[a] > hourlyDistribution[b] ? a : b
     );
-    const leastActiveHour = hours.reduce((a, b) => 
+    const leastActiveHour = hours.reduce((a, b) =>
       hourlyDistribution[a] < hourlyDistribution[b] ? a : b
     );
 
@@ -3928,7 +4024,7 @@ class SupabaseCacheWarmingService {
 
     // Estimate wait time based on queue size and processing capacity
     const estimatedWaitTime = (queueSize / maxConcurrent) * processingInterval;
-    
+
     if (estimatedWaitTime < 1000) {
       return `${Math.round(estimatedWaitTime)}ms`;
     } else if (estimatedWaitTime < 60000) {
@@ -3944,7 +4040,7 @@ class SupabaseCacheWarmingService {
    */
   calculateThroughputTrend() {
     const recentEvents = this.warmingHistory.slice(-20); // Last 20 events
-    
+
     if (recentEvents.length < 10) {
       return { trend: 'insufficient-data', throughput: '0 events/min' };
     }
@@ -3963,8 +4059,8 @@ class SupabaseCacheWarmingService {
     const firstHalfThroughput = firstHalf.length / (firstHalfSpan / 60000);
     const secondHalfThroughput = secondHalf.length / (secondHalfSpan / 60000);
 
-    const trend = secondHalfThroughput > firstHalfThroughput ? 'increasing' : 
-                 secondHalfThroughput < firstHalfThroughput ? 'decreasing' : 'stable';
+    const trend = secondHalfThroughput > firstHalfThroughput ? 'increasing' :
+      secondHalfThroughput < firstHalfThroughput ? 'decreasing' : 'stable';
 
     return {
       trend,
@@ -4041,7 +4137,7 @@ class SupabaseCacheWarmingService {
   generateContextualRecommendations() {
     const recommendations = [];
     const recentEvents = this.warmingHistory.slice(-10);
-    const failureRate = recentEvents.length > 0 ? 
+    const failureRate = recentEvents.length > 0 ?
       recentEvents.filter(e => !e.success).length / recentEvents.length : 0;
 
     // Performance recommendations
@@ -4120,7 +4216,7 @@ class SupabaseCacheWarmingService {
    */
   calculatePerformanceProjections() {
     const recentEvents = this.warmingHistory.slice(-20);
-    
+
     if (recentEvents.length < 10) {
       return {
         available: false,
@@ -4213,17 +4309,17 @@ class SupabaseCacheWarmingService {
       interval: this.maintenanceSchedule,
       config,
       state: this.maintenanceState,
-      
+
       // Control methods
       stop: () => this.stopMaintenanceSchedule(),
       restart: (newInterval) => this.restartMaintenanceSchedule(newInterval, options),
       getStatus: () => this.getMaintenanceStatus(),
       forceRun: () => this.executeScheduledMaintenance(true),
-      
+
       // Configuration methods
       updateConfig: (newOptions) => this.updateMaintenanceConfig(newOptions),
       setQuietHours: (start, end) => this.setMaintenanceQuietHours(start, end),
-      
+
       // Monitoring methods
       getStats: () => this.getMaintenanceStats(),
       getHealth: () => this.getMaintenanceHealth()
@@ -4243,7 +4339,7 @@ class SupabaseCacheWarmingService {
     }
 
     console.log('🛑 Stopping maintenance schedule...');
-    
+
     // Clear the interval
     clearInterval(this.maintenanceSchedule);
     this.maintenanceSchedule = null;
@@ -4264,11 +4360,11 @@ class SupabaseCacheWarmingService {
    */
   restartMaintenanceSchedule(intervalMinutes, options = {}) {
     console.log(`🔄 Restarting maintenance schedule with ${intervalMinutes}m interval`);
-    
+
     // Preserve existing config if not overridden
     const existingConfig = this.maintenanceState?.config || {};
     const mergedOptions = { ...existingConfig, ...options };
-    
+
     this.stopMaintenanceSchedule();
     return this.startMaintenanceSchedule(intervalMinutes, mergedOptions);
   }
@@ -4306,7 +4402,7 @@ class SupabaseCacheWarmingService {
       // Set timeout for maintenance execution
       const maintenancePromise = this.performEnhancedMaintenance();
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Maintenance timeout')), 
+        setTimeout(() => reject(new Error('Maintenance timeout')),
           this.maintenanceState.config.maxMaintenanceDuration);
       });
 
@@ -4324,12 +4420,12 @@ class SupabaseCacheWarmingService {
       // Handle maintenance failure
       const duration = Date.now() - startTime;
       this.updateMaintenanceMetrics(duration, false);
-      
+
       console.error('❌ Scheduled maintenance failed:', error);
-      
+
       // Implement retry logic
       await this.handleMaintenanceFailure(error);
-      
+
       throw error;
     } finally {
       this.maintenanceState.isRunning = false;
@@ -4409,10 +4505,10 @@ class SupabaseCacheWarmingService {
    */
   async handleMaintenanceFailure(error) {
     const { maxRetries, retryDelay } = this.maintenanceState.config;
-    
+
     if (this.maintenanceState.consecutiveFailures < maxRetries) {
       console.log(`🔄 Scheduling maintenance retry in ${retryDelay}ms (attempt ${this.maintenanceState.consecutiveFailures + 1}/${maxRetries})`);
-      
+
       setTimeout(async () => {
         try {
           await this.executeScheduledMaintenance(true);
@@ -4422,7 +4518,7 @@ class SupabaseCacheWarmingService {
       }, retryDelay);
     } else {
       console.error(`💥 Maintenance failed ${maxRetries} times consecutively, giving up`);
-      
+
       // Could implement alerting here
       this.recordMaintenanceAlert('consecutive-failures', {
         failures: this.maintenanceState.consecutiveFailures,
@@ -4464,7 +4560,7 @@ class SupabaseCacheWarmingService {
     }
 
     console.log('🔧 Updating maintenance configuration:', newOptions);
-    
+
     this.maintenanceState.config = {
       ...this.maintenanceState.config,
       ...newOptions
@@ -4500,7 +4596,7 @@ class SupabaseCacheWarmingService {
     }
 
     const uptime = Date.now() - this.maintenanceState.startTime;
-    const successRate = this.maintenanceState.totalRuns > 0 
+    const successRate = this.maintenanceState.totalRuns > 0
       ? ((this.maintenanceState.totalRuns - this.maintenanceState.totalFailures) / this.maintenanceState.totalRuns * 100).toFixed(2)
       : 0;
 
@@ -4620,7 +4716,7 @@ class SupabaseCacheWarmingService {
     };
 
     console.warn(`🚨 Maintenance alert [${alert.severity}]: ${type}`, details);
-    
+
     // Could integrate with external alerting systems here
     // For now, we'll just log it
   }
@@ -4734,7 +4830,7 @@ class SupabaseCacheWarmingService {
 
     try {
       const queueStatus = this.queueManager.getQueueStatus();
-      
+
       // Log queue statistics
       console.log('📊 Queue status:', {
         totalSize: queueStatus.totalSize,
@@ -4751,12 +4847,12 @@ class SupabaseCacheWarmingService {
       Object.keys(this.queueManager.queues).forEach(priority => {
         const queue = this.queueManager.queues[priority];
         const initialLength = queue.length;
-        
+
         this.queueManager.queues[priority] = queue.filter(item => {
           const age = now - item.timestamp;
           return age < maxQueueAge;
         });
-        
+
         const removed = initialLength - this.queueManager.queues[priority].length;
         staleItemsRemoved += removed;
       });

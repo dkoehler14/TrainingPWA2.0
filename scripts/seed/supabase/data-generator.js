@@ -122,7 +122,6 @@ async function generateDiverseUsers(supabase, count, options = {}) {
     
     const userData = {
       id: generateUUID(),
-      auth_id: generateUUID(),
       email: `user${i + 1}@example.com`,
       name: `Test User ${i + 1}`,
       experience_level: experienceLevel,

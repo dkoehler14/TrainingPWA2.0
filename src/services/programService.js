@@ -132,8 +132,24 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
             })
           }
 
+          console.log('🔍 [DEBUG_PROGRAM_SERVICE] Before transformation:', {
+            programId: program.id,
+            programName: program.name,
+            hasWorkouts: !!program.program_workouts,
+            workoutCount: program.program_workouts?.length || 0,
+            programKeys: Object.keys(program)
+          });
+
           // Apply transformation to convert normalized data to weekly_configs format
           const transformedProgram = transformSupabaseProgramToWeeklyConfigs(program);
+
+          console.log('🔍 [DEBUG_PROGRAM_SERVICE] After transformation:', {
+            programId: transformedProgram.id,
+            programName: transformedProgram.name,
+            hasWeeklyConfigs: !!transformedProgram.weekly_configs,
+            weeklyConfigsKeys: transformedProgram.weekly_configs ? Object.keys(transformedProgram.weekly_configs) : [],
+            transformedKeys: Object.keys(transformedProgram)
+          });
 
           return transformedProgram;
         })
@@ -143,6 +159,16 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
         //   templatePrograms: transformedPrograms.filter(p => p.is_template).length,
         //   userPrograms: transformedPrograms.filter(p => !p.is_template).length,
         // });
+
+        console.log('🔍 [DEBUG_PROGRAM_SERVICE] Final transformed programs array:', {
+          totalPrograms: transformedPrograms.length,
+          programSummary: transformedPrograms.map(p => ({
+            id: p.id,
+            name: p.name,
+            hasWeeklyConfigs: !!p.weekly_configs,
+            weeklyConfigsCount: p.weekly_configs ? Object.keys(p.weekly_configs).length : 0
+          }))
+        });
 
         return transformedPrograms
       },
@@ -235,6 +261,27 @@ export const getUserPrograms = async (userId, filters = {}) => {
 
       return filteredPrograms;
     }
+
+    // If no cached data available, fetch all programs and then filter
+    console.log('🔄 [CACHE_MISS] No cached all-programs data, fetching from database and filtering:', {
+      templateFilter: filters.isTemplate,
+      otherFilters: nonTemplateFilters
+    });
+
+    const allPrograms = await getAllUserPrograms(userId, nonTemplateFilters);
+    
+    // Filter by template status
+    const filteredPrograms = allPrograms.filter(program => 
+      program.is_template === filters.isTemplate
+    );
+
+    console.log('✅ [DATABASE_FILTER] Database fetch and filtering completed:', {
+      totalFetched: allPrograms.length,
+      filteredCount: filteredPrograms.length,
+      templateFilter: filters.isTemplate,
+    });
+
+    return filteredPrograms;
 
   }, 'getUserPrograms')
 }

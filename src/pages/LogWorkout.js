@@ -447,11 +447,51 @@ function LogWorkout() {
             )
           ]);
 
-          // Process programs data
-          const parsedPrograms = programsData.map(data => {
-            // Ensure backward compatibility and transform to expected format
-            return ensureBackwardCompatibility(data, 'program');
+          console.log('🔍 [DEBUG_LOGWORKOUT] Raw programs data from service:', {
+            programsDataType: typeof programsData,
+            programsDataIsArray: Array.isArray(programsData),
+            programsDataLength: programsData?.length || 0,
+            programsDataSample: programsData?.length > 0 ? {
+              id: programsData[0].id,
+              name: programsData[0].name,
+              hasWeeklyConfigs: !!programsData[0].weekly_configs,
+              weeklyConfigsKeys: programsData[0].weekly_configs ? Object.keys(programsData[0].weekly_configs) : []
+            } : null
           });
+
+          // Process programs data
+          const parsedPrograms = programsData.map((data, index) => {
+            console.log(`🔍 [DEBUG_LOGWORKOUT] Processing program ${index + 1}:`, {
+              id: data.id,
+              name: data.name,
+              beforeCompatibilityKeys: Object.keys(data),
+              hasWeeklyConfigs: !!data.weekly_configs
+            });
+
+            // Ensure backward compatibility and transform to expected format
+            const compatibleData = ensureBackwardCompatibility(data, 'program');
+
+            console.log(`🔍 [DEBUG_LOGWORKOUT] After compatibility processing:`, {
+              id: compatibleData.id,
+              name: compatibleData.name,
+              afterCompatibilityKeys: Object.keys(compatibleData),
+              hasWeeklyConfigs: !!compatibleData.weekly_configs,
+              hasWeeklyConfigsParsed: !!compatibleData.weeklyConfigs
+            });
+
+            return compatibleData;
+          });
+
+          console.log('🔍 [DEBUG_LOGWORKOUT] Final parsed programs:', {
+            parsedProgramsLength: parsedPrograms.length,
+            parsedProgramsSummary: parsedPrograms.map(p => ({
+              id: p.id,
+              name: p.name,
+              hasWeeklyConfigs: !!p.weekly_configs,
+              hasWeeklyConfigsParsed: !!p.weeklyConfigs
+            }))
+          });
+
           setPrograms(parsedPrograms);
 
           // Process exercises data

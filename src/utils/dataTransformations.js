@@ -15,6 +15,16 @@ import { parseWeeklyConfigs } from './programUtils';
 export const transformSupabaseProgramToWeeklyConfigs = (program) => {
   const startTime = performance.now();
 
+  console.log('🔍 [DEBUG_TRANSFORM] Starting transformation for program:', {
+    programId: program?.id,
+    programName: program?.name,
+    hasProgram: !!program,
+    programType: typeof program,
+    programKeys: program ? Object.keys(program) : [],
+    hasWorkouts: !!program?.program_workouts,
+    workoutCount: program?.program_workouts?.length || 0
+  });
+
   // Handle missing or invalid program data
   if (!program || typeof program !== 'object') {
     console.error('❌ [DATA_TRANSFORM] Invalid program object provided:', {
@@ -33,7 +43,12 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       programName: program.name,
       hasWorkouts: !!program.program_workouts,
       workoutsType: typeof program.program_workouts,
-      isArray: Array.isArray(program.program_workouts)
+      isArray: Array.isArray(program.program_workouts),
+      rawWorkouts: program.program_workouts
+    });
+    console.log('🔍 [DEBUG_TRANSFORM] Returning program with empty weekly_configs:', {
+      programId: program.id,
+      returnedKeys: Object.keys({ ...program, weekly_configs: {} })
     });
     return { ...program, weekly_configs: {} };
   }
@@ -137,10 +152,28 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
     const endTime = performance.now();
     const transformationTime = endTime - startTime;
 
-    return {
+    const transformedProgram = {
       ...program,
       weekly_configs: weekly_configs
     };
+
+    console.log('✅ [DEBUG_TRANSFORM] Transformation completed successfully:', {
+      programId: program.id,
+      programName: program.name,
+      processedWorkouts,
+      skippedWorkouts,
+      totalExercises,
+      weeklyConfigsKeys: Object.keys(weekly_configs),
+      weeklyConfigsCount: Object.keys(weekly_configs).length,
+      transformationTimeMs: transformationTime.toFixed(2),
+      finalProgramKeys: Object.keys(transformedProgram),
+      hasWeeklyConfigs: !!transformedProgram.weekly_configs,
+      weeklyConfigsSize: JSON.stringify(weekly_configs).length
+    });
+
+    console.log('🔍 [DEBUG_TRANSFORM] Final weekly_configs structure:', weekly_configs);
+
+    return transformedProgram;
 
   } catch (error) {
     const endTime = performance.now();

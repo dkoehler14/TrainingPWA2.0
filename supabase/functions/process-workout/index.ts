@@ -97,7 +97,7 @@ serve(async (req: Request) => {
         const { data: userData } = await supabaseClient
             .from('users')
             .select('weight')
-            .eq('auth_id', user.id)
+            .eq('id', user.id)
             .single()
 
         const userBodyweight = userData?.weight || 0
