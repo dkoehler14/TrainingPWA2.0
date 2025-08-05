@@ -15,15 +15,7 @@ import { parseWeeklyConfigs } from './programUtils';
 export const transformSupabaseProgramToWeeklyConfigs = (program) => {
   const startTime = performance.now();
 
-  console.log('🔍 [DEBUG_TRANSFORM] Starting transformation for program:', {
-    programId: program?.id,
-    programName: program?.name,
-    hasProgram: !!program,
-    programType: typeof program,
-    programKeys: program ? Object.keys(program) : [],
-    hasWorkouts: !!program?.program_workouts,
-    workoutCount: program?.program_workouts?.length || 0
-  });
+
 
   // Handle missing or invalid program data
   if (!program || typeof program !== 'object') {
@@ -46,10 +38,7 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       isArray: Array.isArray(program.program_workouts),
       rawWorkouts: program.program_workouts
     });
-    console.log('🔍 [DEBUG_TRANSFORM] Returning program with empty weekly_configs:', {
-      programId: program.id,
-      returnedKeys: Object.keys({ ...program, weekly_configs: {} })
-    });
+
     return { ...program, weekly_configs: {} };
   }
 
@@ -162,16 +151,8 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
       programName: program.name,
       processedWorkouts,
       skippedWorkouts,
-      totalExercises,
-      weeklyConfigsKeys: Object.keys(weekly_configs),
-      weeklyConfigsCount: Object.keys(weekly_configs).length,
-      transformationTimeMs: transformationTime.toFixed(2),
-      finalProgramKeys: Object.keys(transformedProgram),
-      hasWeeklyConfigs: !!transformedProgram.weekly_configs,
-      weeklyConfigsSize: JSON.stringify(weekly_configs).length
+      totalExercises
     });
-
-    console.log('🔍 [DEBUG_TRANSFORM] Final weekly_configs structure:', weekly_configs);
 
     return transformedProgram;
 
@@ -347,6 +328,26 @@ export const ensureBackwardCompatibility = (data, type) => {
       } else if (data.weekly_configs && !data.weeklyConfigs) {
         // Legacy Firebase format or existing weekly_configs - parse them
         data.weeklyConfigs = parseWeeklyConfigs(data.weekly_configs, data.duration, data.days_per_week);
+      }
+      
+      // Handle snake_case to camelCase field conversions for Supabase data
+      if (data.days_per_week !== undefined && data.daysPerWeek === undefined) {
+        data.daysPerWeek = data.days_per_week;
+      }
+      if (data.is_template !== undefined && data.isTemplate === undefined) {
+        data.isTemplate = data.is_template;
+      }
+      if (data.is_current !== undefined && data.isCurrent === undefined) {
+        data.isCurrent = data.is_current;
+      }
+      if (data.is_active !== undefined && data.isActive === undefined) {
+        data.isActive = data.is_active;
+      }
+      if (data.created_at !== undefined && data.createdAt === undefined) {
+        data.createdAt = data.created_at;
+      }
+      if (data.updated_at !== undefined && data.updatedAt === undefined) {
+        data.updatedAt = data.updated_at;
       }
       break;
 

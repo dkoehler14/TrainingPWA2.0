@@ -446,39 +446,34 @@ export class SupabaseCache {
     const result = await queryFn()
     const queryTime = performance.now() - startTime
 
-    if (result.error) {
+    // Handle both Supabase response objects and direct data returns
+    let safeData, error
+    if (result && typeof result === 'object' && ('data' in result || 'error' in result)) {
+      // This is a Supabase response object
+      safeData = result.data || []
+      error = result.error
+    } else {
+      // This is direct data (e.g., from transformed results)
+      safeData = result || []
+      error = null
+    }
+
+    if (error) {
       logger.error('Database query failed', {
         table,
-        error: result.error.message,
-        code: result.error.code,
+        error: error.message,
+        code: error.code,
         queryTimeMs: Math.round(queryTime * 100) / 100
       });
       updateCacheStats(false, queryTime)
-      throw result.error
+      throw error
     }
 
     // Track database read - handle undefined data
-    const safeData = result.data || []
     const dataSize = JSON.stringify(safeData).length
     const documentCount = Array.isArray(safeData) ? safeData.length : 1
 
-    console.log('🔍 [DEBUG_CACHE] Database query result analysis:', {
-      table,
-      cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
-      hasResult: !!result,
-      hasData: !!result.data,
-      resultKeys: result ? Object.keys(result) : [],
-      dataType: typeof result.data,
-      isArray: Array.isArray(result.data),
-      documentCount,
-      dataSize: formatBytes(dataSize),
-      firstItemKeys: Array.isArray(safeData) && safeData.length > 0 ? Object.keys(safeData[0]) : [],
-      rawDataSample: Array.isArray(safeData) && safeData.length > 0 ? {
-        id: safeData[0].id,
-        name: safeData[0].name,
-        hasWeeklyConfigs: !!safeData[0].weekly_configs
-      } : null
-    });
+
 
     logger.success('Database query completed', {
       table,
@@ -499,27 +494,7 @@ export class SupabaseCache {
       queryTime
     })
 
-    console.log('🔍 [DEBUG_CACHE] Cache entry being created:', {
-      table,
-      cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
-      entryKeys: Object.keys(entry),
-      entryDataType: typeof entry.data,
-      entryDataIsArray: Array.isArray(entry.data),
-      entryDataLength: Array.isArray(entry.data) ? entry.data.length : 'not-array',
-      entryDataSample: Array.isArray(entry.data) && entry.data.length > 0 ? {
-        id: entry.data[0].id,
-        name: entry.data[0].name,
-        hasWeeklyConfigs: !!entry.data[0].weekly_configs
-      } : entry.data
-    });
-
     this.setCacheEntry(cacheKey, entry)
-
-    console.log('🔍 [DEBUG_CACHE] Cache entry stored successfully:', {
-      cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),
-      cacheSize: cache.size,
-      entryStored: cache.has(cacheKey)
-    });
 
     logCacheOperation('set', 'SUPABASE_CACHE', 'Data cached', {
       cacheKey: cacheKey.substring(0, 100) + (cacheKey.length > 100 ? '...' : ''),

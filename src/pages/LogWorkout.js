@@ -209,7 +209,7 @@ function LogWorkout() {
         if (update.type === 'UPDATE' || update.type === 'BROADCAST') {
           // Show real-time update notification
           showUserMessage('Workout updated in real-time', 'info');
-          
+
           // If it's a workout log update, refresh the data
           if (update.table === 'workout_logs' && update.eventType === 'UPDATE') {
             // Refresh workout data to get latest changes
@@ -228,7 +228,7 @@ function LogWorkout() {
               setIsWorkoutFinished(updatedData.is_finished);
             }
           }
-          
+
           // If it's an exercise update, refresh exercise data
           if (update.table === 'workout_log_exercises') {
             // Could refresh specific exercise data here
@@ -447,49 +447,12 @@ function LogWorkout() {
             )
           ]);
 
-          console.log('🔍 [DEBUG_LOGWORKOUT] Raw programs data from service:', {
-            programsDataType: typeof programsData,
-            programsDataIsArray: Array.isArray(programsData),
-            programsDataLength: programsData?.length || 0,
-            programsDataSample: programsData?.length > 0 ? {
-              id: programsData[0].id,
-              name: programsData[0].name,
-              hasWeeklyConfigs: !!programsData[0].weekly_configs,
-              weeklyConfigsKeys: programsData[0].weekly_configs ? Object.keys(programsData[0].weekly_configs) : []
-            } : null
-          });
+
 
           // Process programs data
-          const parsedPrograms = programsData.map((data, index) => {
-            console.log(`🔍 [DEBUG_LOGWORKOUT] Processing program ${index + 1}:`, {
-              id: data.id,
-              name: data.name,
-              beforeCompatibilityKeys: Object.keys(data),
-              hasWeeklyConfigs: !!data.weekly_configs
-            });
-
+          const parsedPrograms = programsData.map((data) => {
             // Ensure backward compatibility and transform to expected format
-            const compatibleData = ensureBackwardCompatibility(data, 'program');
-
-            console.log(`🔍 [DEBUG_LOGWORKOUT] After compatibility processing:`, {
-              id: compatibleData.id,
-              name: compatibleData.name,
-              afterCompatibilityKeys: Object.keys(compatibleData),
-              hasWeeklyConfigs: !!compatibleData.weekly_configs,
-              hasWeeklyConfigsParsed: !!compatibleData.weeklyConfigs
-            });
-
-            return compatibleData;
-          });
-
-          console.log('🔍 [DEBUG_LOGWORKOUT] Final parsed programs:', {
-            parsedProgramsLength: parsedPrograms.length,
-            parsedProgramsSummary: parsedPrograms.map(p => ({
-              id: p.id,
-              name: p.name,
-              hasWeeklyConfigs: !!p.weekly_configs,
-              hasWeeklyConfigsParsed: !!p.weeklyConfigs
-            }))
+            return ensureBackwardCompatibility(data, 'program');
           });
 
           setPrograms(parsedPrograms);
@@ -1140,7 +1103,7 @@ function LogWorkout() {
       const completedSets = logData.reduce((sum, ex) =>
         sum + ex.completed.filter(Boolean).length, 0
       );
-      
+
       progressBroadcast.broadcastWorkoutProgress(completedSets, totalSets, {
         programName: selectedProgram?.name,
         weekIndex: selectedWeek + 1,
@@ -1153,7 +1116,7 @@ function LogWorkout() {
       logData.forEach((exercise, exerciseIndex) => {
         const exerciseData = exercisesList.find(e => e.id === exercise.exerciseId);
         const completedSetsCount = exercise.completed.filter(Boolean).length;
-        
+
         if (completedSetsCount > 0) {
           progressBroadcast.broadcastExerciseCompletion(
             exerciseIndex,
@@ -1166,7 +1129,7 @@ function LogWorkout() {
               totalVolume: exercise.weights.reduce((sum, weight, idx) => {
                 if (exercise.completed[idx]) {
                   const reps = exercise.reps[idx] || 0;
-                  const effectiveWeight = exerciseData?.exerciseType === 'Bodyweight' 
+                  const effectiveWeight = exerciseData?.exerciseType === 'Bodyweight'
                     ? (exercise.bodyweight || 0)
                     : (weight || 0);
                   return sum + (effectiveWeight * reps);

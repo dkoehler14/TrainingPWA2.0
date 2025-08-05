@@ -31,22 +31,12 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
     const cacheKey = `user_programs_all_${userId}${filterKey ? '_' + filterKey : ''}`
 
-    console.log('🔍 [PROGRAM_SERVICE] getAllUserPrograms called:', {
-      userId,
-      additionalFilters,
-      filterKey,
-      cacheKey,
-      timestamp: new Date().toISOString()
-    });
+
 
     return supabaseCache.getWithCache(
       cacheKey,
       async () => {
-        console.log('💾 [CACHE_MISS] Cache miss for getAllUserPrograms, fetching from database:', {
-          cacheKey,
-          userId,
-          filters
-        });
+
  
         let query = supabase
           .from('programs')
@@ -73,7 +63,6 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
         Object.keys(filters).forEach(key => {
           if (filters[key] !== undefined) {
             query = query.eq(key, filters[key])
-            console.log('🔧 [QUERY_FILTER] Applied filter:', { key, value: filters[key] });
           }
         })
 
@@ -91,16 +80,6 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
           });
           throw error;
         }
-
-        console.log('📊 [DATABASE_SUCCESS] All programs fetched successfully:', {
-          programCount: data?.length || 0,
-          userId,
-          filters,
-          templatePrograms: data?.filter(p => p.is_template).length || 0,
-          userPrograms: data?.filter(p => !p.is_template).length || 0
-        });
-
-        console.log("📋 [RAW_DATA] Raw all programs data from database:", data);
 
         // Transform each program to include weekly_configs
         const transformedPrograms = (data || []).map((program, index) => {
@@ -123,52 +102,15 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
                 
                 workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
                 
-                // console.log(`💪 [EXERCISE_SORT] Sorted exercises for workout ${workoutIndex + 1}:`, {
-                //   workoutId: workout.id,
-                //   originalOrder: originalExerciseOrder,
-                //   sortedOrder: workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }))
-                // });
               }
             })
           }
 
-          console.log('🔍 [DEBUG_PROGRAM_SERVICE] Before transformation:', {
-            programId: program.id,
-            programName: program.name,
-            hasWorkouts: !!program.program_workouts,
-            workoutCount: program.program_workouts?.length || 0,
-            programKeys: Object.keys(program)
-          });
-
           // Apply transformation to convert normalized data to weekly_configs format
           const transformedProgram = transformSupabaseProgramToWeeklyConfigs(program);
 
-          console.log('🔍 [DEBUG_PROGRAM_SERVICE] After transformation:', {
-            programId: transformedProgram.id,
-            programName: transformedProgram.name,
-            hasWeeklyConfigs: !!transformedProgram.weekly_configs,
-            weeklyConfigsKeys: transformedProgram.weekly_configs ? Object.keys(transformedProgram.weekly_configs) : [],
-            transformedKeys: Object.keys(transformedProgram)
-          });
-
           return transformedProgram;
         })
-
-        // console.log('🎯 [TRANSFORM_SUMMARY] All programs transformed:', {
-        //   totalPrograms: data?.length || 0,
-        //   templatePrograms: transformedPrograms.filter(p => p.is_template).length,
-        //   userPrograms: transformedPrograms.filter(p => !p.is_template).length,
-        // });
-
-        console.log('🔍 [DEBUG_PROGRAM_SERVICE] Final transformed programs array:', {
-          totalPrograms: transformedPrograms.length,
-          programSummary: transformedPrograms.map(p => ({
-            id: p.id,
-            name: p.name,
-            hasWeeklyConfigs: !!p.weekly_configs,
-            weeklyConfigsCount: p.weekly_configs ? Object.keys(p.weekly_configs).length : 0
-          }))
-        });
 
         return transformedPrograms
       },
@@ -212,15 +154,10 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
  */
 export const getUserPrograms = async (userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
-    console.log('🔍 [PROGRAM_SERVICE] getUserPrograms called:', {
-      userId,
-      filters,
-      timestamp: new Date().toISOString()
-    });
+
 
     // If no template filter specified, use optimized path with getAllUserPrograms
     if (filters.isTemplate === undefined) {
-      console.log('🚀 [OPTIMIZATION] No template filter specified, using getAllUserPrograms for optimized fetching');
 
       const result = await getAllUserPrograms(userId, filters);
 
@@ -232,41 +169,17 @@ export const getUserPrograms = async (userId, filters = {}) => {
     delete nonTemplateFilters.isTemplate;
     const allProgramsFilterKey = Object.keys(nonTemplateFilters).sort().map(key => `${key}:${nonTemplateFilters[key]}`).join('_');
     const allProgramsCacheKey = `user_programs_all_${userId}${allProgramsFilterKey ? '_' + allProgramsFilterKey : ''}`;
-    
-    console.log('🔍 [BACKWARD_COMPATIBILITY] Checking for cached all-programs data:', {
-      allProgramsCacheKey,
-      templateFilter: filters.isTemplate,
-      otherFilters: nonTemplateFilters
-    });
 
     const cachedAllPrograms = supabaseCache.get(allProgramsCacheKey);
     
     if (cachedAllPrograms) {
-      console.log('🎯 [CACHE_HIT] Found cached all-programs data, filtering client-side:', {
-        cacheKey: allProgramsCacheKey,
-        totalPrograms: cachedAllPrograms.length,
-        templateFilter: filters.isTemplate
-      });
-
       // Filter from cached data
       const filteredPrograms = cachedAllPrograms.filter(program => 
         program.is_template === filters.isTemplate
       );
 
-      console.log('✅ [CLIENT_FILTER] Client-side filtering completed:', {
-        originalCount: cachedAllPrograms.length,
-        filteredCount: filteredPrograms.length,
-        templateFilter: filters.isTemplate,
-      });
-
       return filteredPrograms;
     }
-
-    // If no cached data available, fetch all programs and then filter
-    console.log('🔄 [CACHE_MISS] No cached all-programs data, fetching from database and filtering:', {
-      templateFilter: filters.isTemplate,
-      otherFilters: nonTemplateFilters
-    });
 
     const allPrograms = await getAllUserPrograms(userId, nonTemplateFilters);
     
@@ -274,12 +187,6 @@ export const getUserPrograms = async (userId, filters = {}) => {
     const filteredPrograms = allPrograms.filter(program => 
       program.is_template === filters.isTemplate
     );
-
-    console.log('✅ [DATABASE_FILTER] Database fetch and filtering completed:', {
-      totalFetched: allPrograms.length,
-      filteredCount: filteredPrograms.length,
-      templateFilter: filters.isTemplate,
-    });
 
     return filteredPrograms;
 
@@ -432,22 +339,9 @@ export const createProgram = async (programData) => {
       .single()
 
     if (error) throw error
-
-    // Invalidate user program cache to ensure new program appears
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache after creation:', {
-      userId: programData.user_id,
-      programId: data.id,
-      programName: data.name,
-      reason: 'program-created'
-    });
     
     invalidateProgramCache(programData.user_id)
 
-    console.log('✅ [PROGRAM_CREATED] Program created successfully:', {
-      programId: data.id,
-      programName: data.name,
-      userId: programData.user_id
-    })
     return data
   }, 'createProgram')
 }
@@ -517,26 +411,8 @@ export const createCompleteProgram = async (programData, workoutsData) => {
         allExercises.push(...exercises)
       }
     }
-
-    // Invalidate user program cache to ensure new program appears
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache after complete program creation:', {
-      userId: programData.user_id,
-      programId: program.id,
-      programName: program.name,
-      workoutCount: workouts.length,
-      exerciseCount: allExercises.length,
-      reason: 'complete-program-created'
-    });
     
     invalidateProgramCache(programData.user_id)
-
-    console.log('✅ [COMPLETE_PROGRAM_CREATED] Complete program created successfully:', {
-      programId: program.id,
-      programName: program.name,
-      userId: programData.user_id,
-      workoutCount: workouts.length,
-      exerciseCount: allExercises.length
-    })
     return {
       program,
       workouts,
@@ -564,21 +440,8 @@ export const updateProgram = async (programId, updates) => {
 
     if (error) throw error
     
-    // Invalidate user program cache
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user program cache after update:', {
-      userId: data.user_id,
-      programId,
-      reason: 'program-updated'
-    });
-    
     invalidateProgramCache(data.user_id)
 
-    console.log('✅ [PROGRAM_UPDATED] Program updated successfully:', {
-      programId,
-      programName: data.name,
-      userId: data.user_id,
-      updatedFields: Object.keys(updates)
-    })
     return data
   }, 'updateProgram')
 }
@@ -649,19 +512,8 @@ export const deleteProgram = async (programId, userId) => {
 
     if (error) throw error
     
-    // Invalidate user program cache
-    console.log('🗑️ [CACHE_INVALIDATE] Invalidating user program cache after deletion:', {
-      userId,
-      programId,
-      reason: 'program-deleted'
-    });
-    
     invalidateProgramCache(userId)
 
-    console.log('✅ [PROGRAM_DELETED] Program deleted successfully:', {
-      programId,
-      userId
-    })
     return true
   }, 'deleteProgram')
 }

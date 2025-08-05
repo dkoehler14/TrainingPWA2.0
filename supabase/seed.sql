@@ -19,10 +19,10 @@ INSERT INTO exercises (id, name, primary_muscle_group, exercise_type, instructio
 ('550e8400-e29b-41d4-a716-446655440008', 'Deadlift', 'Back', 'Compound', 'Lift weight from ground by extending hips and knees', true),
 
 -- Legs exercises
-('550e8400-e29b-41d4-a716-446655440009', 'Squat', 'Legs', 'Compound', 'Lower body by bending knees and hips, return to standing', true),
-('550e8400-e29b-41d4-a716-44665544000a', 'Leg Press', 'Legs', 'Compound', 'Push weight away using legs while seated', true),
-('550e8400-e29b-41d4-a716-44665544000b', 'Lunges', 'Legs', 'Compound', 'Step forward, lower back knee toward ground', true),
-('550e8400-e29b-41d4-a716-44665544000c', 'Leg Curl', 'Legs', 'Isolation', 'Curl heels toward glutes against resistance', true),
+('550e8400-e29b-41d4-a716-446655440009', 'Squat', 'Quads', 'Compound', 'Lower body by bending knees and hips, return to standing', true),
+('550e8400-e29b-41d4-a716-44665544000a', 'Leg Press', 'Quads', 'Compound', 'Push weight away using legs while seated', true),
+('550e8400-e29b-41d4-a716-44665544000b', 'Lunges', 'Quads', 'Compound', 'Step forward, lower back knee toward ground', true),
+('550e8400-e29b-41d4-a716-44665544000c', 'Leg Curl', 'Hamstrings', 'Isolation', 'Curl heels toward glutes against resistance', true),
 
 -- Shoulders exercises
 ('550e8400-e29b-41d4-a716-44665544000d', 'Overhead Press', 'Shoulders', 'Compound', 'Press weight overhead from shoulder level', true),
@@ -31,16 +31,16 @@ INSERT INTO exercises (id, name, primary_muscle_group, exercise_type, instructio
 ('550e8400-e29b-41d4-a716-446655440010', 'Rear Delt Flyes', 'Shoulders', 'Isolation', 'Bend forward, raise arms out to sides', true),
 
 -- Arms exercises
-('550e8400-e29b-41d4-a716-446655440011', 'Bicep Curls', 'Arms', 'Isolation', 'Curl weight up by flexing biceps', true),
-('550e8400-e29b-41d4-a716-446655440012', 'Tricep Dips', 'Arms', 'Compound', 'Lower body by bending arms, push back up', true),
-('550e8400-e29b-41d4-a716-446655440013', 'Hammer Curls', 'Arms', 'Isolation', 'Curl with neutral grip, thumbs up', true),
-('550e8400-e29b-41d4-a716-446655440014', 'Tricep Extensions', 'Arms', 'Isolation', 'Extend arms overhead, lower weight behind head', true),
+('550e8400-e29b-41d4-a716-446655440011', 'Bicep Curls', 'Biceps', 'Isolation', 'Curl weight up by flexing biceps', true),
+('550e8400-e29b-41d4-a716-446655440012', 'Tricep Dips', 'Triceps', 'Compound', 'Lower body by bending arms, push back up', true),
+('550e8400-e29b-41d4-a716-446655440013', 'Hammer Curls', 'Biceps', 'Isolation', 'Curl with neutral grip, thumbs up', true),
+('550e8400-e29b-41d4-a716-446655440014', 'Tricep Extensions', 'Triceps', 'Isolation', 'Extend arms overhead, lower weight behind head', true),
 
 -- Core exercises
-('550e8400-e29b-41d4-a716-446655440015', 'Plank', 'Core', 'Isometric', 'Hold body straight in push-up position', true),
-('550e8400-e29b-41d4-a716-446655440016', 'Crunches', 'Core', 'Isolation', 'Lift shoulders off ground by contracting abs', true),
-('550e8400-e29b-41d4-a716-446655440017', 'Russian Twists', 'Core', 'Isolation', 'Rotate torso side to side while seated', true),
-('550e8400-e29b-41d4-a716-446655440018', 'Mountain Climbers', 'Core', 'Cardio', 'Alternate bringing knees to chest in plank position', true);
+('550e8400-e29b-41d4-a716-446655440015', 'Plank', 'Abs', 'Isometric', 'Hold body straight in push-up position', true),
+('550e8400-e29b-41d4-a716-446655440016', 'Crunches', 'Abs', 'Isolation', 'Lift shoulders off ground by contracting abs', true),
+('550e8400-e29b-41d4-a716-446655440017', 'Russian Twists', 'Abs', 'Isolation', 'Rotate torso side to side while seated', true),
+('550e8400-e29b-41d4-a716-446655440018', 'Mountain Climbers', 'Abs', 'Cardio', 'Alternate bringing knees to chest in plank position', true);
 
 -- Note: User-dependent data (users, programs, workouts, etc.) is now handled by
 -- the JavaScript seeder (scripts/seed/supabase/seeder.js) which properly creates
