@@ -6,9 +6,9 @@ import ExerciseOrganizer from '../components/ExerciseOrganizer';
 import '../styles/Exercises.css';
 import '../styles/ExerciseGrid.css';
 import '../styles/ExerciseOrganizer.css';
-import { getAvailableExercises, getUserExercises, createExercise, updateExercise, deleteExercise } from '../services/exerciseService';
+import { getAvailableExercises } from '../services/exerciseService';
 import { useAuth } from '../hooks/useAuth';
-import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
+import { transformSupabaseExercises } from '../utils/dataTransformations';
 
 function Exercises() {
   const { user, isAuthenticated } = useAuth();
@@ -31,7 +31,7 @@ function Exercises() {
     setIsLoading(true);
     try {
       let allExercises = [];
-      
+
       if (isAuthenticated && user) {
         // Fetch available exercises for authenticated user (global + user-created)
         allExercises = await getAvailableExercises(user.id);
@@ -41,15 +41,10 @@ function Exercises() {
         allExercises = await getExercises({ isGlobal: true });
       }
 
-      // Add source metadata to exercises
-      const enhancedExercises = allExercises.map(ex => ({
-        ...ex,
-        isGlobal: ex.is_global,
-        source: ex.is_global ? 'global' : 'user',
-        createdBy: ex.created_by
-      }));
-      
-      setExercises(enhancedExercises);
+      // Transform exercises to proper format for components
+      const transformedExercises = transformSupabaseExercises(allExercises);
+
+      setExercises(transformedExercises);
     } catch (error) {
       console.error("Error fetching exercises: ", error);
       setValidationError("Failed to load exercises. Please refresh the page.");
@@ -74,26 +69,16 @@ function Exercises() {
 
   // Callback for when a new exercise is added
   const handleExerciseAdded = (newExercise) => {
-    const enhancedExercise = {
-      ...newExercise,
-      isGlobal: newExercise.is_global,
-      source: newExercise.is_global ? 'global' : 'user',
-      createdBy: newExercise.created_by
-    };
-    setExercises(prev => [...prev, enhancedExercise]);
+    const transformedExercise = transformSupabaseExercises([newExercise])[0];
+    setExercises(prev => [...prev, transformedExercise]);
     setSuccessMessage(`Exercise "${newExercise.name}" added successfully!`);
     setShowModal(false);
   };
 
   // Callback for when an exercise is updated
   const handleExerciseUpdated = (updatedExercise) => {
-    const enhancedExercise = {
-      ...updatedExercise,
-      isGlobal: updatedExercise.is_global,
-      source: updatedExercise.is_global ? 'global' : 'user',
-      createdBy: updatedExercise.created_by
-    };
-    setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? enhancedExercise : ex));
+    const transformedExercise = transformSupabaseExercises([updatedExercise])[0];
+    setExercises(prev => prev.map(ex => ex.id === updatedExercise.id ? transformedExercise : ex));
     setSuccessMessage(`Exercise "${updatedExercise.name}" updated successfully!`);
     setShowModal(false);
   };

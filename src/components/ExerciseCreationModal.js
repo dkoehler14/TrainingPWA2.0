@@ -28,10 +28,11 @@ function ExerciseCreationModal({
             if (isEditMode && initialData) {
                 setFormData({
                     name: initialData.name || '',
-                    primary_muscle_group: initialData?.primary_muscle_group || '',
-                    exercise_type: initialData?.exercise_type || ''
+                    // Handle both camelCase (transformed) and snake_case (raw) field names
+                    primary_muscle_group: initialData?.primaryMuscleGroup || initialData?.primary_muscle_group || '',
+                    exercise_type: initialData?.exerciseType || initialData?.exercise_type || ''
                 });
-                if (userRole === 'admin' && initialData?.created_by) {
+                if (userRole === 'admin' && (initialData?.createdBy || initialData?.created_by)) {
                     setAdminVisibility('personal');
                 } else {
                     setAdminVisibility('main');
@@ -120,14 +121,21 @@ function ExerciseCreationModal({
             };
 
             // Set visibility and user association
-            if (userRole === 'admin' && adminVisibility === 'main') {
-                // Admin creating global exercise
-                exerciseData.is_global = true;
-                exerciseData.created_by = user?.id;
+            if (isEditMode) {
+                // For updates, preserve the original is_global and created_by values
+                // Only update the core exercise data (name, muscle group, type)
+                // Don't modify is_global or created_by during updates
             } else {
-                // Regular user or admin creating personal exercise
-                exerciseData.is_global = false;
-                exerciseData.created_by = user?.id;
+                // For new exercises, set visibility and user association
+                if (userRole === 'admin' && adminVisibility === 'main') {
+                    // Admin creating global exercise
+                    exerciseData.is_global = true;
+                    exerciseData.created_by = user?.id;
+                } else {
+                    // Regular user or admin creating personal exercise
+                    exerciseData.is_global = false;
+                    exerciseData.created_by = user?.id;
+                }
             }
 
             let result;

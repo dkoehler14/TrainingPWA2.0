@@ -127,9 +127,9 @@ async function seedSupabaseAll(options = {}) {
 
     const globalExercises = [
       // Chest exercises
-      { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Bench Press', primary_muscle_group: 'Chest', exercise_type: 'Compound', instructions: 'Lie on bench, lower bar to chest, press up', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Push-ups', primary_muscle_group: 'Chest', exercise_type: 'Bodyweight', instructions: 'Start in plank position, lower chest to ground, push up', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Incline Dumbbell Press', primary_muscle_group: 'Chest', exercise_type: 'Compound', instructions: 'On incline bench, press dumbbells up and together', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Barbell Bench Press', primary_muscle_group: 'Chest', exercise_type: 'Barbell', instructions: 'Lie on bench, lower bar to chest, press up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440002', name: 'Push-ups', primary_muscle_group: 'Chest', exercise_type: 'Bodyweight Loadable', instructions: 'Start in plank position, lower chest to ground, push up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440003', name: 'Incline Dumbbell Press', primary_muscle_group: 'Chest', exercise_type: 'Dumbbell', instructions: 'On incline bench, press dumbbells up and together', is_global: true },
       { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Dumbbell Flyes', primary_muscle_group: 'Chest', exercise_type: 'Isolation', instructions: 'Lie on bench, arc dumbbells out and back together', is_global: true },
 
       // Back exercises
