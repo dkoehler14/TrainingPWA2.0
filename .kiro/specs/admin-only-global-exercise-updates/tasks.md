@@ -24,13 +24,13 @@
   - Ensure role information flows to child components
   - _Requirements: 2.2, 2.3_
 
-- [ ] 5. Enhance ExerciseCreationModal with permission validation
+- [x] 5. Enhance ExerciseCreationModal with permission validation
   - Add client-side validation to prevent unauthorized edit attempts
   - Display appropriate error messages for non-admin users
   - Implement graceful handling of permission-denied scenarios
   - _Requirements: 2.1, 2.2_
 
-- [ ] 6. Update Exercises page to provide user role context
+- [x] 6. Update Exercises page to provide user role context
   - Pass user role information to ExerciseOrganizer component
   - Ensure proper role data is available throughout component tree
   - Handle cases where user role is not yet loaded

@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
-import { createExercise, updateExercise, checkExerciseNameExists } from '../services/exerciseService';
+import { 
+    createExercise, 
+    updateExercise, 
+    checkExerciseNameExists,
+    canUserPerformExerciseOperation
+} from '../services/exerciseService';
 import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
 import { useAuth } from '../hooks/useAuth';
 
@@ -25,6 +30,10 @@ function ExerciseCreationModal({
 
     useEffect(() => {
         if (show) {
+            // Reset permission denied state
+            setPermissionDenied(false);
+            setValidationError('');
+            
             if (isEditMode && initialData) {
                 setFormData({
                     name: initialData.name || '',
@@ -37,6 +46,16 @@ function ExerciseCreationModal({
                 } else {
                     setAdminVisibility('main');
                 }
+                
+                // Check permissions for editing this exercise
+                if (!canUserPerformExerciseOperation(initialData, userRole, user?.id, 'edit')) {
+                    setPermissionDenied(true);
+                    if (initialData.is_global || initialData.isGlobal) {
+                        setValidationError('You don\'t have permission to edit global exercises. Only administrators can modify global exercises.');
+                    } else {
+                        setValidationError('You don\'t have permission to edit this exercise.');
+                    }
+                }
             } else {
                 setFormData({
                     name: '',
@@ -46,10 +65,11 @@ function ExerciseCreationModal({
                 setAdminVisibility('main');
             }
         }
-    }, [show, isEditMode, initialData, userRole]);
+    }, [show, isEditMode, initialData, userRole, user?.id]);
 
     const [validationError, setValidationError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [permissionDenied, setPermissionDenied] = useState(false);
 
     const resetForm = () => {
         setFormData({
@@ -58,6 +78,7 @@ function ExerciseCreationModal({
             exercise_type: ''
         });
         setValidationError('');
+        setPermissionDenied(false);
     };
 
     const validateExercise = async () => {
@@ -80,6 +101,24 @@ function ExerciseCreationModal({
         if (!formData.primary_muscle_group) {
             setValidationError('Primary muscle group is required.');
             return false;
+        }
+
+        // Permission validation for edit mode
+        if (isEditMode && initialData) {
+            try {
+                // Check if user has permission to edit this exercise
+                if (!canUserPerformExerciseOperation(initialData, userRole, user?.id, 'edit')) {
+                    if (initialData.is_global || initialData.isGlobal) {
+                        setValidationError('You don\'t have permission to edit global exercises. Only administrators can modify global exercises.');
+                    } else {
+                        setValidationError('You don\'t have permission to edit this exercise.');
+                    }
+                    return false;
+                }
+            } catch (permissionError) {
+                setValidationError(permissionError.message || 'Permission denied.');
+                return false;
+            }
         }
 
         // Check for duplicate exercise name
@@ -140,7 +179,8 @@ function ExerciseCreationModal({
 
             let result;
             if (isEditMode) {
-                result = await updateExercise(exerciseId, exerciseData);
+                // Pass userRole to updateExercise for additional server-side validation
+                result = await updateExercise(exerciseId, exerciseData, userRole);
                 if (onExerciseUpdated) {
                     onExerciseUpdated(result);
                 }
@@ -160,7 +200,15 @@ function ExerciseCreationModal({
             onHide();
         } catch (error) {
             console.error("Error adding/updating exercise: ", error);
-            setValidationError(error.message || "Failed to add/update exercise. Please try again.");
+            
+            // Handle permission-specific errors with user-friendly messages
+            if (error.message?.includes('permission') || 
+                error.message?.includes('insufficient privileges') ||
+                error.message?.includes('administrators')) {
+                setValidationError(error.message);
+            } else {
+                setValidationError(error.message || "Failed to add/update exercise. Please try again.");
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -169,12 +217,28 @@ function ExerciseCreationModal({
     return (
         <Modal show={show} onHide={onHide} centered>
             <Modal.Header closeButton>
-                <Modal.Title>{isEditMode ? 'Edit Exercise' : 'Add New Exercise'}</Modal.Title>
+                <Modal.Title>
+                    {isEditMode ? 'Edit Exercise' : 'Add New Exercise'}
+                    {permissionDenied && (
+                        <small className="text-muted ms-2">(Read Only)</small>
+                    )}
+                </Modal.Title>
             </Modal.Header>
             <Modal.Body>
                 {validationError && (
-                    <Alert variant="danger" onClose={() => setValidationError('')} dismissible>
+                    <Alert 
+                        variant={permissionDenied ? "warning" : "danger"} 
+                        onClose={() => setValidationError('')} 
+                        dismissible={!permissionDenied}
+                    >
                         {validationError}
+                        {permissionDenied && (
+                            <div className="mt-2">
+                                <small>
+                                    Contact an administrator to request changes to global exercises.
+                                </small>
+                            </div>
+                        )}
                     </Alert>
                 )}
 
@@ -188,6 +252,7 @@ function ExerciseCreationModal({
                             placeholder="Enter exercise name"
                             className="soft-input"
                             autoFocus
+                            disabled={permissionDenied}
                         />
                     </Form.Group>
 
@@ -199,6 +264,7 @@ function ExerciseCreationModal({
                             onChange={e => setFormData({ ...formData, exercise_type: e.target.value })}
                             className="soft-input"
                             required
+                            disabled={permissionDenied}
                         >
                             <option value="">Select Exercise Type</option>
                             {EXERCISE_TYPES.map((type) => (
@@ -215,6 +281,7 @@ function ExerciseCreationModal({
                             onChange={e => setFormData({ ...formData, primary_muscle_group: e.target.value })}
                             className="soft-input"
                             required
+                            disabled={permissionDenied}
                         >
                             <option value="">Select Primary Muscle Group</option>
                             {MUSCLE_GROUPS.map((group) => (
@@ -264,6 +331,7 @@ function ExerciseCreationModal({
                                 value={adminVisibility}
                                 onChange={e => setAdminVisibility(e.target.value)}
                                 className="soft-input"
+                                disabled={permissionDenied}
                             >
                                 <option value="main">Main List (Global)</option>
                                 <option value="personal">Personal (Custom)</option>
@@ -279,7 +347,7 @@ function ExerciseCreationModal({
                 <Button
                     variant="primary"
                     onClick={handleSubmit}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || permissionDenied}
                 >
                     {isSubmitting ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Exercise' : 'Add Exercise')}
                 </Button>

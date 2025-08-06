@@ -157,17 +157,46 @@ export function useAuthError() {
 export function useRoles() {
   const { userProfile, user } = useAuth()
   
+  const getUserRoles = () => {
+    // Get roles from userProfile (database) first, fallback to auth metadata
+    if (userProfile?.roles && Array.isArray(userProfile.roles)) {
+      return userProfile.roles
+    }
+    
+    // Fallback to auth metadata (for backwards compatibility)
+    const metadataRole = user?.user_metadata?.role
+    if (metadataRole) {
+      return [metadataRole]
+    }
+    
+    // Default role
+    return ['user']
+  }
+  
   const getUserRole = () => {
-    return userProfile?.role || user?.user_metadata?.role || 'user'
+    const roles = getUserRoles()
+    
+    // Priority order for primary role: admin > moderator > user
+    if (roles.includes('admin')) return 'admin'
+    if (roles.includes('moderator')) return 'moderator'
+    
+    // Return first role or default to 'user'
+    return roles[0] || 'user'
   }
   
   const hasRole = (role) => {
-    return getUserRole() === role
+    const roles = getUserRoles()
+    return roles.includes(role)
   }
   
-  const hasAnyRole = (roles) => {
-    const userRole = getUserRole()
-    return roles.includes(userRole)
+  const hasAnyRole = (rolesToCheck) => {
+    const userRoles = getUserRoles()
+    return rolesToCheck.some(role => userRoles.includes(role))
+  }
+  
+  const hasAllRoles = (rolesToCheck) => {
+    const userRoles = getUserRoles()
+    return rolesToCheck.every(role => userRoles.includes(role))
   }
   
   const isAdmin = () => hasRole('admin')
@@ -176,8 +205,10 @@ export function useRoles() {
   
   return {
     userRole: getUserRole(),
+    userRoles: getUserRoles(),
     hasRole,
     hasAnyRole,
+    hasAllRoles,
     isAdmin,
     isModerator,
     isUser

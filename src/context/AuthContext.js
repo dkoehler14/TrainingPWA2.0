@@ -3,12 +3,11 @@ import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
 import { 
   getUserProfile, 
   createUserProfile, 
-  getOrCreateUserProfile,
   updateUserProfile 
 } from '../services/userService'
 import { handleSupabaseError } from '../utils/supabaseErrorHandler'
 import { authService } from '../services/authService'
-import { initializeAuthConfig, sessionManager, authEventHandler } from '../config/supabaseAuth'
+import { initializeAuthConfig, authEventHandler } from '../config/supabaseAuth'
 
 /**
  * Authentication Context for Supabase
@@ -358,7 +357,28 @@ export const AuthProvider = ({ children }) => {
   const hasCompleteProfile = !!(userProfile?.name && userProfile?.experience_level)
 
   // Get user role (for backwards compatibility)
-  const userRole = userProfile?.role || authUser?.user_metadata?.role || 'user'
+  const getUserRole = () => {
+    // Get roles from userProfile (database) first
+    if (userProfile?.roles && Array.isArray(userProfile.roles)) {
+      const roles = userProfile.roles
+      // Priority order for primary role: admin > moderator > user
+      if (roles.includes('admin')) return 'admin'
+      if (roles.includes('moderator')) return 'moderator'
+      // Return first role or default to 'user'
+      return roles[0] || 'user'
+    }
+    
+    // Fallback to auth metadata (for backwards compatibility)
+    const metadataRole = authUser?.user_metadata?.role
+    if (metadataRole) {
+      return metadataRole
+    }
+    
+    // Default role
+    return 'user'
+  }
+  
+  const userRole = getUserRole()
 
   // Check if profile is loading
   const isProfileLoading = profileLoading

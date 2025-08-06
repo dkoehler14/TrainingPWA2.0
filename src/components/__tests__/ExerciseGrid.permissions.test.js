@@ -103,4 +103,39 @@ describe('ExerciseGrid Permissions', () => {
         const editButtons = document.querySelectorAll('.exercises-edit-button');
         expect(editButtons).toHaveLength(1);
     });
+
+    test('shows loading indicator when role is loading', () => {
+        render(
+            <ExerciseGrid
+                exercises={mockExercises}
+                showEditButton={true}
+                onEditClick={mockOnEditClick}
+                userRole="admin"
+                isRoleLoading={true}
+            />
+        );
+
+        // Should not show any edit buttons when loading
+        const editButtons = document.querySelectorAll('.exercises-edit-button');
+        expect(editButtons).toHaveLength(0);
+
+        // Should show loading indicators
+        const loadingIndicators = screen.getAllByText('...');
+        expect(loadingIndicators).toHaveLength(2); // One for each exercise
+    });
+
+    test('does not show edit buttons when userRole is null', () => {
+        render(
+            <ExerciseGrid
+                exercises={mockExercises}
+                showEditButton={true}
+                onEditClick={mockOnEditClick}
+                userRole={null}
+            />
+        );
+
+        // Should not show any edit buttons when userRole is null
+        const editButtons = document.querySelectorAll('.exercises-edit-button');
+        expect(editButtons).toHaveLength(0);
+    });
 });

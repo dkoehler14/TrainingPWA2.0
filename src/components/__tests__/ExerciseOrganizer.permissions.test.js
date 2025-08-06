@@ -4,13 +4,14 @@ import ExerciseOrganizer from '../ExerciseOrganizer';
 
 // Mock ExerciseGrid to verify props are passed correctly
 jest.mock('../ExerciseGrid', () => {
-  return function MockExerciseGrid({ userRole, exercises, showEditButton, onEditClick }) {
+  return function MockExerciseGrid({ userRole, exercises, showEditButton, onEditClick, isRoleLoading }) {
     return (
       <div data-testid="exercise-grid">
         <span data-testid="user-role">{userRole}</span>
         <span data-testid="exercise-count">{exercises.length}</span>
         <span data-testid="show-edit-button">{showEditButton.toString()}</span>
         <span data-testid="has-edit-handler">{!!onEditClick ? 'true' : 'false'}</span>
+        <span data-testid="is-role-loading">{isRoleLoading.toString()}</span>
       </div>
     );
   };
@@ -120,5 +121,49 @@ describe('ExerciseOrganizer Role Passing', () => {
     // Should show all exercises
     const exerciseCount = exerciseGrids[0].querySelector('[data-testid="exercise-count"]');
     expect(exerciseCount).toHaveTextContent('2');
+  });
+
+  it('should pass isRoleLoading prop to ExerciseGrid', () => {
+    render(
+      <ExerciseOrganizer
+        exercises={mockExercises}
+        userRole="admin"
+        isRoleLoading={true}
+        showEditButton={true}
+        onEditClick={mockEditClick}
+      />
+    );
+
+    const exerciseGrid = screen.getByTestId('exercise-grid');
+    const isRoleLoadingSpan = exerciseGrid.querySelector('[data-testid="is-role-loading"]');
+    expect(isRoleLoadingSpan).toHaveTextContent('true');
+  });
+
+  it('should not show stats button when role is loading', () => {
+    render(
+      <ExerciseOrganizer
+        exercises={mockExercises}
+        userRole="admin"
+        isRoleLoading={true}
+      />
+    );
+
+    // Should not show stats button when loading
+    expect(screen.queryByText('Stats')).not.toBeInTheDocument();
+  });
+
+  it('should default isRoleLoading to false when not provided', () => {
+    render(
+      <ExerciseOrganizer
+        exercises={mockExercises}
+        userRole="admin"
+        showEditButton={true}
+        onEditClick={mockEditClick}
+      />
+    );
+
+    const exerciseGrid = screen.getByTestId('exercise-grid');
+    const isRoleLoadingSpan = exerciseGrid.querySelector('[data-testid="is-role-loading"]');
+    expect(isRoleLoadingSpan).toHaveTextContent('false');
   });
 });

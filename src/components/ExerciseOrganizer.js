@@ -10,7 +10,8 @@ const ExerciseOrganizer = ({
     showEditButton = false, 
     onEditClick = null,
     className = "",
-    userRole = "user"
+    userRole = "user",
+    isRoleLoading = false
 }) => {
     const [viewMode] = useState('grid'); // 'grid', 'list', 'grouped'
     const [showStats, setShowStats] = useState(false);
@@ -84,6 +85,7 @@ const ExerciseOrganizer = ({
                                 onEditClick={onEditClick}
                                 emptyMessage={`No ${groupName.toLowerCase()} found.`}
                                 userRole={userRole}
+                                isRoleLoading={isRoleLoading}
                             />
                         </Card.Body>
                     </Card>
@@ -94,6 +96,8 @@ const ExerciseOrganizer = ({
 
     // Helper function to determine if an exercise can be edited
     const canEditExercise = (exercise) => {
+        // If role is still loading, don't allow editing to be safe
+        if (isRoleLoading || userRole === null) return false;
         // Custom exercises can always be edited by their creator
         if (!exercise.isGlobal) return true;
         // Global exercises can only be edited by admins
@@ -122,7 +126,7 @@ const ExerciseOrganizer = ({
                             <Badge bg={ex.isGlobal ? 'primary' : 'success'}>
                                 {ex.isGlobal ? 'Global' : 'Custom'}
                             </Badge>
-                            {showEditButton && onEditClick && canEditExercise(ex) && (
+                            {showEditButton && onEditClick && !isRoleLoading && canEditExercise(ex) && (
                                 <Button
                                     variant="outline-primary"
                                     size="sm"
@@ -134,9 +138,14 @@ const ExerciseOrganizer = ({
                                     Edit
                                 </Button>
                             )}
-                            {showEditButton && ex.isGlobal && !canEditExercise(ex) && (
+                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && (
                                 <Badge bg="secondary" className="text-muted">
                                     Read Only
+                                </Badge>
+                            )}
+                            {showEditButton && isRoleLoading && (
+                                <Badge bg="light" className="text-muted">
+                                    Loading...
                                 </Badge>
                             )}
                         </div>
@@ -257,7 +266,7 @@ const ExerciseOrganizer = ({
                     )}
                 </div> */}
 
-                {userRole === 'admin' && (
+                {!isRoleLoading && userRole === 'admin' && (
                     <Button
                         variant="outline-secondary"
                         size="sm"
@@ -271,7 +280,7 @@ const ExerciseOrganizer = ({
             </div>
 
             {/* Statistics Panel */}
-            {userRole === 'admin' && renderStatsPanel()}
+            {!isRoleLoading && userRole === 'admin' && renderStatsPanel()}
 
             {/* Exercise Display */}
             {viewMode === 'grid' && (
@@ -281,6 +290,7 @@ const ExerciseOrganizer = ({
                     showEditButton={showEditButton}
                     onEditClick={onEditClick}
                     userRole={userRole}
+                    isRoleLoading={isRoleLoading}
                 />
             )}
 

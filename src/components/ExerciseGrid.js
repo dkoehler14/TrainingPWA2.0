@@ -22,7 +22,8 @@ const ExerciseGrid = ({
     initialMuscleFilter = '',
     initialSearchTerm = '',
     initialSourceFilter = 'all',
-    userRole = 'user'
+    userRole = 'user',
+    isRoleLoading = false
 }) => {
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
     const [typeFilter, setTypeFilter] = useState(initialTypeFilter);
@@ -33,6 +34,8 @@ const ExerciseGrid = ({
 
     // Helper function to determine if an exercise can be edited
     const canEditExercise = (exercise) => {
+        // If role is still loading, don't allow editing to be safe
+        if (isRoleLoading || userRole === null) return false;
         // Custom exercises can always be edited by their creator
         if (!exercise.isGlobal) return true;
         // Global exercises can only be edited by admins
@@ -261,7 +264,7 @@ const ExerciseGrid = ({
                             </div>
 
                             {/* Edit button in top right corner */}
-                            {showEditButton && onEditClick && canEditExercise(ex) && (
+                            {showEditButton && onEditClick && !isRoleLoading && canEditExercise(ex) && (
                                 <Button
                                     variant="outline-primary"
                                     size="sm"
@@ -276,8 +279,29 @@ const ExerciseGrid = ({
                                 </Button>
                             )}
 
+                            {/* Loading indicator when role is being loaded */}
+                            {showEditButton && isRoleLoading && (
+                                <div
+                                    className="position-absolute d-flex align-items-center justify-content-center"
+                                    style={{
+                                        top: '8px',
+                                        right: '8px',
+                                        zIndex: 10,
+                                        width: '28px',
+                                        height: '28px',
+                                        backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                                        borderRadius: '4px',
+                                        fontSize: '10px'
+                                    }}
+                                >
+                                    <Badge bg="light" className="text-muted" style={{ fontSize: '8px' }}>
+                                        ...
+                                    </Badge>
+                                </div>
+                            )}
+
                             {/* Read-only indicator for non-editable global exercises */}
-                            {showEditButton && ex.isGlobal && !canEditExercise(ex) && (
+                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && (
                                 <div
                                     className="position-absolute d-flex align-items-center justify-content-center"
                                     style={{
