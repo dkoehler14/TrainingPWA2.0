@@ -25,12 +25,12 @@ const convertSupabaseProgramToWeeks = (program) => {
     program.program_workouts.forEach(workout => {
       const weekIndex = workout.week_number - 1;
       const dayIndex = workout.day_number - 1;
-      
+
       if (weekIndex >= 0 && weekIndex < program.duration &&
-          dayIndex >= 0 && dayIndex < program.days_per_week) {
-        
+        dayIndex >= 0 && dayIndex < program.days_per_week) {
+
         weeks[weekIndex].days[dayIndex].name = workout.name || `Day ${dayIndex + 1}`;
-        
+
         if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
           weeks[weekIndex].days[dayIndex].exercises = workout.program_exercises.map(ex => ({
             exerciseId: ex.exercise_id || '',
@@ -47,7 +47,7 @@ const convertSupabaseProgramToWeeks = (program) => {
 };
 
 // New Exercise Selection Modal Component using ExerciseGrid
-const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew }) => {
+const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew, userRole }) => {
   const handleExerciseSelect = (exercise) => {
     onSelect({ value: exercise.id, label: exercise.name });
     onHide();
@@ -74,6 +74,7 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
           exercises={exercises}
           onExerciseClick={handleExerciseSelect}
           emptyMessage="No exercises found."
+          userRole={userRole}
         />
       </Modal.Body>
       <Modal.Footer>
@@ -85,7 +86,7 @@ const ExerciseSelectionModal = ({ show, onHide, onSelect, exercises, onCreateNew
   );
 };
 
-function CreateProgram({ mode = 'create', userRole }) {
+function CreateProgram({ mode = 'create' }) {
   const { programId } = useParams();
   const navigate = useNavigate();
   const [programName, setProgramName] = useState('');
@@ -105,7 +106,7 @@ function CreateProgram({ mode = 'create', userRole }) {
   const [showExerciseModal, setShowExerciseModal] = useState(false); // New state for exercise selection modal
   const [currentExerciseSelection, setCurrentExerciseSelection] = useState({ weekIndex: 0, dayIndex: 0, exIndex: 0 }); // Track which exercise is being selected
   const [showExerciseCreationModal, setShowExerciseCreationModal] = useState(false);
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, userRole } = useAuth();
   const [isLoading, setIsLoading] = useState(mode === 'edit');
   const [step, setStep] = useState(mode === 'edit' ? 3 : 1); // Stepper: 1=choose, 2=select, 3=edit
   const [creationSource, setCreationSource] = useState('scratch'); // 'scratch' | 'template' | 'previous'
@@ -134,7 +135,7 @@ function CreateProgram({ mode = 'create', userRole }) {
     const fetchExercises = async () => {
       try {
         if (!user) return;
-        
+
         // Cache warming for CreateProgram page
         const cacheWarmingService = (await import('../services/supabaseCacheWarmingService')).default;
         const warmingPromise = cacheWarmingService.smartWarmCache(user.id, {
@@ -145,10 +146,10 @@ function CreateProgram({ mode = 'create', userRole }) {
           console.warn('Cache warming failed:', error);
           return null;
         });
-        
+
         // Fetch exercises using Supabase
         const exercisesData = await getAvailableExercises(user.id);
-        
+
         // Format for UI
         const formattedExercises = exercisesData.map(ex => ({
           ...ex,
@@ -158,13 +159,13 @@ function CreateProgram({ mode = 'create', userRole }) {
           label: ex.name,
           value: ex.id,
         }));
-        
+
         setExercises(formattedExercises);
       } catch (error) {
         console.error("Error fetching exercises: ", error);
       }
     };
-    
+
     fetchExercises();
   }, [user]);
 
@@ -180,7 +181,7 @@ function CreateProgram({ mode = 'create', userRole }) {
           console.log('📡 Fetching program document...');
           const programDoc = await getProgramById(programId);
           console.log('📄 Raw program document:', programDoc);
-          
+
           if (programDoc) {
             const programData = programDoc;
             console.log('✅ Program data loaded successfully:', {
@@ -195,14 +196,14 @@ function CreateProgram({ mode = 'create', userRole }) {
               weeklyConfigsLength: programData.weeklyConfigs ? Object.keys(programData.weeklyConfigs).length : 0,
               rawWeeklyConfigs: programData.weeklyConfigs
             });
-            
+
             // Validate required fields with detailed logging
             console.log('🔍 Validating program structure...');
             const validationErrors = [];
-            
+
             if (!programData.duration) validationErrors.push('Missing duration');
             if (!programData.days_per_week) validationErrors.push('Missing days_per_week');
-            
+
             if (validationErrors.length > 0) {
               console.error('❌ Program validation failed:', {
                 errors: validationErrors,
@@ -214,12 +215,12 @@ function CreateProgram({ mode = 'create', userRole }) {
               });
               throw new Error(`Invalid program data structure: ${validationErrors.join(', ')}`);
             }
-            
+
             console.log('✅ Program structure validation passed');
 
             setProgramName(programData.name || '');
             setWeightUnit(programData.weight_unit || 'LB');
-            
+
             // Create the correct structure for weeks from Supabase data
             console.log('🏗️ Creating weeks structure from Supabase data...');
             const weeklyConfigs = Array.from({ length: programData.duration }, (_, weekIdx) => ({
@@ -246,7 +247,7 @@ function CreateProgram({ mode = 'create', userRole }) {
               programData.program_workouts.forEach((workout, workoutIdx) => {
                 const weekIndex = workout.week_number - 1;
                 const dayIndex = workout.day_number - 1;
-                
+
                 console.log('📝 Processing workout:', {
                   workoutIdx,
                   weekNumber: workout.week_number,
@@ -256,14 +257,14 @@ function CreateProgram({ mode = 'create', userRole }) {
                   workoutName: workout.name,
                   exercisesCount: workout.program_exercises?.length || 0
                 });
-                
+
                 // Validate indices are within bounds
                 if (weekIndex >= 0 && weekIndex < programData.duration &&
-                    dayIndex >= 0 && dayIndex < programData.days_per_week) {
-                  
+                  dayIndex >= 0 && dayIndex < programData.days_per_week) {
+
                   // Set workout name
                   weeklyConfigs[weekIndex].days[dayIndex].name = workout.name || `Day ${dayIndex + 1}`;
-                  
+
                   // Process exercises for this workout
                   if (workout.program_exercises && Array.isArray(workout.program_exercises)) {
                     const processedExercises = workout.program_exercises.map(ex => ({
@@ -272,9 +273,9 @@ function CreateProgram({ mode = 'create', userRole }) {
                       reps: ex.reps || 8,
                       notes: ex.notes || ''
                     }));
-                    
+
                     weeklyConfigs[weekIndex].days[dayIndex].exercises = processedExercises;
-                    
+
                     console.log('✅ Set exercises for week/day:', {
                       weekIndex,
                       dayIndex,
@@ -313,9 +314,9 @@ function CreateProgram({ mode = 'create', userRole }) {
 
             // Validate the structure before setting state
             const isValidStructure = weeklyConfigs.length > 0 &&
-                                   weeklyConfigs[0].days?.length > 0 &&
-                                   Array.isArray(weeklyConfigs[0].days);
-                                   
+              weeklyConfigs[0].days?.length > 0 &&
+              Array.isArray(weeklyConfigs[0].days);
+
             console.log('🔍 Structure validation:', {
               hasWeeks: weeklyConfigs.length > 0,
               hasDays: weeklyConfigs[0]?.days?.length > 0,
@@ -450,7 +451,7 @@ function CreateProgram({ mode = 'create', userRole }) {
 
   const saveNotes = () => {
     const { weekIndex, dayIndex, exIndex, tempNotes } = currentNoteExercise;
-    
+
     console.log('Saving notes:', {
       weekIndex,
       dayIndex,
@@ -476,7 +477,7 @@ function CreateProgram({ mode = 'create', userRole }) {
     const newWeeks = [...weeks];
     newWeeks.forEach(week => {
       if (week.days[dayIndex]?.exercises[exIndex]) {
-      week.days[dayIndex].exercises[exIndex].notes = tempNotes || '';
+        week.days[dayIndex].exercises[exIndex].notes = tempNotes || '';
       }
     });
     setWeeks(newWeeks);
@@ -944,12 +945,12 @@ function CreateProgram({ mode = 'create', userRole }) {
   return (
     <Container fluid className="soft-container create-program-container">
       {/* Stepper UI */}
-      <div className="stepper mb-4 d-flex justify-content-center align-items-center" style={{gap: 0}}>
-        <div className={`step px-3 py-2 text-center${step === 1 ? ' active-step' : ''}`} style={{borderBottom: step === 1 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 1 ? 'bold' : 'normal', color: step === 1 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>1. Start</div>
-        <div className="step-separator mx-2" style={{color: '#adb5bd', fontSize: 24}}>→</div>
-        <div className={`step px-3 py-2 text-center${step === 2 ? ' active-step' : ''}`} style={{borderBottom: step === 2 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 2 ? 'bold' : 'normal', color: step === 2 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>2. Select</div>
-        <div className="step-separator mx-2" style={{color: '#adb5bd', fontSize: 24}}>→</div>
-        <div className={`step px-3 py-2 text-center${step === 3 ? ' active-step' : ''}`} style={{borderBottom: step === 3 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 3 ? 'bold' : 'normal', color: step === 3 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s'}}>3. Edit</div>
+      <div className="stepper mb-4 d-flex justify-content-center align-items-center" style={{ gap: 0 }}>
+        <div className={`step px-3 py-2 text-center${step === 1 ? ' active-step' : ''}`} style={{ borderBottom: step === 1 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 1 ? 'bold' : 'normal', color: step === 1 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s' }}>1. Start</div>
+        <div className="step-separator mx-2" style={{ color: '#adb5bd', fontSize: 24 }}>→</div>
+        <div className={`step px-3 py-2 text-center${step === 2 ? ' active-step' : ''}`} style={{ borderBottom: step === 2 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 2 ? 'bold' : 'normal', color: step === 2 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s' }}>2. Select</div>
+        <div className="step-separator mx-2" style={{ color: '#adb5bd', fontSize: 24 }}>→</div>
+        <div className={`step px-3 py-2 text-center${step === 3 ? ' active-step' : ''}`} style={{ borderBottom: step === 3 ? '3px solid #0d6efd' : '1px solid #dee2e6', fontWeight: step === 3 ? 'bold' : 'normal', color: step === 3 ? '#0d6efd' : '#6c757d', minWidth: 90, transition: 'all 0.2s' }}>3. Edit</div>
       </div>
       {/* Step 1: Choose how to start */}
       {step === 1 && (
@@ -959,7 +960,7 @@ function CreateProgram({ mode = 'create', userRole }) {
             <Button
               variant="outline-primary"
               className="stepper-choice"
-              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              style={{ minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s' }}
               onClick={() => { setCreationSource('scratch'); setStep(3); }}
             >
               Start from Scratch
@@ -967,7 +968,7 @@ function CreateProgram({ mode = 'create', userRole }) {
             <Button
               variant="outline-primary"
               className="stepper-choice"
-              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              style={{ minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s' }}
               onClick={() => { setCreationSource('template'); setStep(2); }}
             >
               Use a Template
@@ -975,7 +976,7 @@ function CreateProgram({ mode = 'create', userRole }) {
             <Button
               variant="outline-primary"
               className="stepper-choice"
-              style={{minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s'}}
+              style={{ minWidth: 220, minHeight: 70, fontSize: 18, borderWidth: 2, transition: 'all 0.15s' }}
               onClick={() => { setCreationSource('previous'); setStep(2); }}
             >
               Use Previous Program
@@ -1051,21 +1052,21 @@ function CreateProgram({ mode = 'create', userRole }) {
                 >
                   <Card.Body>
                     <div className="d-flex align-items-center justify-content-between mb-2">
-                      <Card.Title className="mb-0" style={{fontSize: 20, fontWeight: 600, color: '#0d223a'}}>{program.name}</Card.Title>
+                      <Card.Title className="mb-0" style={{ fontSize: 20, fontWeight: 600, color: '#0d223a' }}>{program.name}</Card.Title>
                       {program.isCurrent && (
-                        <span className="badge bg-success ms-2" title="Current Program" style={{fontSize: 12}}>Current</span>
+                        <span className="badge bg-success ms-2" title="Current Program" style={{ fontSize: 12 }}>Current</span>
                       )}
                     </div>
-                    <div className="mb-2" style={{fontSize: 15, color: '#495057'}}>
+                    <div className="mb-2" style={{ fontSize: 15, color: '#495057' }}>
                       <span className="me-3"><strong>{program.duration}</strong> weeks</span>
                       <span><strong>{program.days_per_week}</strong> days/week</span>
                     </div>
-                    <div style={{fontSize: 13, color: '#6c757d'}}>
+                    <div style={{ fontSize: 13, color: '#6c757d' }}>
                       Last edited: {program.updatedAt ? new Date(program.updatedAt.seconds * 1000).toLocaleDateString() : (program.createdAt ? new Date(program.createdAt.seconds * 1000).toLocaleDateString() : '—')}
                     </div>
                   </Card.Body>
                   {selectedPreviousProgram?.id === program.id && (
-                    <div style={{position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: '#0d6efd', borderTopLeftRadius: 6, borderTopRightRadius: 6}} />
+                    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 4, background: '#0d6efd', borderTopLeftRadius: 6, borderTopRightRadius: 6 }} />
                   )}
                 </Card>
               ))
@@ -1131,9 +1132,9 @@ function CreateProgram({ mode = 'create', userRole }) {
             <div className="d-flex flex-wrap week-indicators">
               {weeks && weeks.length > 0 ? (
                 weeks.map((_, index) => (
-                <div key={index} className="me-2 mb-2">
-                  <span className="badge bg-secondary">Week {index + 1}</span>
-                </div>
+                  <div key={index} className="me-2 mb-2">
+                    <span className="badge bg-secondary">Week {index + 1}</span>
+                  </div>
                 ))
               ) : (
                 <div className="text-muted">No weeks added yet</div>
@@ -1149,42 +1150,42 @@ function CreateProgram({ mode = 'create', userRole }) {
             <Accordion defaultActiveKey="0" className="mb-4">
               {weeks && weeks.length > 0 && weeks[0]?.days ? (
                 weeks[0].days.map((day, dayIndex) => (
-                <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
-                  <Accordion.Header className="d-flex justify-content-between">
-                    {/* Inline editable day name */}
-                    <span className="me-3">
-                      {editingDay.dayIndex === dayIndex ? (
-                        <Form.Control
-                          type="text"
-                          value={editingDay.value}
-                          autoFocus
-                          onChange={(e) => handleDayNameChange(e)}
-                          onBlur={() => handleDayNameBlur(dayIndex)}
-                          onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
-                          style={{ maxWidth: 160, display: 'inline-block' }}
-                          size="sm"
-                        />
-                      ) : (
-                        <span
-                          style={{ cursor: 'pointer', fontWeight: 500 }}
-                          onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
-                          title="Click to edit day name"
-                        >
-                          {day.name || `Day ${dayIndex + 1}`}
-                        </span>
-                      )}
-                    </span>
-                    <div onClick={(e) => e.stopPropagation()} className="me-3">
-                      <Button onClick={() => removeDay(dayIndex)} className="preset-btn delete-btn" variant="outline-danger" size="sm"><Trash /></Button>
-                    </div>
-                  </Accordion.Header>
-                  <Accordion.Body>
-                    {day.exercises.map((exercise, exIndex) => renderMobileExerciseRow(day, dayIndex, exercise, exIndex))}
-                    <div className="text-center mt-3">
-                      <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
-                    </div>
-                  </Accordion.Body>
-                </Accordion.Item>
+                  <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
+                    <Accordion.Header className="d-flex justify-content-between">
+                      {/* Inline editable day name */}
+                      <span className="me-3">
+                        {editingDay.dayIndex === dayIndex ? (
+                          <Form.Control
+                            type="text"
+                            value={editingDay.value}
+                            autoFocus
+                            onChange={(e) => handleDayNameChange(e)}
+                            onBlur={() => handleDayNameBlur(dayIndex)}
+                            onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
+                            style={{ maxWidth: 160, display: 'inline-block' }}
+                            size="sm"
+                          />
+                        ) : (
+                          <span
+                            style={{ cursor: 'pointer', fontWeight: 500 }}
+                            onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
+                            title="Click to edit day name"
+                          >
+                            {day.name || `Day ${dayIndex + 1}`}
+                          </span>
+                        )}
+                      </span>
+                      <div onClick={(e) => e.stopPropagation()} className="me-3">
+                        <Button onClick={() => removeDay(dayIndex)} className="preset-btn delete-btn" variant="outline-danger" size="sm"><Trash /></Button>
+                      </div>
+                    </Accordion.Header>
+                    <Accordion.Body>
+                      {day.exercises.map((exercise, exIndex) => renderMobileExerciseRow(day, dayIndex, exercise, exIndex))}
+                      <div className="text-center mt-3">
+                        <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
+                      </div>
+                    </Accordion.Body>
+                  </Accordion.Item>
                 ))
               ) : (
                 <div className="text-center p-3">
@@ -1200,7 +1201,7 @@ function CreateProgram({ mode = 'create', userRole }) {
                     <th style={{ width: '215px', border: 'none' }}></th>
                     {weeks && weeks.length > 0 ? (
                       weeks.map((_, index) => (
-                      <th key={index} style={{ textAlign: 'center', width: '100px' }}>Week {index + 1}</th>
+                        <th key={index} style={{ textAlign: 'center', width: '100px' }}>Week {index + 1}</th>
                       ))
                     ) : (
                       <th style={{ textAlign: 'center', width: '100px' }}>No Weeks</th>
@@ -1214,45 +1215,45 @@ function CreateProgram({ mode = 'create', userRole }) {
                       <Accordion defaultActiveKey="0">
                         {weeks && weeks.length > 0 && weeks[0]?.days ? (
                           weeks[0].days.map((day, dayIndex) => (
-                          <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
-                            <Accordion.Header>
-                              {/* Inline editable day name */}
-                              {editingDay.dayIndex === dayIndex ? (
-                                <Form.Control
-                                  type="text"
-                                  value={editingDay.value}
-                                  autoFocus
-                                  onChange={(e) => handleDayNameChange(e)}
-                                  onBlur={() => handleDayNameBlur(dayIndex)}
-                                  onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
-                                  style={{ maxWidth: 160, display: 'inline-block' }}
+                            <Accordion.Item eventKey={dayIndex.toString()} key={dayIndex}>
+                              <Accordion.Header>
+                                {/* Inline editable day name */}
+                                {editingDay.dayIndex === dayIndex ? (
+                                  <Form.Control
+                                    type="text"
+                                    value={editingDay.value}
+                                    autoFocus
+                                    onChange={(e) => handleDayNameChange(e)}
+                                    onBlur={() => handleDayNameBlur(dayIndex)}
+                                    onKeyDown={(e) => handleDayNameKeyDown(e, dayIndex)}
+                                    style={{ maxWidth: 160, display: 'inline-block' }}
+                                    size="sm"
+                                  />
+                                ) : (
+                                  <span
+                                    style={{ cursor: 'pointer', fontWeight: 500 }}
+                                    onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
+                                    title="Click to edit day name"
+                                  >
+                                    {day.name || `Day ${dayIndex + 1}`}
+                                  </span>
+                                )}
+                                <Button
+                                  onClick={(e) => { e.stopPropagation(); removeDay(dayIndex); }}
+                                  className="ms-2 preset-btn delete-btn"
+                                  variant="outline-danger"
                                   size="sm"
-                                />
-                              ) : (
-                                <span
-                                  style={{ cursor: 'pointer', fontWeight: 500 }}
-                                  onClick={(e) => { e.stopPropagation(); handleDayNameClick(dayIndex, day.name); }}
-                                  title="Click to edit day name"
                                 >
-                                  {day.name || `Day ${dayIndex + 1}`}
-                                </span>
-                              )}
-                              <Button
-                                onClick={(e) => { e.stopPropagation(); removeDay(dayIndex); }}
-                                className="ms-2 preset-btn delete-btn"
-                                variant="outline-danger"
-                                size="sm"
-                              >
-                                <Trash />
-                              </Button>
-                            </Accordion.Header>
-                            <Accordion.Body>
-                              {day.exercises.map((exercise, exIndex) => renderDesktopExerciseRow(day, dayIndex, exercise, exIndex))}
-                              <div className="text-center">
-                                <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
-                              </div>
-                            </Accordion.Body>
-                          </Accordion.Item>
+                                  <Trash />
+                                </Button>
+                              </Accordion.Header>
+                              <Accordion.Body>
+                                {day.exercises.map((exercise, exIndex) => renderDesktopExerciseRow(day, dayIndex, exercise, exIndex))}
+                                <div className="text-center">
+                                  <Button onClick={() => addExercise(0, dayIndex)} className="soft-button gradient" size="sm">Add Exercise</Button>
+                                </div>
+                              </Accordion.Body>
+                            </Accordion.Item>
                           ))
                         ) : (
                           <div className="text-center p-3">
@@ -1305,8 +1306,8 @@ function CreateProgram({ mode = 'create', userRole }) {
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onClick={() => setShowNotesModal(false)}>Cancel</Button>
-              <Button 
-                className="soft-button gradient" 
+              <Button
+                className="soft-button gradient"
                 onClick={() => {
                   console.log('Saving notes:', {
                     currentNoteExercise,
@@ -1335,6 +1336,7 @@ function CreateProgram({ mode = 'create', userRole }) {
             )}
             exercises={exercises}
             onCreateNew={() => setShowExerciseCreationModal(true)}
+            userRole={userRole}
           />
 
           {/* New Exercise Creation Modal */}
@@ -1359,7 +1361,7 @@ function CreateProgram({ mode = 'create', userRole }) {
               <div className="mb-2 text-muted">
                 {previewProgram.duration} weeks, {previewProgram.days_per_week} days/week
               </div>
-              <div style={{maxHeight: 350, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#f8f9fa'}}>
+              <div style={{ maxHeight: 350, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: 12, background: '#f8f9fa' }}>
                 {(() => {
                   // Convert Supabase program structure to weeks array for preview
                   let weeksArr = [];
@@ -1377,13 +1379,13 @@ function CreateProgram({ mode = 'create', userRole }) {
                     console.error('Error parsing program structure for preview:', error);
                     weeksArr = [];
                   }
-                  
+
                   // Helper to get exercise name from exercises list
                   const getExerciseName = (exerciseId) => {
                     const found = exercises.find(e => e.value === exerciseId || e.id === exerciseId);
                     return found ? found.label || found.name : exerciseId;
                   };
-                  
+
                   // Ensure all days have a name and handle undefined days
                   weeksArr.forEach((week, wIdx) => {
                     if (week && week.days && Array.isArray(week.days)) {
@@ -1402,15 +1404,15 @@ function CreateProgram({ mode = 'create', userRole }) {
                       ) : (
                         weeksArr.map((week, wIdx) => (
                           <div key={wIdx} className="mb-2">
-                            <div style={{fontWeight: 600, color: '#0d6efd'}}>Week {wIdx + 1}</div>
+                            <div style={{ fontWeight: 600, color: '#0d6efd' }}>Week {wIdx + 1}</div>
                             {week && week.days && Array.isArray(week.days) ? (
                               week.days.map((day, dIdx) => (
                                 <div key={dIdx} className="ms-3 mb-1">
-                                  <span style={{fontWeight: 500}}>{day && day.name ? day.name : `Day ${dIdx + 1}`}:</span>
+                                  <span style={{ fontWeight: 500 }}>{day && day.name ? day.name : `Day ${dIdx + 1}`}:</span>
                                   {!day || !Array.isArray(day.exercises) || day.exercises.length === 0 ? (
                                     <span className="text-muted ms-2">No exercises</span>
                                   ) : (
-                                    <ul className="mb-1" style={{marginLeft: 16}}>
+                                    <ul className="mb-1" style={{ marginLeft: 16 }}>
                                       {day.exercises.map((ex, eIdx) => (
                                         <li key={eIdx}>
                                           {getExerciseName(ex.exerciseId) || ex.exerciseId || 'Exercise'}

@@ -83,12 +83,21 @@ const ExerciseOrganizer = ({
                                 showEditButton={showEditButton}
                                 onEditClick={onEditClick}
                                 emptyMessage={`No ${groupName.toLowerCase()} found.`}
+                                userRole={userRole}
                             />
                         </Card.Body>
                     </Card>
                 ))}
             </div>
         );
+    };
+
+    // Helper function to determine if an exercise can be edited
+    const canEditExercise = (exercise) => {
+        // Custom exercises can always be edited by their creator
+        if (!exercise.isGlobal) return true;
+        // Global exercises can only be edited by admins
+        return userRole === 'admin';
     };
 
     const renderListView = () => {
@@ -113,7 +122,7 @@ const ExerciseOrganizer = ({
                             <Badge bg={ex.isGlobal ? 'primary' : 'success'}>
                                 {ex.isGlobal ? 'Global' : 'Custom'}
                             </Badge>
-                            {showEditButton && onEditClick && (
+                            {showEditButton && onEditClick && canEditExercise(ex) && (
                                 <Button
                                     variant="outline-primary"
                                     size="sm"
@@ -124,6 +133,11 @@ const ExerciseOrganizer = ({
                                 >
                                     Edit
                                 </Button>
+                            )}
+                            {showEditButton && ex.isGlobal && !canEditExercise(ex) && (
+                                <Badge bg="secondary" className="text-muted">
+                                    Read Only
+                                </Badge>
                             )}
                         </div>
                     </div>
@@ -266,6 +280,7 @@ const ExerciseOrganizer = ({
                     onExerciseClick={onExerciseClick}
                     showEditButton={showEditButton}
                     onEditClick={onEditClick}
+                    userRole={userRole}
                 />
             )}
 

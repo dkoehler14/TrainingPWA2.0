@@ -1,24 +1,24 @@
 # Implementation Plan
 
-- [ ] 1. Update database RLS policy for admin-only global exercise updates
+- [x] 1. Update database RLS policy for admin-only global exercise updates
   - Create new migration file to replace current permissive policy
   - Update RLS policy to check user_profiles.role = 'admin' for global exercise updates
   - Test policy with admin and non-admin users
   - _Requirements: 1.1, 1.2, 3.1, 3.2_
 
-- [ ] 2. Add permission checking utilities to exercise service
+- [x] 2. Add permission checking utilities to exercise service
   - Create canEditGlobalExercise utility function in exerciseService.js
   - Add role-based validation before updateExercise calls
   - Implement user-friendly error messages for permission denials
   - _Requirements: 1.1, 1.2, 2.1_
 
-- [ ] 3. Update ExerciseGrid component to conditionally show edit buttons
+- [x] 3. Update ExerciseGrid component to conditionally show edit buttons
   - Add userRole prop to ExerciseGrid component
   - Hide edit button for global exercises when user is not admin
   - Add visual indicators to distinguish editable vs read-only exercises
   - _Requirements: 2.2, 2.3_
 
-- [ ] 4. Update ExerciseOrganizer component to pass role information
+- [x] 4. Update ExerciseOrganizer component to pass role information
   - Modify ExerciseOrganizer to accept and pass userRole prop
   - Update component to filter edit capabilities based on permissions
   - Ensure role information flows to child components

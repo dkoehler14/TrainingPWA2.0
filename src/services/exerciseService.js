@@ -3,6 +3,80 @@ import { handleSupabaseError, executeSupabaseOperation } from '../utils/supabase
 import { supabaseCache } from '../api/supabaseCache'
 
 /**
+ * Permission checking utilities for exercise operations
+ */
+
+/**
+ * Check if a user can edit a global exercise
+ * @param {string} userRole - The user's role ('admin', 'user', etc.)
+ * @param {Object} exercise - The exercise object
+ * @returns {boolean} - True if user can edit the exercise
+ */
+export const canEditGlobalExercise = (userRole, exercise) => {
+  if (!exercise.is_global) return true // Anyone can edit custom exercises
+  return userRole === 'admin' // Only admins can edit global exercises
+}
+
+/**
+ * Permission context for exercise operations
+ */
+export const exercisePermissions = {
+  canEdit: (exercise, userRole) => {
+    return !exercise.is_global || userRole === 'admin'
+  },
+  canDelete: (exercise, userRole, userId) => {
+    return exercise.created_by === userId || 
+           (exercise.is_global && userRole === 'admin')
+  }
+}
+
+/**
+ * Validate user permissions for exercise operations
+ * @param {Object} exercise - The exercise object
+ * @param {string} userRole - The user's role
+ * @param {string} operation - The operation being performed ('edit', 'delete')
+ * @param {string} userId - The current user's ID (required for delete operations)
+ * @throws {Error} - Throws error if user doesn't have permission
+ */
+export const validateExercisePermission = (exercise, userRole, operation = 'edit', userId = null) => {
+  if (operation === 'edit' && !exercisePermissions.canEdit(exercise, userRole)) {
+    if (exercise.is_global) {
+      throw new Error('You don\'t have permission to edit global exercises. Only administrators can modify global exercises.')
+    }
+    throw new Error('You don\'t have permission to edit this exercise.')
+  }
+  
+  if (operation === 'delete' && !exercisePermissions.canDelete(exercise, userRole, userId)) {
+    if (exercise.is_global) {
+      throw new Error('You don\'t have permission to delete global exercises. Only administrators can delete global exercises.')
+    }
+    throw new Error('You don\'t have permission to delete this exercise.')
+  }
+}
+
+/**
+ * Check if a user can perform an operation on an exercise
+ * @param {Object} exercise - The exercise object
+ * @param {string} userRole - The user's role
+ * @param {string} userId - The user's ID (for ownership checks)
+ * @param {string} operation - The operation to check ('edit', 'delete')
+ * @returns {boolean} - True if the user can perform the operation
+ */
+export const canUserPerformExerciseOperation = (exercise, userRole, userId, operation = 'edit') => {
+  try {
+    if (operation === 'edit') {
+      return exercisePermissions.canEdit(exercise, userRole)
+    }
+    if (operation === 'delete') {
+      return exercisePermissions.canDelete(exercise, userRole, userId)
+    }
+    return false
+  } catch (error) {
+    return false
+  }
+}
+
+/**
  * Exercise Service for Supabase exercise operations
  * Handles CRUD operations for exercises with proper filtering and search
  * Enhanced with caching for improved performance
@@ -228,10 +302,33 @@ export const createExercise = async (exerciseData) => {
 }
 
 /**
- * Update an exercise
+ * Update an exercise with permission validation
+ * @param {string} exerciseId - The ID of the exercise to update
+ * @param {Object} updates - The updates to apply
+ * @param {string} userRole - The current user's role (optional, for client-side validation)
  */
-export const updateExercise = async (exerciseId, updates) => {
+export const updateExercise = async (exerciseId, updates, userRole = null) => {
   return executeSupabaseOperation(async () => {
+    // If userRole is provided, perform client-side validation
+    if (userRole) {
+      try {
+        // First, get the current exercise to check permissions
+        const { data: currentExercise, error: fetchError } = await supabase
+          .from('exercises')
+          .select('id, name, is_global, created_by')
+          .eq('id', exerciseId)
+          .single()
+
+        if (fetchError) throw fetchError
+
+        // Validate permissions before attempting update
+        validateExercisePermission(currentExercise, userRole, 'edit')
+      } catch (permissionError) {
+        // Re-throw permission errors with user-friendly messages
+        throw permissionError
+      }
+    }
+
     const updateData = {
       ...updates,
       updated_at: new Date().toISOString()
@@ -244,7 +341,13 @@ export const updateExercise = async (exerciseId, updates) => {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      // Check if this is a permission error from RLS policy
+      if (error.code === '42501' || error.message?.includes('insufficient privileges')) {
+        throw new Error('You don\'t have permission to edit global exercises. Only administrators can modify global exercises.')
+      }
+      throw error
+    }
 
     console.log('Exercise updated:', data.name)
     return data
@@ -252,16 +355,45 @@ export const updateExercise = async (exerciseId, updates) => {
 }
 
 /**
- * Delete an exercise
+ * Delete an exercise with permission validation
+ * @param {string} exerciseId - The ID of the exercise to delete
+ * @param {string} userRole - The current user's role (optional, for client-side validation)
+ * @param {string} userId - The current user's ID (optional, for client-side validation)
  */
-export const deleteExercise = async (exerciseId) => {
+export const deleteExercise = async (exerciseId, userRole = null, userId = null) => {
   return executeSupabaseOperation(async () => {
+    // If userRole and userId are provided, perform client-side validation
+    if (userRole && userId) {
+      try {
+        // First, get the current exercise to check permissions
+        const { data: currentExercise, error: fetchError } = await supabase
+          .from('exercises')
+          .select('id, name, is_global, created_by')
+          .eq('id', exerciseId)
+          .single()
+
+        if (fetchError) throw fetchError
+
+        // Validate permissions before attempting delete
+        validateExercisePermission(currentExercise, userRole, 'delete', userId)
+      } catch (permissionError) {
+        // Re-throw permission errors with user-friendly messages
+        throw permissionError
+      }
+    }
+
     const { error } = await supabase
       .from('exercises')
       .delete()
       .eq('id', exerciseId)
 
-    if (error) throw error
+    if (error) {
+      // Check if this is a permission error from RLS policy
+      if (error.code === '42501' || error.message?.includes('insufficient privileges')) {
+        throw new Error('You don\'t have permission to delete global exercises. Only administrators can delete global exercises.')
+      }
+      throw error
+    }
 
     console.log('Exercise deleted:', exerciseId)
     return true

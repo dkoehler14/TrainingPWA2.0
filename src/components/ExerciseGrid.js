@@ -21,7 +21,8 @@ const ExerciseGrid = ({
     initialTypeFilter = '',
     initialMuscleFilter = '',
     initialSearchTerm = '',
-    initialSourceFilter = 'all'
+    initialSourceFilter = 'all',
+    userRole = 'user'
 }) => {
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
     const [typeFilter, setTypeFilter] = useState(initialTypeFilter);
@@ -29,6 +30,14 @@ const ExerciseGrid = ({
     const [sourceFilter, setSourceFilter] = useState(initialSourceFilter);
     const [sortOption, setSortOption] = useState('name-asc');
     const [showAdvancedFilters] = useState(true);
+
+    // Helper function to determine if an exercise can be edited
+    const canEditExercise = (exercise) => {
+        // Custom exercises can always be edited by their creator
+        if (!exercise.isGlobal) return true;
+        // Global exercises can only be edited by admins
+        return userRole === 'admin';
+    };
 
     // Enhanced filtering and sorting logic
     const filteredExercises = exercises
@@ -205,13 +214,14 @@ const ExerciseGrid = ({
                 {filteredExercises.map(ex => (
                     <Col xs={12} md={6} lg={4} key={ex.id} className="mb-3">
                         <div
-                            className={`p-3 border rounded exercise-card h-100 d-flex flex-column ${ex.isGlobal ? 'exercise-card-global' : 'exercise-card-custom'}`}
+                            className={`p-3 border rounded exercise-card h-100 d-flex flex-column ${ex.isGlobal ? 'exercise-card-global' : 'exercise-card-custom'} ${showEditButton && ex.isGlobal && !canEditExercise(ex) ? 'exercise-card-readonly' : ''}`}
                             style={{
                                 cursor: onExerciseClick ? 'pointer' : 'default',
-                                backgroundColor: '#f8f9fa',
+                                backgroundColor: showEditButton && ex.isGlobal && !canEditExercise(ex) ? '#f8f9fa' : '#f8f9fa',
                                 transition: 'all 0.2s',
                                 position: 'relative',
-                                borderLeft: `4px solid ${ex.isGlobal ? 'var(--primary-color, #007bff)' : 'var(--success-color, #28a745)'}`
+                                borderLeft: `4px solid ${ex.isGlobal ? 'var(--primary-color, #007bff)' : 'var(--success-color, #28a745)'}`,
+                                opacity: showEditButton && ex.isGlobal && !canEditExercise(ex) ? 0.85 : 1
                             }}
                             onMouseEnter={e => {
                                 if (onExerciseClick) {
@@ -251,7 +261,7 @@ const ExerciseGrid = ({
                             </div>
 
                             {/* Edit button in top right corner */}
-                            {showEditButton && onEditClick && (
+                            {showEditButton && onEditClick && canEditExercise(ex) && (
                                 <Button
                                     variant="outline-primary"
                                     size="sm"
@@ -264,6 +274,34 @@ const ExerciseGrid = ({
                                 >
                                     <PencilSquare size={14} />
                                 </Button>
+                            )}
+
+                            {/* Read-only indicator for non-editable global exercises */}
+                            {showEditButton && ex.isGlobal && !canEditExercise(ex) && (
+                                <div
+                                    className="position-absolute d-flex align-items-center justify-content-center"
+                                    style={{
+                                        top: '8px',
+                                        right: '8px',
+                                        zIndex: 10,
+                                        width: '28px',
+                                        height: '28px',
+                                        backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                                        borderRadius: '4px',
+                                        border: '1px solid rgba(108, 117, 125, 0.3)'
+                                    }}
+                                    title="Admin-only exercise - read only"
+                                >
+                                    <span
+                                        style={{
+                                            fontSize: '10px',
+                                            color: '#6c757d',
+                                            fontWeight: 'bold'
+                                        }}
+                                    >
+                                        RO
+                                    </span>
+                                </div>
                             )}
 
                             <div className={showEditButton ? 'pe-5 ps-4' : 'ps-4'}>

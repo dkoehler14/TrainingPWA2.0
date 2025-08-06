@@ -53,6 +53,36 @@
     border-radius: 6px;
 }
 
+/* Read-only exercise card styling */
+.exercise-card-readonly {
+    opacity: 0.85;
+    position: relative;
+}
+
+.exercise-card-readonly::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(108, 117, 125, 0.05) 10px,
+        rgba(108, 117, 125, 0.05) 20px
+    );
+    pointer-events: none;
+    border-radius: inherit;
+}
+
+.exercise-card-readonly:hover {
+    opacity: 0.9;
+    transform: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
 /* Phase 2: Enhanced filtering styles */
 .btn-group .btn {
     flex: 1;

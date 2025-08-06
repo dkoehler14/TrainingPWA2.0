@@ -194,7 +194,7 @@ function LogWorkout() {
   // User message state for enhanced error handling
   const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
 
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, userRole } = useAuth();
 
   // Enhanced real-time capabilities for workout updates
   const realtimeHook = useWorkoutRealtime(
@@ -1817,6 +1817,7 @@ function LogWorkout() {
                           exercises={alternativeExercises}
                           onExerciseClick={replaceExercise}
                           emptyMessage="No exercises found."
+                          userRole={userRole}
                           initialTypeFilter=''
                           // This is useful for other files maybe
                           // {(() => {
@@ -1970,6 +1971,7 @@ function LogWorkout() {
               exercises={exercisesList}
               onExerciseClick={(exercise) => handleAddExercise(exercise, addExerciseType)}
               emptyMessage="No exercises found."
+              userRole={userRole}
             />
           </div>
         </Modal.Body>

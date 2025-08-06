@@ -95,10 +95,11 @@ CREATE POLICY "Users can view active users" ON users
 
 -- Allow admins to manage all users (placeholder - requires admin role implementation)
 -- This would typically be expanded with proper admin role checking
-CREATE POLICY "Admins can manage all users" ON users
-    USING (
-        EXISTS (
-            SELECT 1 FROM auth.users
-            WHERE auth.uid() = id AND raw_user_meta_data->>'role' = 'admin'
-        )
-    );
+-- Note: This policy is disabled for now until proper admin role checking is implemented
+-- CREATE POLICY "Admins can manage all users" ON users
+--     USING (
+--         EXISTS (
+--             SELECT 1 FROM users u
+--             WHERE u.id = auth.uid() AND 'admin' = ANY(u.roles)
+--         )
+--     );

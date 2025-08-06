@@ -16,7 +16,7 @@ CREATE POLICY "Admin only global exercise updates" ON exercises
             EXISTS (
                 SELECT 1 FROM users
                 WHERE users.id = auth.uid() 
-                AND 'admin' = ANY(users.role)
+                AND 'admin' = ANY(users.roles)
             )
         )
     );

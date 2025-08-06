@@ -5,9 +5,9 @@ CREATE OR REPLACE FUNCTION add_user_role(user_id UUID, new_role TEXT)
 RETURNS VOID AS $$
 BEGIN
     UPDATE users 
-    SET role = array_append(role, new_role)
+    SET roles = array_append(roles, new_role)
     WHERE id = user_id 
-    AND NOT (new_role = ANY(role));
+    AND NOT (new_role = ANY(roles));
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION remove_user_role(user_id UUID, old_role TEXT)
 RETURNS VOID AS $$
 BEGIN
     UPDATE users 
-    SET role = array_remove(role, old_role)
+    SET roles = array_remove(roles, old_role)
     WHERE id = user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -28,7 +28,7 @@ BEGIN
     RETURN EXISTS (
         SELECT 1 FROM users 
         WHERE id = user_id 
-        AND check_role = ANY(role)
+        AND check_role = ANY(roles)
     );
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

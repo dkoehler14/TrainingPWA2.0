@@ -34,4 +34,4 @@ This feature restricts the ability to update global exercises to only users with
 
 1. WHEN the database RLS policy is evaluated for global exercise updates THEN it SHALL check the user's admin role status
 2. WHEN a non-admin user attempts to update a global exercise via direct API call THEN the database SHALL reject the operation
-3. WHEN the user_profiles table is queried for role verification THEN it SHALL return accurate role information for the authenticated user
+3. WHEN the users table is queried for role verification THEN it SHALL return accurate role information for the authenticated user

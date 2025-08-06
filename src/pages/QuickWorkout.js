@@ -40,7 +40,7 @@ function QuickWorkout() {
     const [lastSaved, setLastSaved] = useState(null);
     const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
 
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, userRole } = useAuth();
 
     // Refs for number inputs
     const repsInputRef = useRef(null);
@@ -805,6 +805,7 @@ function QuickWorkout() {
                     <ExerciseGrid
                         exercises={exercisesList}
                         onExerciseClick={addExerciseToWorkout}
+                        userRole={userRole}
                     />
                 </Modal.Body>
             </Modal>

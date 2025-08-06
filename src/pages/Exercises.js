@@ -7,11 +7,12 @@ import '../styles/Exercises.css';
 import '../styles/ExerciseGrid.css';
 import '../styles/ExerciseOrganizer.css';
 import { getAvailableExercises } from '../services/exerciseService';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, useRoles } from '../hooks/useAuth';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
 
 function Exercises() {
   const { user, isAuthenticated } = useAuth();
+  const { userRole } = useRoles();
   const [exercises, setExercises] = useState([]);
 
   // State for validation and feedback
@@ -127,6 +128,7 @@ function Exercises() {
                   showEditButton={true}
                   onEditClick={openEditModal}
                   className="exercises-organizer"
+                  userRole={userRole}
                 />
               </>
             )}
