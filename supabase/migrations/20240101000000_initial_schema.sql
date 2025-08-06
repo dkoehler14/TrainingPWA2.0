@@ -9,7 +9,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY, -- This will be auth.uid()
     email VARCHAR(255) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
-    role TEXT[] DEFAULT '{user}',
+    roles TEXT[] DEFAULT ARRAY['user'],
     experience_level VARCHAR(50) DEFAULT 'beginner',
     preferred_units VARCHAR(10) DEFAULT 'LB',
     age INTEGER,

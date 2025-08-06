@@ -185,6 +185,7 @@ async function seedSupabaseAll(options = {}) {
       {
         email: `test-${timestamp}@example.com`,
         password: 'testpass123',
+        role: ['user'],
         profile: {
           name: 'Test User',
           experience_level: 'beginner',
@@ -202,6 +203,7 @@ async function seedSupabaseAll(options = {}) {
       {
         email: 'beginner@example.com',
         password: 'beginner123',
+        role: ['user'],
         profile: {
           name: 'Beginner User',
           experience_level: 'beginner',
@@ -219,6 +221,7 @@ async function seedSupabaseAll(options = {}) {
       {
         email: 'intermediate@example.com',
         password: 'intermediate123',
+        role: ['user'],
         profile: {
           name: 'Intermediate User',
           experience_level: 'intermediate',
@@ -226,6 +229,24 @@ async function seedSupabaseAll(options = {}) {
           age: 28,
           weight: 170.0,
           height: 72.0,
+          goals: ['Get Stronger', 'Build Muscle'],
+          available_equipment: ['Dumbbells', 'Barbell', 'Bench', 'Pull-up Bar'],
+          injuries: [],
+          preferences: {},
+          settings: {}
+        }
+      },
+      {
+        email: 'admin@example.com',
+        password: 'admin123',
+        role: ['admin'],
+        profile: {
+          name: 'Admin User',
+          experience_level: 'intermediate',
+          preferred_units: 'LB',
+          age: 29,
+          weight: 200.0,
+          height: 75.0,
           goals: ['Get Stronger', 'Build Muscle'],
           available_equipment: ['Dumbbells', 'Barbell', 'Bench', 'Pull-up Bar'],
           injuries: [],
