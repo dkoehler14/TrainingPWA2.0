@@ -7,7 +7,7 @@ import {
     canUserPerformExerciseOperation
 } from '../services/exerciseService';
 import { MUSCLE_GROUPS, EXERCISE_TYPES } from '../constants/exercise';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth, useRoles } from '../hooks/useAuth';
 
 function ExerciseCreationModal({
     show,
@@ -18,13 +18,14 @@ function ExerciseCreationModal({
     exerciseId,           // Required if isEditMode is true
     initialData          // Optional object with name, primaryMuscleGroup
 }) {
-    const { user, userProfile } = useAuth();
-    const userRole = userProfile?.role || 'user';
+    const { user } = useAuth();
+    const { userRole } = useRoles();
     const [formData, setFormData] = useState({
         name: '',
         primary_muscle_group: '',
         exercise_type: ''
     });
+    console.log("userRole: ", userRole);
 
     const [adminVisibility, setAdminVisibility] = useState('main'); // 'main' or 'personal'
 
