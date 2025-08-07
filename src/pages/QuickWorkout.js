@@ -9,6 +9,7 @@ import '../styles/QuickWorkoutDraft.css';
 import { debounce } from 'lodash';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
+import { transformSupabaseExercises } from '../utils/dataTransformations';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 
@@ -218,13 +219,10 @@ function QuickWorkout() {
                         })
                     ]);
 
-                    // Process exercises for UI
-                    const enhancedExercises = exercisesData.map(ex => ({
-                        ...ex,
-                        isGlobal: ex.is_global,
-                        source: ex.is_global ? 'global' : 'user',
-                        createdBy: ex.created_by
-                    }));
+                    console.log("exercisesData: ", exercisesData);
+
+                    // Process exercises for UI using transformSupabaseExercises
+                    const enhancedExercises = transformSupabaseExercises(exercisesData);
 
                     setExercisesList(enhancedExercises);
 

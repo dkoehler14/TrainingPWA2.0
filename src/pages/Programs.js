@@ -8,6 +8,7 @@ import '../styles/Programs.css';
 import { getUserPrograms, getProgramById, setCurrentProgram, deleteProgram, copyProgram, getProgramStatistics } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
+import { transformSupabaseExercises } from '../utils/dataTransformations';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { useRealtimePrograms, useRealtimeExerciseLibrary } from '../hooks/useRealtimePrograms';
 import { Line } from 'react-chartjs-2';
@@ -269,12 +270,7 @@ function Programs({ userRole }) {
               fetchTimeMs: Math.round(fetchTime * 100) / 100
             });
 
-            const processedExercises = exercisesData.map(ex => ({
-              ...ex,
-              isGlobal: ex.is_global,
-              source: ex.is_global ? 'global' : 'user',
-              createdBy: ex.created_by
-            }));
+            const processedExercises = transformSupabaseExercises(exercisesData);
 
             console.log('🔄 [PROGRAMS_PAGE] Exercises processed:', {
               originalCount: exercisesData?.length || 0,
@@ -310,12 +306,7 @@ function Programs({ userRole }) {
                   source: 'cache-fallback'
                 });
 
-                const processedCachedExercises = cachedExercises.map(ex => ({
-                  ...ex,
-                  isGlobal: ex.is_global,
-                  source: ex.is_global ? 'global' : 'user',
-                  createdBy: ex.created_by
-                }));
+                const processedCachedExercises = transformSupabaseExercises(cachedExercises);
 
                 setExercises(processedCachedExercises);
                 setExercisesError('Showing cached exercise data. Some information may be outdated.');
@@ -360,12 +351,7 @@ function Programs({ userRole }) {
               }
               
               if (cachedExercises) {
-                const processedExercises = cachedExercises.map(ex => ({
-                  ...ex,
-                  isGlobal: ex.is_global,
-                  source: ex.is_global ? 'global' : 'user',
-                  createdBy: ex.created_by
-                }));
+                const processedExercises = transformSupabaseExercises(cachedExercises);
                 setExercises(processedExercises);
                 setExercisesError('Showing cached exercise data. Please refresh for latest information.');
               }

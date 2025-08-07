@@ -11,6 +11,7 @@ import { Container, Row, Col, Spinner, Alert, Modal, Button } from 'react-bootst
 import { useAuth } from '../hooks/useAuth';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
+import { transformSupabaseExercises } from '../utils/dataTransformations';
 import { supabase } from '../config/supabase';
 
 // Import child components
@@ -105,19 +106,16 @@ function QuickWorkoutHistoryContent() {
           console.warn('Exercises data is not an array:', exercisesData);
         }
 
-        const enhancedExercises = validExercises.map(ex => {
-          // Validate exercise structure
+        // Validate exercise structure and transform using utility function
+        const validatedExercises = validExercises.filter(ex => {
           if (!ex || typeof ex !== 'object' || !ex.id) {
             console.warn('Invalid exercise data:', ex);
-            return null;
+            return false;
           }
-          return {
-            ...ex,
-            isGlobal: ex.is_global,
-            source: ex.is_global ? 'global' : 'user',
-            createdBy: ex.created_by
-          };
-        }).filter(Boolean); // Remove null entries
+          return true;
+        });
+
+        const enhancedExercises = transformSupabaseExercises(validatedExercises);
 
         setExercises(enhancedExercises);
 

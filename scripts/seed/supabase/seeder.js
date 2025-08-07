@@ -133,34 +133,34 @@ async function seedSupabaseAll(options = {}) {
       { id: '550e8400-e29b-41d4-a716-446655440004', name: 'Dumbbell Flyes', primary_muscle_group: 'Chest', exercise_type: 'Isolation', instructions: 'Lie on bench, arc dumbbells out and back together', is_global: true },
 
       // Back exercises
-      { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Pull-ups', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Hang from bar, pull body up until chin over bar', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440006', name: 'Bent-over Row', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Bend at hips, pull weight to lower chest', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440007', name: 'Lat Pulldown', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Pull bar down to upper chest, squeeze shoulder blades', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440008', name: 'Deadlift', primary_muscle_group: 'Back', exercise_type: 'Compound', instructions: 'Lift weight from ground by extending hips and knees', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440005', name: 'Pull-ups', primary_muscle_group: 'Back', exercise_type: 'Bodyweight Loadable', instructions: 'Hang from bar, pull body up until chin over bar', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440006', name: 'Bent-over Row', primary_muscle_group: 'Back', exercise_type: 'Barberll', instructions: 'Bend at hips, pull weight to lower chest', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440007', name: 'Lat Pulldown', primary_muscle_group: 'Back', exercise_type: 'Cable', instructions: 'Pull bar down to upper chest, squeeze shoulder blades', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440008', name: 'Trap Bar Deadlift', primary_muscle_group: 'Back', exercise_type: 'Trap Bar', instructions: 'Lift weight from ground by extending hips and knees', is_global: true },
 
       // Legs exercises
-      { id: '550e8400-e29b-41d4-a716-446655440009', name: 'Squat', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Lower body by bending knees and hips, return to standing', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000a', name: 'Leg Press', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Push weight away using legs while seated', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000b', name: 'Lunges', primary_muscle_group: 'Legs', exercise_type: 'Compound', instructions: 'Step forward, lower back knee toward ground', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000c', name: 'Leg Curl', primary_muscle_group: 'Legs', exercise_type: 'Isolation', instructions: 'Curl heels toward glutes against resistance', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440009', name: 'SSB Squat', primary_muscle_group: 'Legs', exercise_type: 'Safety Squat Bar', instructions: 'Lower body by bending knees and hips, return to standing', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000a', name: 'Leg Press', primary_muscle_group: 'Legs', exercise_type: 'Machine', instructions: 'Push weight away using legs while seated', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000b', name: 'DB Lunges', primary_muscle_group: 'Legs', exercise_type: 'Dumbbell', instructions: 'Step forward, lower back knee toward ground', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000c', name: '2 Leg Seated Leg Curl', primary_muscle_group: 'Legs', exercise_type: 'Machine', instructions: 'Curl heels toward glutes against resistance', is_global: true },
 
       // Shoulders exercises
-      { id: '550e8400-e29b-41d4-a716-44665544000d', name: 'Overhead Press', primary_muscle_group: 'Shoulders', exercise_type: 'Compound', instructions: 'Press weight overhead from shoulder level', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000e', name: 'Lateral Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Raise arms out to sides to shoulder height', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000f', name: 'Front Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Raise arms forward to shoulder height', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440010', name: 'Rear Delt Flyes', primary_muscle_group: 'Shoulders', exercise_type: 'Isolation', instructions: 'Bend forward, raise arms out to sides', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000d', name: 'Overhead Press', primary_muscle_group: 'Shoulders', exercise_type: 'Barbell', instructions: 'Press weight overhead from shoulder level', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000e', name: 'Lateral Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Dumbbell', instructions: 'Raise arms out to sides to shoulder height', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000f', name: 'Front Raises', primary_muscle_group: 'Shoulders', exercise_type: 'Dumbbell', instructions: 'Raise arms forward to shoulder height', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440010', name: 'Cable Rear Delt Flyes', primary_muscle_group: 'Shoulders', exercise_type: 'Cable', instructions: 'Bend forward, raise arms out to sides', is_global: true },
 
       // Arms exercises
-      { id: '550e8400-e29b-41d4-a716-446655440011', name: 'Bicep Curls', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Curl weight up by flexing biceps', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440012', name: 'Tricep Dips', primary_muscle_group: 'Arms', exercise_type: 'Compound', instructions: 'Lower body by bending arms, push back up', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440013', name: 'Hammer Curls', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Curl with neutral grip, thumbs up', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440014', name: 'Tricep Extensions', primary_muscle_group: 'Arms', exercise_type: 'Isolation', instructions: 'Extend arms overhead, lower weight behind head', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440011', name: 'Cable Bicep Curls', primary_muscle_group: 'Biceps', exercise_type: 'Cable', instructions: 'Curl weight up by flexing biceps', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440012', name: 'Tricep Dips', primary_muscle_group: 'Triceps', exercise_type: 'Bodyweight Loadable', instructions: 'Lower body by bending arms, push back up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440013', name: 'Hammer Curls', primary_muscle_group: 'Biceps', exercise_type: 'Dumbbell', instructions: 'Curl with neutral grip, thumbs up', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440014', name: 'Tricep Extensions', primary_muscle_group: 'Triceps', exercise_type: 'Dumbbell', instructions: 'Extend arms overhead, lower weight behind head', is_global: true },
 
       // Core exercises
-      { id: '550e8400-e29b-41d4-a716-446655440015', name: 'Plank', primary_muscle_group: 'Core', exercise_type: 'Isometric', instructions: 'Hold body straight in push-up position', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440016', name: 'Crunches', primary_muscle_group: 'Core', exercise_type: 'Isolation', instructions: 'Lift shoulders off ground by contracting abs', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440017', name: 'Russian Twists', primary_muscle_group: 'Core', exercise_type: 'Isolation', instructions: 'Rotate torso side to side while seated', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-446655440018', name: 'Mountain Climbers', primary_muscle_group: 'Core', exercise_type: 'Cardio', instructions: 'Alternate bringing knees to chest in plank position', is_global: true }
+      { id: '550e8400-e29b-41d4-a716-446655440015', name: 'Plank', primary_muscle_group: 'Abs', exercise_type: 'Bodyweight', instructions: 'Hold body straight in push-up position', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440016', name: 'Crunches', primary_muscle_group: 'Abs', exercise_type: 'Bodyweight', instructions: 'Lift shoulders off ground by contracting abs', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440017', name: 'Russian Twists', primary_muscle_group: 'Abs', exercise_type: 'Medicine Ball', instructions: 'Rotate torso side to side while seated', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440018', name: 'Mountain Climbers', primary_muscle_group: 'Abs', exercise_type: 'Bodyweight', instructions: 'Alternate bringing knees to chest in plank position', is_global: true }
     ];
 
     // Insert global exercises

@@ -10,6 +10,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { createProgram, createCompleteProgram, getProgramById, updateProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
+import { transformSupabaseExercises } from '../utils/dataTransformations';
 import { invalidateProgramCache } from '../api/supabaseCache';
 
 // Helper function to convert Supabase program structure to weeks state
@@ -150,12 +151,10 @@ function CreateProgram({ mode = 'create' }) {
         // Fetch exercises using Supabase
         const exercisesData = await getAvailableExercises(user.id);
 
-        // Format for UI
-        const formattedExercises = exercisesData.map(ex => ({
+        // Format for UI using transformSupabaseExercises
+        const transformedExercises = transformSupabaseExercises(exercisesData);
+        const formattedExercises = transformedExercises.map(ex => ({
           ...ex,
-          isGlobal: ex.is_global,
-          source: ex.is_global ? 'global' : 'user',
-          createdBy: ex.created_by,
           label: ex.name,
           value: ex.id,
         }));
