@@ -664,14 +664,15 @@ describe('Data Transformation Utilities', () => {
               originalIndex: -1
             }
           ],
-          isWorkoutFinished: true
+          isWorkoutFinished: true,
+          workoutLogId: 'log-1'
         },
         '0_1': {
           exercises: [
             {
               exerciseId: 'exercise-2',
               sets: 2,
-              reps: [0, 0], // Filled with defaults
+              reps: ['', ''], // Filled with defaults
               weights: ['', ''], // Filled with defaults
               completed: [false, false], // Filled with defaults
               notes: '',
@@ -681,7 +682,8 @@ describe('Data Transformation Utilities', () => {
               originalIndex: 0
             }
           ],
-          isWorkoutFinished: false
+          isWorkoutFinished: false,
+          workoutLogId: 'log-2'
         }
       });
     });

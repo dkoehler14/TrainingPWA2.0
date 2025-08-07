@@ -219,8 +219,6 @@ function QuickWorkout() {
                         })
                     ]);
 
-                    console.log("exercisesData: ", exercisesData);
-
                     // Process exercises for UI using transformSupabaseExercises
                     const enhancedExercises = transformSupabaseExercises(exercisesData);
 

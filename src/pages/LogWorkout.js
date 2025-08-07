@@ -6,6 +6,7 @@ import { useNumberInput } from '../hooks/useNumberInput.js';
 import useWorkoutRealtime, { useWorkoutProgressBroadcast } from '../hooks/useWorkoutRealtime';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
+import { useNavigate } from 'react-router-dom';
 import { getUserPrograms, getProgramById, updateProgram, updateProgramExercise } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
@@ -195,6 +196,7 @@ function LogWorkout() {
   const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
 
   const { user, isAuthenticated, userRole } = useAuth();
+  const navigate = useNavigate();
 
   // Enhanced real-time capabilities for workout updates
   const realtimeHook = useWorkoutRealtime(
@@ -324,8 +326,9 @@ function LogWorkout() {
             await executeSupabaseOperation(async () => {
               // Use cached workout log if available to avoid redundant queries
               const cacheKey = `workout_log_${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
-              let existingLog = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId
-                ? { id: programLogs[`${weekIndex}_${dayIndex}`].workoutLogId }
+              const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
+              let existingLog = cachedWorkoutLogId && cachedWorkoutLogId !== 'undefined'
+                ? { id: cachedWorkoutLogId }
                 : await workoutLogService.getWorkoutLog(userData.id, programData.id, weekIndex, dayIndex);
 
               // Transform exercise data to Supabase format (memoized)
@@ -2018,7 +2021,10 @@ function LogWorkout() {
 
       <WorkoutSummaryModal
         show={showSummaryModal}
-        onHide={() => setShowSummaryModal(false)}
+        onHide={() => {
+          setShowSummaryModal(false);
+          navigate('/');
+        }}
         workoutData={logData.map(ex => ({ ...ex, name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown' }))}
         exercisesList={exercisesList}
         weightUnit={selectedProgram?.weightUnit || 'LB'}

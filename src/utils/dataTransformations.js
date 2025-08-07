@@ -240,7 +240,8 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
         addedType: ex.added_type || null,
         originalIndex: ex.original_index || -1
       })),
-      isWorkoutFinished: log.is_finished || false
+      isWorkoutFinished: log.is_finished || false,
+      workoutLogId: log.id // Add the missing workoutLogId
     };
   });
   
