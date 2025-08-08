@@ -135,38 +135,69 @@ class WorkoutLogService {
       return supabaseCache.getWithCache(
         cacheKey,
         async () => {
-          const { data, error } = await supabase
-            .from('workout_logs')
-            .select(`
-              *,
-              workout_log_exercises (
+          try {
+            const { data, error } = await supabase
+              .from('workout_logs')
+              .select(`
                 *,
-                exercises (
-                  id,
-                  name,
-                  primary_muscle_group,
-                  exercise_type,
-                  instructions
+                workout_log_exercises (
+                  *,
+                  exercises (
+                    id,
+                    name,
+                    primary_muscle_group,
+                    exercise_type,
+                    instructions
+                  )
                 )
-              )
-            `)
-            .eq('user_id', userId)
-            .eq('program_id', programId)
-            .eq('week_index', weekIndex)
-            .eq('day_index', dayIndex)
-            .single()
+              `)
+              .eq('user_id', userId)
+              .eq('program_id', programId)
+              .eq('week_index', weekIndex)
+              .eq('day_index', dayIndex)
+              .limit(1)
 
-          if (error && error.code !== 'PGRST116') throw error
+            if (error) {
+              console.error('❌ getWorkoutLog query failed:', {
+                error: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                userId,
+                programId,
+                weekIndex,
+                dayIndex
+              })
+              // Return null instead of throwing to prevent breaking the app
+              return null
+            }
 
-          // Return null if no workout log found
-          if (error && error.code === 'PGRST116') return null
+            // Return null if no workout log found (empty array)
+            if (!data || data.length === 0) {
+              console.log('ℹ️ No workout log found:', { userId, programId, weekIndex, dayIndex })
+              return null
+            }
 
-          // Sort exercises by order_index
-          if (data?.workout_log_exercises) {
-            data.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+            // Get the first (and should be only) result
+            const workoutLog = data[0]
+
+            // Sort exercises by order_index
+            if (workoutLog?.workout_log_exercises) {
+              workoutLog.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+            }
+
+            console.log('✅ getWorkoutLog found existing log:', {
+              logId: workoutLog.id,
+              exerciseCount: workoutLog.workout_log_exercises?.length || 0,
+              isFinished: workoutLog.is_finished
+            })
+
+            return workoutLog
+          } catch (queryError) {
+            console.error('❌ getWorkoutLog failed completely:', queryError)
+            // Return null instead of throwing to prevent breaking the app
+            return null
           }
-
-          return data
         },
         { ttl: this.CACHE_TTL }
       )
@@ -972,7 +1003,7 @@ class WorkoutLogService {
 
       const completedDate = new Date().toISOString()
 
-      if (existingLog) {
+      if (existingLog && existingLog.id && existingLog.id !== 'undefined' && existingLog.id !== undefined && existingLog.id !== null && existingLog.id !== '') {
         // Update existing log to mark as finished
         await this.updateWorkoutLog(existingLog.id, {
           name: existingLog.name,

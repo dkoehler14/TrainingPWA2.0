@@ -327,9 +327,54 @@ function LogWorkout() {
               // Use cached workout log if available to avoid redundant queries
               const cacheKey = `workout_log_${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
               const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
-              let existingLog = cachedWorkoutLogId && cachedWorkoutLogId !== 'undefined'
-                ? { id: cachedWorkoutLogId }
-                : await workoutLogService.getWorkoutLog(userData.id, programData.id, weekIndex, dayIndex);
+              
+              // Debug logging for cached workout log ID
+              if (process.env.NODE_ENV === 'development') {
+                const isValid = cachedWorkoutLogId && 
+                               cachedWorkoutLogId !== 'undefined' && 
+                               cachedWorkoutLogId !== undefined && 
+                               cachedWorkoutLogId !== null &&
+                               cachedWorkoutLogId !== '';
+                console.log('🔍 Cached workout log ID check:', {
+                  key: `${weekIndex}_${dayIndex}`,
+                  cachedWorkoutLogId,
+                  type: typeof cachedWorkoutLogId,
+                  isValid,
+                  willUseCached: isValid
+                });
+              }
+              
+              let existingLog = null;
+              
+              if (cachedWorkoutLogId && 
+                  cachedWorkoutLogId !== 'undefined' && 
+                  cachedWorkoutLogId !== undefined && 
+                  cachedWorkoutLogId !== null &&
+                  cachedWorkoutLogId !== '') {
+                existingLog = { id: cachedWorkoutLogId };
+                console.log('✅ Using cached workout log ID:', cachedWorkoutLogId);
+              } else {
+                console.log('🔍 Fetching workout log from database:', {
+                  userId: userData.id,
+                  userIdType: typeof userData.id,
+                  programId: programData.id,
+                  programIdType: typeof programData.id,
+                  weekIndex,
+                  weekIndexType: typeof weekIndex,
+                  dayIndex,
+                  dayIndexType: typeof dayIndex
+                });
+                
+              }
+
+              // Additional validation for existing log
+              if (existingLog && Array.isArray(existingLog)) {
+                console.warn('⚠️ getWorkoutLog returned array instead of object, treating as new workout:', existingLog);
+                existingLog = null;
+              } else if (existingLog && (!existingLog.id || existingLog.id === 'undefined' || existingLog.id === undefined || existingLog.id === null || existingLog.id === '')) {
+                console.warn('⚠️ Invalid existing log ID detected, treating as new workout:', existingLog);
+                existingLog = null;
+              }
 
               // Transform exercise data to Supabase format (memoized)
               const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
@@ -342,7 +387,7 @@ function LogWorkout() {
                 isFinished: existingLog?.is_finished || false
               });
 
-              if (existingLog) {
+              if (existingLog && existingLog.id) {
                 // Optimized update: only send changed fields
                 const updateData = {
                   name: workoutData.name,
@@ -351,6 +396,15 @@ function LogWorkout() {
                   exercises: transformedExercises
                 };
 
+                // Debug logging for update operation
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('🔄 Updating workout log:', {
+                    logId: existingLog.id,
+                    logIdType: typeof existingLog.id,
+                    updateData: { ...updateData, exercises: `${updateData.exercises.length} exercises` }
+                  });
+                }
+                
                 await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
 
                 workoutDebugger.logger.debug('📝 Workout log updated (optimized)', {
@@ -361,15 +415,17 @@ function LogWorkout() {
                 // Create new log and cache the ID for future updates
                 const newLog = await workoutLogService.createWorkoutLog(userData.id, workoutData);
 
-                // Update local cache with new log ID
-                const key = `${weekIndex}_${dayIndex}`;
-                setProgramLogs(prev => ({
-                  ...prev,
-                  [key]: {
-                    ...prev[key],
-                    workoutLogId: newLog.id
-                  }
-                }));
+                // Update local cache with new log ID (only if we got a valid ID)
+                if (newLog && newLog.id) {
+                  const key = `${weekIndex}_${dayIndex}`;
+                  setProgramLogs(prev => ({
+                    ...prev,
+                    [key]: {
+                      ...prev[key],
+                      workoutLogId: newLog.id
+                    }
+                  }));
+                }
 
                 workoutDebugger.logger.debug('📝 Workout log created (cached)', {
                   logId: newLog?.id,
@@ -1026,7 +1082,7 @@ function LogWorkout() {
           originalIndex: ex.originalIndex || -1
         }));
 
-        if (existingLog) {
+        if (existingLog && existingLog.id && existingLog.id !== 'undefined' && existingLog.id !== undefined && existingLog.id !== null && existingLog.id !== '') {
           // Update existing log
           await workoutLogService.updateWorkoutLog(existingLog.id, {
             name: existingLog.name,
