@@ -327,14 +327,14 @@ function LogWorkout() {
               // Use cached workout log if available to avoid redundant queries
               const cacheKey = `workout_log_${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
               const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
-              
+
               // Debug logging for cached workout log ID
               if (process.env.NODE_ENV === 'development') {
-                const isValid = cachedWorkoutLogId && 
-                               cachedWorkoutLogId !== 'undefined' && 
-                               cachedWorkoutLogId !== undefined && 
-                               cachedWorkoutLogId !== null &&
-                               cachedWorkoutLogId !== '';
+                const isValid = cachedWorkoutLogId &&
+                  cachedWorkoutLogId !== 'undefined' &&
+                  cachedWorkoutLogId !== undefined &&
+                  cachedWorkoutLogId !== null &&
+                  cachedWorkoutLogId !== '';
                 console.log('🔍 Cached workout log ID check:', {
                   key: `${weekIndex}_${dayIndex}`,
                   cachedWorkoutLogId,
@@ -343,14 +343,14 @@ function LogWorkout() {
                   willUseCached: isValid
                 });
               }
-              
+
               let existingLog = null;
-              
-              if (cachedWorkoutLogId && 
-                  cachedWorkoutLogId !== 'undefined' && 
-                  cachedWorkoutLogId !== undefined && 
-                  cachedWorkoutLogId !== null &&
-                  cachedWorkoutLogId !== '') {
+
+              if (cachedWorkoutLogId &&
+                cachedWorkoutLogId !== 'undefined' &&
+                cachedWorkoutLogId !== undefined &&
+                cachedWorkoutLogId !== null &&
+                cachedWorkoutLogId !== '') {
                 existingLog = { id: cachedWorkoutLogId };
                 console.log('✅ Using cached workout log ID:', cachedWorkoutLogId);
               } else {
@@ -364,7 +364,7 @@ function LogWorkout() {
                   dayIndex,
                   dayIndexType: typeof dayIndex
                 });
-                
+
               }
 
               // Additional validation for existing log
@@ -404,7 +404,7 @@ function LogWorkout() {
                     updateData: { ...updateData, exercises: `${updateData.exercises.length} exercises` }
                   });
                 }
-                
+
                 await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
 
                 workoutDebugger.logger.debug('📝 Workout log updated (optimized)', {
@@ -449,6 +449,103 @@ function LogWorkout() {
     [showUserMessage, handleError, programLogs] // Include programLogs for caching
   );
 
+  // Create a non-debounced version for immediate saves
+  const immediateSaveLog = useCallback(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
+    // Cancel any pending debounced saves
+    debouncedSaveLog.cancel();
+
+    // Execute the save immediately
+    if (!userData || !programData || exerciseData.length === 0) return;
+
+    try {
+      await workoutDebugger.trackOperation(
+        WORKOUT_OPERATIONS.SAVE_WORKOUT_LOG,
+        async () => {
+          await executeSupabaseOperation(async () => {
+            // Use cached workout log if available to avoid redundant queries
+            const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
+
+            let existingLog = null;
+
+            if (cachedWorkoutLogId &&
+              cachedWorkoutLogId !== 'undefined' &&
+              cachedWorkoutLogId !== undefined &&
+              cachedWorkoutLogId !== null &&
+              cachedWorkoutLogId !== '') {
+              existingLog = { id: cachedWorkoutLogId };
+            } else {
+              existingLog = await workoutLogService.getWorkoutLog(userData.id, programData.id, weekIndex, dayIndex);
+            }
+
+            // Additional validation for existing log
+            if (existingLog && Array.isArray(existingLog)) {
+              existingLog = null;
+            } else if (existingLog && (!existingLog.id || existingLog.id === 'undefined' || existingLog.id === undefined || existingLog.id === null || existingLog.id === '')) {
+              existingLog = null;
+            }
+
+            // Transform exercise data to Supabase format
+            const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
+
+            const workoutData = createWorkoutDataForSupabase({
+              program: programData,
+              weekIndex: weekIndex,
+              dayIndex: dayIndex,
+              exercises: transformedExercises,
+              isFinished: existingLog?.is_finished || false
+            });
+
+            if (existingLog && existingLog.id) {
+              // Optimized update: only send changed fields
+              const updateData = {
+                name: workoutData.name,
+                isFinished: workoutData.isFinished,
+                isDraft: workoutData.isDraft,
+                exercises: transformedExercises
+              };
+
+              await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
+
+              workoutDebugger.logger.debug('📝 Workout log updated (immediate)', {
+                logId: existingLog.id,
+                exerciseCount: transformedExercises.length
+              });
+            } else {
+              // Create new log and cache the ID for future updates
+              const newLog = await workoutLogService.createWorkoutLog(userData.id, workoutData);
+
+              // Update local cache with new log ID
+              if (newLog && newLog.id) {
+                const key = `${weekIndex}_${dayIndex}`;
+                setProgramLogs(prev => ({
+                  ...prev,
+                  [key]: {
+                    ...prev[key],
+                    workoutLogId: newLog.id
+                  }
+                }));
+              }
+
+              workoutDebugger.logger.debug('📝 Workout log created (immediate)', {
+                logId: newLog?.id,
+                exerciseCount: transformedExercises.length
+              });
+            }
+          }, 'immediately saving workout log');
+        },
+        {
+          userId: userData.id,
+          programId: programData.id,
+          weekIndex,
+          dayIndex,
+          exerciseCount: exerciseData.length
+        }
+      );
+    } catch (error) {
+      handleError(error, 'immediately saving workout log', 'Error saving workout. Please try again.');
+    }
+  }, [workoutDebugger, executeSupabaseOperation, workoutLogService, programLogs, handleError, debouncedSaveLog]);
+
   // Initialize debugging and monitoring systems
   useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -471,6 +568,55 @@ function LogWorkout() {
       workoutDebugger.logger.debug('🚀 LogWorkout component fully initialized');
     }
   }, [user]);
+
+  // Add beforeunload event listener to save any pending changes
+  useEffect(() => {
+    const handleBeforeUnload = (event) => {
+      // Check if there are any pending changes that need to be saved
+      if (user && selectedProgram && logData.length > 0) {
+        // Try to flush any pending debounced saves immediately
+        debouncedSaveLog.flush();
+
+        // For critical changes, we could also trigger an immediate save
+        // but this might be too aggressive and cause performance issues
+        immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData);
+      }
+    };
+
+    // Add the event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup function to remove the event listener
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [user, selectedProgram, logData, selectedWeek, selectedDay, debouncedSaveLog]);
+
+  // Cleanup effect to flush any pending saves when component unmounts
+  useEffect(() => {
+    return () => {
+      // Flush any pending debounced saves when component unmounts
+      if (debouncedSaveLog && typeof debouncedSaveLog.flush === 'function') {
+        debouncedSaveLog.flush();
+      }
+    };
+  }, [debouncedSaveLog]);
+
+  // Add visibility change handler to save when page becomes hidden
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && user && selectedProgram && logData.length > 0) {
+        // Flush any pending debounced saves when page becomes hidden
+        debouncedSaveLog.flush();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [user, selectedProgram, logData, debouncedSaveLog]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -737,7 +883,8 @@ function LogWorkout() {
       newLogData[bodyweightExerciseIndex].weights = Array(newLogData[bodyweightExerciseIndex].sets).fill(bodyweightInput);
     }
     setLogData(newLogData);
-    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    // Use immediate save for bodyweight (user explicitly saved)
+    immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
     setShowBodyweightModal(false);
   };
 
@@ -748,9 +895,9 @@ function LogWorkout() {
     newLogData[currentExerciseIndex].notes = exerciseNotes;
     setLogData(newLogData);
 
-    // Trigger auto-save
+    // Trigger immediate save for notes (user explicitly saved)
     if (user && selectedProgram) {
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+      immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
     }
 
     setShowNotesModal(false);
@@ -837,8 +984,8 @@ function LogWorkout() {
               }
             }));
 
-            // Trigger auto-save with updated data
-            debouncedSaveLog(user, updatedProgram, selectedWeek, selectedDay, newLogData);
+            // Trigger immediate save for exercise replacement (structural change)
+            immediateSaveLog(user, updatedProgram, selectedWeek, selectedDay, newLogData);
 
             setShowReplaceModal(false);
             setExerciseToReplace(null);
@@ -1027,7 +1174,8 @@ function LogWorkout() {
       newSetCount: newLogData[exerciseIndex].sets
     });
 
-    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    // Use immediate save for structural changes
+    immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   };
 
   const handleRemoveSet = (exerciseIndex) => {
@@ -1050,7 +1198,8 @@ function LogWorkout() {
         newSetCount: newLogData[exerciseIndex].sets
       });
 
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+      // Use immediate save for structural changes
+      immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
     }
   };
 
@@ -1286,8 +1435,8 @@ function LogWorkout() {
         }
       }));
 
-      // Trigger auto-save
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+      // Trigger immediate save for adding exercises (structural change)
+      immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
 
       setShowAddExerciseModal(false);
     } catch (error) {
@@ -1385,8 +1534,8 @@ function LogWorkout() {
         }
       }));
 
-      // Trigger auto-save
-      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+      // Trigger immediate save for removing exercises (structural change)
+      immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
 
       // End performance monitoring with success
       // endPerformanceMonitoring(operationId, {
