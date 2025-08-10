@@ -10,6 +10,16 @@
 
 import { createClient } from '@supabase/supabase-js'
 
+// UUID generation utility for tests
+const generateTestUUID = () => {
+  // Generate a proper UUID v4 format for testing
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
 // Test environment configuration
 const TEST_SUPABASE_URL = process.env.REACT_APP_SUPABASE_LOCAL_URL || 'http://localhost:54321'
 const TEST_SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_LOCAL_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY
@@ -62,7 +72,7 @@ export const testDataGenerators = {
    * Generate test user data
    */
   createTestUser: (overrides = {}) => ({
-    id: `test-auth-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    id: generateTestUUID(),
     email: `test-${Date.now()}@example.com`,
     name: 'Test User',
     experience_level: 'beginner',

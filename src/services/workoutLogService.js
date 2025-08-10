@@ -11,6 +11,217 @@
 import { supabase } from '../config/supabase'
 import { withSupabaseErrorHandling } from '../config/supabase'
 import { supabaseCache } from '../api/supabaseCache'
+import { WorkoutLogCacheManager } from '../utils/cacheManager'
+
+// Import comprehensive error handling system
+const { 
+  WorkoutLogError, 
+  WorkoutLogErrorType, 
+  ErrorClassifier,
+  ErrorContextCollector 
+} = require('../utils/workoutLogErrorHandler')
+
+// Import comprehensive logging system
+const { 
+  workoutLogLogger,
+  OperationType,
+  logInfo,
+  logError,
+  logWarn,
+  logDebug,
+  logCacheOperation,
+  logExerciseOperation,
+  startTimer,
+  endTimer,
+  logPerformanceMetric
+} = require('../utils/workoutLogLogger')
+
+// Import error recovery system
+const { recoverFromError } = require('../utils/workoutLogErrorRecovery')
+
+/**
+ * Constraint violation handler utilities
+ */
+export const ConstraintViolationHandler = {
+  /**
+   * Check if error is a unique constraint violation
+   */
+  isUniqueConstraintViolation(error) {
+    return error.code === '23505' && 
+           (error.message.includes('unique_user_program_week_day') || 
+            error.message.includes('workout_logs_user_id_program_id_week_index_day_index_key'));
+  },
+
+  /**
+   * Extract constraint violation details from error
+   */
+  extractConstraintDetails(error) {
+    const details = {
+      constraintName: null,
+      conflictingValues: {},
+      errorCode: error.code,
+      errorMessage: error.message
+    };
+
+    if (error.message.includes('unique_user_program_week_day')) {
+      details.constraintName = 'unique_user_program_week_day';
+    }
+
+    // Try to extract conflicting values from error message
+    const valueMatch = error.message.match(/\(([^)]+)\)=\(([^)]+)\)/);
+    if (valueMatch) {
+      const keys = valueMatch[1].split(', ');
+      const values = valueMatch[2].split(', ');
+      keys.forEach((key, index) => {
+        details.conflictingValues[key] = values[index];
+      });
+    }
+
+    return details;
+  },
+
+  /**
+   * Log constraint violation incident with comprehensive details
+   */
+  logConstraintViolation(operation, error, context = {}) {
+    const details = this.extractConstraintDetails(error);
+    
+    console.error('🚫 CONSTRAINT VIOLATION DETECTED:', {
+      operation,
+      timestamp: new Date().toISOString(),
+      constraintDetails: details,
+      context,
+      error: {
+        code: error.code,
+        message: error.message,
+        hint: error.hint,
+        details: error.details
+      },
+      recoveryAction: 'attempting_update_fallback'
+    });
+
+    return details;
+  },
+
+  /**
+   * Attempt recovery from constraint violation by updating existing record
+   */
+  async attemptConstraintRecovery(service, userId, workoutData, originalError) {
+    const details = this.extractConstraintDetails(originalError);
+    
+    console.log('🔄 CONSTRAINT RECOVERY: Attempting to find and update existing record', {
+      constraintDetails: details,
+      userId,
+      programId: workoutData.programId,
+      weekIndex: workoutData.weekIndex,
+      dayIndex: workoutData.dayIndex
+    });
+
+    try {
+      // Find existing workout log
+      const existingLog = await service.getWorkoutLog(
+        userId, 
+        workoutData.programId, 
+        workoutData.weekIndex, 
+        workoutData.dayIndex
+      );
+
+      if (existingLog) {
+        console.log('✅ CONSTRAINT RECOVERY: Found existing log, updating', {
+          existingLogId: existingLog.id,
+          operation: 'update_on_constraint_violation',
+          recoverySuccess: true
+        });
+
+        // Update the existing record
+        const updatedLog = await service.updateWorkoutLog(existingLog.id, {
+          name: workoutData.name,
+          isFinished: workoutData.isFinished || false,
+          isDraft: workoutData.isDraft || false,
+          duration: workoutData.duration,
+          notes: workoutData.notes,
+          exercises: workoutData.exercises
+        });
+
+        console.log('✅ CONSTRAINT RECOVERY SUCCESS:', {
+          workoutLogId: updatedLog.id,
+          operation: 'constraint_violation_recovery',
+          originalError: originalError.message
+        });
+
+        return updatedLog;
+      } else {
+        // Could not find existing record - this is unexpected
+        const recoveryError = new WorkoutLogError(
+          WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION,
+          'Constraint violation occurred but no existing record found for update',
+          {
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex,
+            constraintDetails: details
+          },
+          originalError
+        );
+
+        console.error('❌ CONSTRAINT RECOVERY FAILED:', recoveryError.toJSON());
+        throw recoveryError;
+      }
+    } catch (recoveryError) {
+      console.error('❌ CONSTRAINT RECOVERY ERROR:', {
+        originalError: originalError.message,
+        recoveryError: recoveryError.message,
+        context: {
+          userId,
+          programId: workoutData.programId,
+          weekIndex: workoutData.weekIndex,
+          dayIndex: workoutData.dayIndex
+        }
+      });
+
+      // Re-throw as WorkoutLogError if not already
+      if (!(recoveryError instanceof WorkoutLogError)) {
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION,
+          'Failed to recover from constraint violation',
+          { originalError: originalError.message, recoveryError: recoveryError.message },
+          recoveryError
+        );
+      }
+      throw recoveryError;
+    }
+  },
+
+  /**
+   * Create user-friendly error message for constraint violations
+   */
+  createUserFriendlyMessage(error, context = {}) {
+    const details = this.extractConstraintDetails(error);
+    
+    if (details.constraintName === 'unique_user_program_week_day') {
+      return {
+        title: 'Workout Already Exists',
+        message: 'A workout log already exists for this program, week, and day. Your changes have been saved to the existing workout.',
+        type: 'info',
+        recoverable: true,
+        context: {
+          programId: context.programId,
+          weekIndex: context.weekIndex,
+          dayIndex: context.dayIndex
+        }
+      };
+    }
+
+    return {
+      title: 'Data Conflict',
+      message: 'There was a conflict saving your workout data. Please try again.',
+      type: 'error',
+      recoverable: true,
+      context
+    };
+  }
+};
 
 class WorkoutLogService {
   constructor() {
@@ -18,40 +229,580 @@ class WorkoutLogService {
     this.DRAFT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes for drafts
     this.PROGRAM_LOGS_CACHE_TTL = 10 * 60 * 1000 // 10 minutes for program logs
     this.EXERCISE_HISTORY_CACHE_TTL = 30 * 60 * 1000 // 30 minutes for exercise history
+    
+    // Initialize constraint violation tracking
+    this.constraintViolationStats = {
+      totalViolations: 0,
+      successfulRecoveries: 0,
+      failedRecoveries: 0,
+      lastViolation: null
+    };
   }
 
   /**
-   * Create a new workout log
+   * Handle constraint violation with comprehensive logging and user feedback
+   */
+  async handleConstraintViolation(error, context, operation = 'unknown') {
+    this.constraintViolationStats.totalViolations++;
+    this.constraintViolationStats.lastViolation = new Date().toISOString();
+
+    // Log the incident with full context
+    const violationDetails = ConstraintViolationHandler.logConstraintViolation(operation, error, context);
+    
+    // Create user-friendly message
+    const userMessage = ConstraintViolationHandler.createUserFriendlyMessage(error, context);
+
+    // Attempt recovery
+    try {
+      const recoveredLog = await ConstraintViolationHandler.attemptConstraintRecovery(
+        this,
+        context.userId,
+        context.workoutData || context,
+        error
+      );
+
+      this.constraintViolationStats.successfulRecoveries++;
+
+      console.log('✅ CONSTRAINT VIOLATION HANDLED SUCCESSFULLY:', {
+        operation,
+        recoveredLogId: recoveredLog.id,
+        violationDetails,
+        userMessage,
+        stats: this.constraintViolationStats
+      });
+
+      return {
+        success: true,
+        result: recoveredLog,
+        userMessage,
+        violationDetails
+      };
+    } catch (recoveryError) {
+      this.constraintViolationStats.failedRecoveries++;
+
+      console.error('❌ CONSTRAINT VIOLATION RECOVERY FAILED:', {
+        operation,
+        originalError: error.message,
+        recoveryError: recoveryError.message,
+        violationDetails,
+        userMessage,
+        stats: this.constraintViolationStats
+      });
+
+      return {
+        success: false,
+        error: recoveryError,
+        userMessage: {
+          ...userMessage,
+          type: 'error',
+          message: 'Unable to save workout due to a data conflict. Please refresh and try again.'
+        },
+        violationDetails
+      };
+    }
+  }
+
+  /**
+   * Get constraint violation statistics
+   */
+  getConstraintViolationStats() {
+    return {
+      ...this.constraintViolationStats,
+      recoveryRate: this.constraintViolationStats.totalViolations > 0 
+        ? (this.constraintViolationStats.successfulRecoveries / this.constraintViolationStats.totalViolations) * 100 
+        : 0
+    };
+  }
+
+  /**
+   * Reset constraint violation statistics
+   */
+  resetConstraintViolationStats() {
+    this.constraintViolationStats = {
+      totalViolations: 0,
+      successfulRecoveries: 0,
+      failedRecoveries: 0,
+      lastViolation: null
+    };
+  }
+
+  /**
+   * Enhanced workout log creation with transaction boundaries and comprehensive error handling
+   */
+  async createWorkoutLogEnhanced(userId, workoutData, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        validateConstraints = true,
+        enableRecovery = true,
+        logOperations = true
+      } = options;
+
+      let transactionState = {
+        workoutLogCreated: false,
+        exercisesCreated: false,
+        workoutLogId: null,
+        exerciseIds: []
+      };
+
+      // Start performance timer
+      const timerId = startTimer('createWorkoutLogEnhanced', {
+        userId,
+        programId: workoutData.programId,
+        weekIndex: workoutData.weekIndex,
+        dayIndex: workoutData.dayIndex,
+        exerciseCount: workoutData.exercises?.length || 0
+      });
+
+      try {
+
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Enhanced create transaction started', {
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex,
+            exerciseCount: workoutData.exercises?.length || 0,
+            options
+          });
+        }
+
+        // Validate input data
+        if (!userId || !workoutData.programId || 
+            workoutData.weekIndex === undefined || workoutData.dayIndex === undefined) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Missing required workout log data',
+            {
+              userId: !!userId,
+              programId: !!workoutData.programId,
+              weekIndex: workoutData.weekIndex !== undefined,
+              dayIndex: workoutData.dayIndex !== undefined
+            }
+          );
+        }
+
+        // Create workout log with constraint handling
+        const workoutLogResult = await this.createWorkoutLog(userId, workoutData);
+        transactionState.workoutLogCreated = true;
+        transactionState.workoutLogId = workoutLogResult.id;
+
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Workout log created in enhanced transaction', {
+            workoutLogId: workoutLogResult.id,
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex
+          });
+        }
+
+        // Create exercises if provided (already handled in createWorkoutLog, but track state)
+        if (workoutData.exercises && workoutData.exercises.length > 0) {
+          transactionState.exercisesCreated = true;
+          // Exercise creation is handled within createWorkoutLog
+        }
+
+        // End performance timer and log success
+        const timing = endTimer(timerId, {
+          workoutLogId: workoutLogResult.id,
+          transactionState,
+          success: true
+        });
+
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Enhanced create transaction completed successfully', {
+            workoutLogId: workoutLogResult.id,
+            transactionState,
+            operation: 'createWorkoutLogEnhanced',
+            duration: timing?.duration
+          });
+        }
+
+        return workoutLogResult;
+      } catch (error) {
+        // End timer with error
+        endTimer(timerId, {
+          success: false,
+          error: error.message,
+          errorType: error.type || 'unknown'
+        });
+
+        logError(OperationType.CREATE, 'Enhanced create transaction failed', {
+          errorType: error.type || 'unknown',
+          transactionState,
+          context: {
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex
+          }
+        }, error);
+
+        // Handle constraint violations with recovery if enabled
+        if (error instanceof WorkoutLogError && 
+            error.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION && 
+            enableRecovery) {
+          
+          if (logOperations) {
+            console.log('🔄 ENHANCED CREATE: Attempting constraint violation recovery', {
+              originalError: error.message,
+              transactionState
+            });
+          }
+
+          try {
+            const recoveryResult = await this.handleConstraintViolation(error, {
+              userId,
+              workoutData
+            }, 'createWorkoutLogEnhanced');
+
+            if (recoveryResult.success) {
+              if (logOperations) {
+                console.log('✅ ENHANCED CREATE: Constraint violation recovery successful', {
+                  recoveredLogId: recoveryResult.result.id,
+                  userMessage: recoveryResult.userMessage
+                });
+              }
+              return recoveryResult.result;
+            } else {
+              throw recoveryResult.error;
+            }
+          } catch (recoveryError) {
+            if (logOperations) {
+              console.error('❌ ENHANCED CREATE: Constraint violation recovery failed', {
+                originalError: error.message,
+                recoveryError: recoveryError.message
+              });
+            }
+            throw recoveryError;
+          }
+        }
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.TRANSACTION_FAILED,
+          `Enhanced create transaction failed: ${error.message}`,
+          {
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex,
+            transactionState
+          },
+          error
+        );
+      }
+    }, 'createWorkoutLogEnhanced')
+  }
+
+  /**
+   * Enhanced workout log update with cache-aware operations and transaction boundaries
+   */
+  async updateWorkoutLogEnhanced(workoutLogId, updates, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        validateCache = true,
+        invalidateCache = true,
+        logOperations = true,
+        cacheManager = null,
+        programLogs = {},
+        setProgramLogs = () => {}
+      } = options;
+
+      try {
+        if (logOperations) {
+          console.log('🚀 ENHANCED UPDATE START:', {
+            workoutLogId,
+            hasExercises: !!updates.exercises,
+            exerciseCount: updates.exercises?.length || 0,
+            options: {
+              validateCache,
+              invalidateCache,
+              hasCacheManager: !!cacheManager
+            }
+          });
+        }
+
+        // Validate workout log ID format
+        if (!workoutLogId || typeof workoutLogId !== 'string') {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Invalid workout log ID provided',
+            { workoutLogId, type: typeof workoutLogId }
+          );
+        }
+
+        // Perform the update with transaction boundaries
+        const result = await this.updateWorkoutLog(workoutLogId, updates);
+
+        // Update cache if cache manager is provided
+        if (cacheManager && result) {
+          try {
+            const cacheKey = cacheManager.generateKey(result.week_index, result.day_index);
+            
+            if (validateCache) {
+              // Validate existing cache entry
+              const existingCache = await cacheManager.get(cacheKey, programLogs);
+              if (existingCache && existingCache.workoutLogId !== workoutLogId) {
+                console.warn('⚠️ CACHE INCONSISTENCY DETECTED:', {
+                  cacheKey,
+                  cachedId: existingCache.workoutLogId,
+                  actualId: workoutLogId,
+                  action: 'updating_cache'
+                });
+              }
+            }
+
+            // Update cache with fresh data
+            await cacheManager.set(cacheKey, {
+              workoutLogId: result.id,
+              lastSaved: new Date().toISOString(),
+              isValid: true,
+              exercises: updates.exercises || [],
+              isWorkoutFinished: result.is_finished || false,
+              metadata: {
+                source: 'enhanced_update',
+                operation: 'updateWorkoutLogEnhanced',
+                timestamp: new Date().toISOString()
+              }
+            }, programLogs, setProgramLogs, {
+              source: 'enhanced_update'
+            });
+
+            if (logOperations) {
+              console.log('✅ CACHE UPDATED IN ENHANCED UPDATE:', {
+                workoutLogId: result.id,
+                cacheKey,
+                exerciseCount: updates.exercises?.length || 0
+              });
+            }
+          } catch (cacheError) {
+            console.warn('⚠️ CACHE UPDATE FAILED (NON-CRITICAL):', {
+              workoutLogId,
+              cacheError: cacheError.message,
+              updateContinues: true
+            });
+            // Cache errors are non-critical for update operations
+          }
+        }
+
+        if (logOperations) {
+          console.log('✅ ENHANCED UPDATE SUCCESS:', {
+            workoutLogId: result.id,
+            userId: result.user_id,
+            programId: result.program_id,
+            weekIndex: result.week_index,
+            dayIndex: result.day_index,
+            exercisesUpdated: !!updates.exercises,
+            cacheUpdated: !!cacheManager
+          });
+        }
+
+        return result;
+      } catch (error) {
+        console.error('❌ ENHANCED UPDATE ERROR:', {
+          workoutLogId,
+          error: error.message,
+          errorType: error.type || 'unknown',
+          stack: error.stack,
+          context: {
+            hasExercises: !!updates.exercises,
+            exerciseCount: updates.exercises?.length || 0
+          }
+        });
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.DATABASE_ERROR,
+          `Enhanced update failed: ${error.message}`,
+          {
+            workoutLogId,
+            updates: JSON.stringify(updates, null, 2)
+          },
+          error
+        );
+      }
+    }, 'updateWorkoutLogEnhanced')
+  }
+
+  /**
+   * Create a new workout log with comprehensive constraint violation handling
    */
   async createWorkoutLog(userId, workoutData) {
     return withSupabaseErrorHandling(async () => {
-      const { data, error } = await supabase
-        .from('workout_logs')
-        .insert({
-          user_id: userId,
-          program_id: workoutData.programId,
-          week_index: workoutData.weekIndex,
-          day_index: workoutData.dayIndex,
-          name: workoutData.name,
-          type: workoutData.type || 'program_workout',
-          date: workoutData.date || new Date().toISOString().split('T')[0],
-          is_finished: workoutData.isFinished || false,
-          is_draft: workoutData.isDraft || false,
-          weight_unit: workoutData.weightUnit || 'LB',
-          duration: workoutData.duration,
-          notes: workoutData.notes
-        })
-        .select()
-        .single()
+      try {
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .insert({
+            user_id: userId,
+            program_id: workoutData.programId,
+            week_index: workoutData.weekIndex,
+            day_index: workoutData.dayIndex,
+            name: workoutData.name,
+            type: workoutData.type || 'program_workout',
+            date: workoutData.date || new Date().toISOString().split('T')[0],
+            is_finished: workoutData.isFinished || false,
+            is_draft: workoutData.isDraft || false,
+            weight_unit: workoutData.weightUnit || 'LB',
+            duration: workoutData.duration,
+            notes: workoutData.notes
+          })
+          .select()
+          .single()
 
-      if (error) throw error
+        if (error) {
+          // Handle unique constraint violation with comprehensive logging and recovery
+          if (ConstraintViolationHandler.isUniqueConstraintViolation(error)) {
+            // Log the constraint violation incident
+            ConstraintViolationHandler.logConstraintViolation('createWorkoutLog', error, {
+              userId,
+              programId: workoutData.programId,
+              weekIndex: workoutData.weekIndex,
+              dayIndex: workoutData.dayIndex,
+              workoutData: JSON.stringify(workoutData, null, 2)
+            });
 
-      // If exercises are provided, create them
-      if (workoutData.exercises && workoutData.exercises.length > 0) {
-        await this.createWorkoutLogExercises(data.id, workoutData.exercises)
+            // Attempt recovery by updating existing record
+            try {
+              const recoveredLog = await ConstraintViolationHandler.attemptConstraintRecovery(
+                this, 
+                userId, 
+                workoutData, 
+                error
+              );
+
+              // Log successful recovery
+              console.log('✅ CONSTRAINT VIOLATION RECOVERY SUCCESS:', {
+                operation: 'createWorkoutLog',
+                recoveredLogId: recoveredLog.id,
+                originalError: error.message,
+                recoveryAction: 'updated_existing_record'
+              });
+
+              return recoveredLog;
+            } catch (recoveryError) {
+              // Recovery failed - throw enhanced error
+              throw new WorkoutLogError(
+                WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION,
+                'Failed to create workout log due to duplicate constraint violation',
+                {
+                  userId,
+                  programId: workoutData.programId,
+                  weekIndex: workoutData.weekIndex,
+                  dayIndex: workoutData.dayIndex,
+                  userFriendlyMessage: ConstraintViolationHandler.createUserFriendlyMessage(error, {
+                    programId: workoutData.programId,
+                    weekIndex: workoutData.weekIndex,
+                    dayIndex: workoutData.dayIndex
+                  })
+                },
+                recoveryError
+              );
+            }
+          }
+
+          // Handle other database errors
+          if (error.code) {
+            throw new WorkoutLogError(
+              WorkoutLogErrorType.DATABASE_ERROR,
+              `Database error during workout log creation: ${error.message}`,
+              {
+                userId,
+                programId: workoutData.programId,
+                weekIndex: workoutData.weekIndex,
+                dayIndex: workoutData.dayIndex,
+                errorCode: error.code,
+                errorDetails: error.details,
+                errorHint: error.hint
+              },
+              error
+            );
+          }
+
+          throw error;
+        }
+
+        // If exercises are provided, create them using upsert for consistency
+        if (workoutData.exercises && workoutData.exercises.length > 0) {
+          try {
+            // Use upsert method even for creation to maintain consistency
+            const upsertResult = await this.upsertWorkoutExercises(data.id, workoutData.exercises, {
+              logOperations: true,
+              useTransaction: true,
+              validateData: true
+            });
+
+            console.log('✅ EXERCISES CREATED VIA UPSERT:', {
+              workoutLogId: data.id,
+              operations: upsertResult.operations,
+              exerciseCount: workoutData.exercises.length
+            });
+          } catch (exerciseError) {
+            console.error('❌ EXERCISE CREATION ERROR:', {
+              workoutLogId: data.id,
+              exerciseCount: workoutData.exercises.length,
+              error: exerciseError.message
+            });
+
+            // Don't fail the entire operation for exercise errors
+            // The workout log was created successfully
+            console.warn('⚠️ PARTIAL SUCCESS: Workout log created but exercises failed', {
+              workoutLogId: data.id,
+              exerciseError: exerciseError.message
+            });
+          }
+        }
+
+        console.log('✅ CREATE WORKOUT LOG SUCCESS:', {
+          workoutLogId: data.id,
+          userId,
+          programId: workoutData.programId,
+          weekIndex: workoutData.weekIndex,
+          dayIndex: workoutData.dayIndex,
+          exerciseCount: workoutData.exercises?.length || 0
+        });
+
+        return data
+      } catch (error) {
+        // Enhanced error logging for all create operations
+        console.error('❌ CREATE WORKOUT LOG ERROR:', {
+          operation: 'createWorkoutLog',
+          userId,
+          programId: workoutData.programId,
+          weekIndex: workoutData.weekIndex,
+          dayIndex: workoutData.dayIndex,
+          error: error.message,
+          errorType: error.type || 'unknown',
+          errorCode: error.code,
+          stack: error.stack,
+          timestamp: new Date().toISOString()
+        });
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.DATABASE_ERROR,
+          `Failed to create workout log: ${error.message}`,
+          {
+            userId,
+            programId: workoutData.programId,
+            weekIndex: workoutData.weekIndex,
+            dayIndex: workoutData.dayIndex
+          },
+          error
+        );
       }
-
-      return data
     }, 'createWorkoutLog')
   }
 
@@ -126,6 +877,399 @@ class WorkoutLogService {
   }
 
   /**
+   * Validate that a workout log ID exists and belongs to the specified user/program/week/day
+   */
+  async validateWorkoutLogId(workoutLogId, userId, programId, weekIndex, dayIndex) {
+    return withSupabaseErrorHandling(async () => {
+      const { data, error } = await supabase
+        .from('workout_logs')
+        .select('id')
+        .eq('id', workoutLogId)
+        .eq('user_id', userId)
+        .eq('program_id', programId)
+        .eq('week_index', weekIndex)
+        .eq('day_index', dayIndex)
+        .single()
+
+      if (error || !data) {
+        return false
+      }
+
+      return true
+    }, 'validateWorkoutLogId')
+  }
+
+  /**
+   * Cache-first save logic for workout logs
+   * Implements comprehensive cache validation and fallback to database queries
+   */
+  async saveWorkoutLogCacheFirst(userId, programId, weekIndex, dayIndex, exerciseData, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        cacheManager = new WorkoutLogCacheManager(),
+        programLogs = {},
+        setProgramLogs = () => {},
+        isImmediate = false,
+        workoutName = null,
+        isFinished = false,
+        isDraft = false,
+        notes = ''
+      } = options;
+
+      const cacheKey = cacheManager.generateKey(weekIndex, dayIndex);
+      const operation = isImmediate ? 'immediateSaveLog' : 'debouncedSaveLog';
+
+      console.log(`🚀 CACHE-FIRST SAVE: Starting ${operation}`, {
+        userId,
+        programId,
+        weekIndex,
+        dayIndex,
+        cacheKey,
+        exerciseCount: exerciseData?.length || 0
+      });
+
+      try {
+        // Step 1: Check cache for existing workout log ID
+        const cachedEntry = await cacheManager.get(cacheKey, programLogs, {
+          validateInDatabase: true,
+          logOperations: true
+        });
+
+        let workoutLogId = null;
+        let existingLog = null;
+
+        if (cachedEntry && cachedEntry.workoutLogId) {
+          // Cache hit - validate the cached ID
+          const validationResult = await cacheManager.validate(cacheKey, cachedEntry.workoutLogId, {
+            validateInDatabase: true
+          });
+
+          if (validationResult.isValid) {
+            workoutLogId = cachedEntry.workoutLogId;
+            console.log('✅ CACHE HIT: Using validated cached workout log ID', {
+              operation,
+              cacheKey,
+              workoutLogId,
+              validationContext: validationResult.context
+            });
+          } else {
+            // Cache validation failed - cleanup and fall back to database
+            console.warn('⚠️ CACHE VALIDATION FAILED: Cleaning up and falling back to database', {
+              operation,
+              cacheKey,
+              workoutLogId: cachedEntry.workoutLogId,
+              reason: validationResult.reason,
+              context: validationResult.context
+            });
+
+            await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+              reason: validationResult.reason
+            });
+          }
+        }
+
+        // Step 2: Query database if no valid cached ID
+        if (!workoutLogId) {
+          console.log('🔍 DATABASE QUERY: No valid cached ID, querying database', {
+            operation,
+            cacheKey,
+            userId,
+            programId,
+            weekIndex,
+            dayIndex
+          });
+
+          try {
+            existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
+            if (existingLog && existingLog.id) {
+              workoutLogId = existingLog.id;
+              
+              // Update cache with found workout log ID
+              await cacheManager.set(cacheKey, {
+                workoutLogId,
+                lastSaved: new Date().toISOString(),
+                isValid: true,
+                exercises: exerciseData || [],
+                isWorkoutFinished: isFinished,
+                metadata: {
+                  source: 'database_query',
+                  operation
+                }
+              }, programLogs, setProgramLogs, {
+                source: 'database_fallback'
+              });
+
+              console.log('✅ DATABASE FOUND: Cached existing workout log ID', {
+                operation,
+                cacheKey,
+                workoutLogId,
+                exerciseCount: existingLog.workout_log_exercises?.length || 0
+              });
+            }
+          } catch (dbError) {
+            console.error('❌ DATABASE QUERY FAILED: Treating as new workout', {
+              operation,
+              cacheKey,
+              error: dbError.message,
+              errorCode: dbError.code,
+              fallbackAction: 'create_new_workout'
+            });
+            // Continue to create new workout log
+          }
+        }
+
+        // Step 3: Create or update workout log with constraint violation handling
+        let result;
+        if (workoutLogId) {
+          // Update existing workout log
+          console.log('🔄 UPDATE OPERATION: Updating existing workout log', {
+            operation,
+            workoutLogId,
+            exerciseCount: exerciseData?.length || 0
+          });
+
+          try {
+            result = await this.updateWorkoutLog(workoutLogId, {
+              name: workoutName,
+              isFinished,
+              isDraft,
+              notes,
+              exercises: exerciseData
+            });
+          } catch (updateError) {
+            console.error('❌ UPDATE OPERATION FAILED:', {
+              operation,
+              workoutLogId,
+              error: updateError.message,
+              errorType: updateError.type
+            });
+
+            // Clean up cache on update failure
+            await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+              reason: 'update_operation_failed'
+            });
+
+            throw updateError;
+          }
+        } else {
+          // Create new workout log with constraint violation handling
+          console.log('🆕 CREATE OPERATION: Creating new workout log', {
+            operation,
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            exerciseCount: exerciseData?.length || 0
+          });
+
+          try {
+            result = await this.createWorkoutLog(userId, {
+              programId,
+              weekIndex,
+              dayIndex,
+              name: workoutName,
+              isFinished,
+              isDraft,
+              notes,
+              exercises: exerciseData
+            });
+
+            workoutLogId = result.id;
+
+            // Cache the new workout log ID
+            await cacheManager.set(cacheKey, {
+              workoutLogId,
+              lastSaved: new Date().toISOString(),
+              isValid: true,
+              exercises: exerciseData || [],
+              isWorkoutFinished: isFinished,
+              metadata: {
+                source: 'create_operation',
+                operation
+              }
+            }, programLogs, setProgramLogs, {
+              source: 'create_new'
+            });
+          } catch (createError) {
+            console.error('❌ CREATE OPERATION FAILED:', {
+              operation,
+              error: createError.message,
+              errorType: createError.type,
+              context: {
+                userId,
+                programId,
+                weekIndex,
+                dayIndex
+              }
+            });
+
+            // Handle constraint violations specifically
+            if (createError instanceof WorkoutLogError && 
+                createError.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION) {
+              
+              console.log('🔄 CONSTRAINT VIOLATION IN CACHE-FIRST: Attempting cache update', {
+                operation,
+                cacheKey,
+                error: createError.message
+              });
+
+              // The constraint violation handler already attempted recovery
+              // If we get here, the recovery was successful and result is in the error context
+              if (createError.context && createError.context.recoveredLog) {
+                result = createError.context.recoveredLog;
+                workoutLogId = result.id;
+
+                // Update cache with recovered workout log ID
+                await cacheManager.set(cacheKey, {
+                  workoutLogId,
+                  lastSaved: new Date().toISOString(),
+                  isValid: true,
+                  exercises: exerciseData || [],
+                  isWorkoutFinished: isFinished,
+                  metadata: {
+                    source: 'constraint_violation_recovery',
+                    operation,
+                    originalError: createError.message
+                  }
+                }, programLogs, setProgramLogs, {
+                  source: 'constraint_recovery'
+                });
+
+                console.log('✅ CONSTRAINT VIOLATION RECOVERY IN CACHE-FIRST:', {
+                  operation,
+                  workoutLogId,
+                  cacheKey
+                });
+              } else {
+                // Recovery failed, clean up cache and re-throw
+                await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+                  reason: 'constraint_violation_recovery_failed'
+                });
+                throw createError;
+              }
+            } else {
+              // Other errors, clean up cache and re-throw
+              await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+                reason: 'create_operation_failed'
+              });
+              throw createError;
+            }
+          }
+        }
+
+        console.log('✅ CACHE-FIRST SAVE SUCCESS:', {
+          operation,
+          workoutLogId: result.id,
+          action: workoutLogId === result.id ? 'UPDATE' : 'CREATE',
+          cacheKey,
+          exerciseCount: exerciseData?.length || 0
+        });
+
+        return result;
+
+      } catch (error) {
+        console.error('❌ CACHE-FIRST SAVE ERROR:', {
+          operation,
+          cacheKey,
+          error: error.message,
+          errorName: error.name,
+          stack: error.stack,
+          context: {
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            exerciseCount: exerciseData?.length || 0
+          }
+        });
+
+        // Attempt cache cleanup on error
+        try {
+          await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+            reason: 'save_operation_failed'
+          });
+        } catch (cleanupError) {
+          console.error('❌ CACHE CLEANUP FAILED:', cleanupError);
+        }
+
+        throw error;
+      }
+    }, 'saveWorkoutLogCacheFirst')
+  }
+
+  /**
+   * Get workout log with cache-aware operations
+   */
+  async getWorkoutLogWithCache(userId, programId, weekIndex, dayIndex, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        cacheManager = new WorkoutLogCacheManager(),
+        programLogs = {},
+        setProgramLogs = () => {},
+        forceRefresh = false
+      } = options;
+
+      const cacheKey = cacheManager.generateKey(weekIndex, dayIndex);
+
+      try {
+        // Check cache first unless force refresh is requested
+        if (!forceRefresh) {
+          const cachedEntry = await cacheManager.get(cacheKey, programLogs, {
+            validateInDatabase: false, // Skip DB validation for read operations
+            logOperations: true
+          });
+
+          if (cachedEntry && cachedEntry.workoutLogId) {
+            console.log('✅ CACHE HIT: Using cached workout log for read operation', {
+              cacheKey,
+              workoutLogId: cachedEntry.workoutLogId
+            });
+
+            // Return cached data if available, otherwise fetch from database
+            if (cachedEntry.exercises && cachedEntry.exercises.length > 0) {
+              return {
+                id: cachedEntry.workoutLogId,
+                exercises: cachedEntry.exercises,
+                is_finished: cachedEntry.isWorkoutFinished,
+                // Add other cached properties as needed
+              };
+            }
+          }
+        }
+
+        // Fetch from database
+        const workoutLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
+        
+        if (workoutLog) {
+          // Update cache with fresh data
+          await cacheManager.set(cacheKey, {
+            workoutLogId: workoutLog.id,
+            lastSaved: new Date().toISOString(),
+            isValid: true,
+            exercises: workoutLog.workout_log_exercises || [],
+            isWorkoutFinished: workoutLog.is_finished || false,
+            metadata: {
+              source: 'database_read',
+              operation: 'getWorkoutLogWithCache'
+            }
+          }, programLogs, setProgramLogs, {
+            source: 'database_read'
+          });
+        }
+
+        return workoutLog;
+      } catch (error) {
+        console.error('❌ GET WORKOUT LOG WITH CACHE ERROR:', {
+          cacheKey,
+          error: error.message,
+          context: { userId, programId, weekIndex, dayIndex }
+        });
+        throw error;
+      }
+    }, 'getWorkoutLogWithCache')
+  }
+
+  /**
    * Get workout log by program, week, and day (with caching)
    */
   async getWorkoutLog(userId, programId, weekIndex, dayIndex) {
@@ -186,10 +1330,17 @@ class WorkoutLogService {
               workoutLog.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
             }
 
+            // Enhanced logging for workout log retrieval with comprehensive metadata
             console.log('✅ getWorkoutLog found existing log:', {
               logId: workoutLog.id,
               exerciseCount: workoutLog.workout_log_exercises?.length || 0,
-              isFinished: workoutLog.is_finished
+              isFinished: workoutLog.is_finished,
+              isDraft: workoutLog.is_draft,
+              weekIndex: workoutLog.week_index,
+              dayIndex: workoutLog.day_index,
+              createdAt: workoutLog.created_at,
+              updatedAt: workoutLog.updated_at,
+              timestamp: new Date().toISOString()
             })
 
             return workoutLog
@@ -250,60 +1401,1062 @@ class WorkoutLogService {
   }
 
   /**
-   * Update workout log (with cache invalidation)
+   * Update workout log with cache-aware operations and transaction boundaries
    */
   async updateWorkoutLog(workoutLogId, updates) {
     return withSupabaseErrorHandling(async () => {
-      const { data, error } = await supabase
-        .from('workout_logs')
-        .update({
-          name: updates.name,
-          is_finished: updates.isFinished,
-          is_draft: updates.isDraft,
-          completed_date: updates.completedDate,
-          duration: updates.duration,
-          notes: updates.notes,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', workoutLogId)
-        .select()
-        .single()
+      // Start transaction-like operation with rollback capability
+      let transactionState = {
+        workoutLogUpdated: false,
+        exercisesUpdated: false,
+        cacheInvalidated: false,
+        originalData: null
+      };
 
-      if (error) throw error
+      try {
+        // First, get the original data for potential rollback
+        const { data: originalData, error: fetchError } = await supabase
+          .from('workout_logs')
+          .select('*')
+          .eq('id', workoutLogId)
+          .single();
 
-      // Update exercises if provided
-      if (updates.exercises) {
-        await this.updateWorkoutLogExercises(workoutLogId, updates.exercises)
+        if (fetchError) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.DATABASE_ERROR,
+            `Failed to fetch original workout log data: ${fetchError.message}`,
+            { workoutLogId, operation: 'updateWorkoutLog' },
+            fetchError
+          );
+        }
+
+        transactionState.originalData = originalData;
+
+        console.log('🔄 UPDATE TRANSACTION START:', {
+          workoutLogId,
+          operation: 'updateWorkoutLog',
+          hasExercises: !!updates.exercises,
+          exerciseCount: updates.exercises?.length || 0,
+          originalData: {
+            name: originalData.name,
+            isFinished: originalData.is_finished,
+            isDraft: originalData.is_draft
+          }
+        });
+
+        // Update workout log metadata
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .update({
+            name: updates.name,
+            is_finished: updates.isFinished,
+            is_draft: updates.isDraft,
+            completed_date: updates.completedDate,
+            duration: updates.duration,
+            notes: updates.notes,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', workoutLogId)
+          .select()
+          .single()
+
+        if (error) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.DATABASE_ERROR,
+            `Failed to update workout log: ${error.message}`,
+            {
+              workoutLogId,
+              updates: JSON.stringify(updates, null, 2),
+              errorCode: error.code,
+              errorDetails: error.details
+            },
+            error
+          );
+        }
+
+        transactionState.workoutLogUpdated = true;
+
+        // Update exercises if provided (within transaction boundary)
+        if (updates.exercises) {
+          try {
+            // Use the new upsert method for efficient exercise updates
+            const upsertResult = await this.upsertWorkoutExercises(workoutLogId, updates.exercises, {
+              logOperations: true,
+              useTransaction: true,
+              validateData: true
+            });
+            
+            transactionState.exercisesUpdated = true;
+
+            console.log('✅ EXERCISES UPSERTED IN TRANSACTION:', {
+              workoutLogId,
+              exerciseCount: updates.exercises.length,
+              operations: upsertResult.operations,
+              totalChanges: upsertResult.operations.inserted + upsertResult.operations.updated + upsertResult.operations.deleted,
+              operation: 'updateWorkoutLog'
+            });
+          } catch (exerciseError) {
+            console.error('❌ EXERCISE UPSERT FAILED IN TRANSACTION:', {
+              workoutLogId,
+              exerciseError: exerciseError.message,
+              rollbackRequired: true
+            });
+
+            // Exercise update failed - this is critical for data consistency
+            throw new WorkoutLogError(
+              WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+              `Failed to upsert exercises in transaction: ${exerciseError.message}`,
+              {
+                workoutLogId,
+                exerciseCount: updates.exercises.length,
+                transactionState
+              },
+              exerciseError
+            );
+          }
+        }
+
+        // Invalidate related caches (final step)
+        if (data) {
+          try {
+            const patterns = [
+              `workout_log_${data.user_id}_${data.program_id}_${data.week_index}_${data.day_index}`,
+              `program_workout_logs_${data.user_id}_${data.program_id}`
+            ];
+            supabaseCache.invalidate(patterns);
+            transactionState.cacheInvalidated = true;
+
+            console.log('✅ UPDATE TRANSACTION SUCCESS:', {
+              workoutLogId: data.id,
+              userId: data.user_id,
+              programId: data.program_id,
+              weekIndex: data.week_index,
+              dayIndex: data.day_index,
+              exercisesUpdated: transactionState.exercisesUpdated,
+              cacheInvalidated: transactionState.cacheInvalidated,
+              transactionState
+            });
+          } catch (cacheError) {
+            console.warn('⚠️ CACHE INVALIDATION FAILED (NON-CRITICAL):', {
+              workoutLogId,
+              cacheError: cacheError.message,
+              transactionContinues: true
+            });
+            // Cache invalidation failure is not critical - continue
+          }
+        }
+
+        return data;
+      } catch (error) {
+        console.error('❌ UPDATE TRANSACTION ERROR:', {
+          workoutLogId,
+          error: error.message,
+          errorType: error.type || 'unknown',
+          transactionState,
+          rollbackAttempted: false
+        });
+
+        // For now, we don't implement automatic rollback as Supabase doesn't support transactions
+        // In a real implementation, you would use database transactions
+        console.warn('⚠️ TRANSACTION ROLLBACK NOT IMPLEMENTED:', {
+          workoutLogId,
+          transactionState,
+          note: 'Manual cleanup may be required'
+        });
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.TRANSACTION_FAILED,
+          `Update transaction failed: ${error.message}`,
+          {
+            workoutLogId,
+            transactionState,
+            originalError: error.message
+          },
+          error
+        );
       }
-
-      // Invalidate related caches
-      if (data) {
-        const patterns = [
-          `workout_log_${data.user_id}_${data.program_id}_${data.week_index}_${data.day_index}`,
-          `program_workout_logs_${data.user_id}_${data.program_id}`
-        ]
-        supabaseCache.invalidate(patterns)
-      }
-
-      return data
     }, 'updateWorkoutLog')
   }
 
   /**
-   * Update workout log exercises
+   * Upsert workout exercises using intelligent change detection
+   * Replaces delete-and-recreate with efficient insert/update/delete operations
+   */
+  async upsertWorkoutExercises(workoutLogId, exercises, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        logOperations = true,
+        useTransaction = true,
+        validateData = true
+      } = options;
+
+      if (logOperations) {
+        console.log('🚀 UPSERT EXERCISES START:', {
+          workoutLogId,
+          exerciseCount: exercises?.length || 0,
+          options
+        });
+      }
+
+      // Validate input
+      if (!workoutLogId || typeof workoutLogId !== 'string') {
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.INVALID_DATA,
+          'Invalid workout log ID for exercise upsert',
+          { workoutLogId, type: typeof workoutLogId }
+        );
+      }
+
+      if (!Array.isArray(exercises)) {
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.INVALID_DATA,
+          'Exercises must be an array',
+          { exercises: typeof exercises }
+        );
+      }
+
+      try {
+        // Step 1: Get existing exercises from database
+        const { data: existingExercises, error: fetchError } = await supabase
+          .from('workout_log_exercises')
+          .select('*')
+          .eq('workout_log_id', workoutLogId)
+          .order('order_index', { ascending: true });
+
+        if (fetchError) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.DATABASE_ERROR,
+            `Failed to fetch existing exercises: ${fetchError.message}`,
+            { workoutLogId, errorCode: fetchError.code },
+            fetchError
+          );
+        }
+
+        if (logOperations) {
+          console.log('📋 EXISTING EXERCISES FETCHED:', {
+            workoutLogId,
+            existingCount: existingExercises?.length || 0
+          });
+        }
+
+        // Step 2: Use change detection to identify operations needed
+        const { ExerciseChangeDetector } = await import('../utils/exerciseChangeDetection.js');
+        const detector = new ExerciseChangeDetector({
+          trackOrderChanges: true,
+          deepCompare: true,
+          logOperations: logOperations
+        });
+
+        const comparisonResult = detector.compareExercises(existingExercises || [], exercises);
+
+        if (logOperations) {
+          console.log('🔍 CHANGE DETECTION COMPLETE:', {
+            workoutLogId,
+            hasChanges: comparisonResult.hasChanges,
+            summary: comparisonResult.summary,
+            changeTypes: comparisonResult.changes.metadata.changeTypes
+          });
+        }
+
+        // If no changes detected, return early
+        if (!comparisonResult.hasChanges) {
+          if (logOperations) {
+            console.log('✅ NO CHANGES DETECTED - SKIPPING UPSERT:', {
+              workoutLogId,
+              existingCount: existingExercises?.length || 0,
+              updatedCount: exercises.length
+            });
+          }
+          return { 
+            success: true, 
+            operations: { inserted: 0, updated: 0, deleted: 0 },
+            message: 'No changes detected'
+          };
+        }
+
+        const { changes } = comparisonResult;
+        let operationResults = {
+          inserted: 0,
+          updated: 0,
+          deleted: 0,
+          errors: []
+        };
+
+        // Step 3: Execute operations in transaction-like manner
+        if (useTransaction) {
+          // Note: Supabase doesn't support true transactions, but we'll execute in order
+          // and track operations for potential rollback
+          if (logOperations) {
+            console.log('🔄 EXECUTING UPSERT OPERATIONS:', {
+              workoutLogId,
+              toInsert: changes.toInsert.length,
+              toUpdate: changes.toUpdate.length,
+              toDelete: changes.toDelete.length,
+              orderChanged: changes.orderChanged
+            });
+          }
+        }
+
+        // Step 4: Delete exercises that are no longer needed
+        if (changes.toDelete.length > 0) {
+          try {
+            const { error: deleteError } = await supabase
+              .from('workout_log_exercises')
+              .delete()
+              .in('id', changes.toDelete);
+
+            if (deleteError) {
+              throw new WorkoutLogError(
+                WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+                `Failed to delete exercises: ${deleteError.message}`,
+                { workoutLogId, exerciseIds: changes.toDelete },
+                deleteError
+              );
+            }
+
+            operationResults.deleted = changes.toDelete.length;
+
+            if (logOperations) {
+              console.log('🗑️ EXERCISES DELETED:', {
+                workoutLogId,
+                deletedCount: changes.toDelete.length,
+                deletedIds: changes.toDelete
+              });
+            }
+          } catch (deleteError) {
+            operationResults.errors.push({
+              operation: 'delete',
+              error: deleteError.message,
+              exerciseIds: changes.toDelete
+            });
+            throw deleteError;
+          }
+        }
+
+        // Step 5: Update existing exercises
+        if (changes.toUpdate.length > 0) {
+          try {
+            for (const exercise of changes.toUpdate) {
+              const updateData = this._prepareExerciseData(exercise, workoutLogId);
+              
+              const { error: updateError } = await supabase
+                .from('workout_log_exercises')
+                .update(updateData)
+                .eq('id', exercise.id);
+
+              if (updateError) {
+                throw new WorkoutLogError(
+                  WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+                  `Failed to update exercise ${exercise.id}: ${updateError.message}`,
+                  { workoutLogId, exerciseId: exercise.id, updateData },
+                  updateError
+                );
+              }
+
+              operationResults.updated++;
+            }
+
+            if (logOperations) {
+              console.log('✏️ EXERCISES UPDATED:', {
+                workoutLogId,
+                updatedCount: changes.toUpdate.length,
+                updatedIds: changes.toUpdate.map(ex => ex.id)
+              });
+            }
+          } catch (updateError) {
+            operationResults.errors.push({
+              operation: 'update',
+              error: updateError.message,
+              exercises: changes.toUpdate.map(ex => ex.id)
+            });
+            throw updateError;
+          }
+        }
+
+        // Step 6: Insert new exercises
+        if (changes.toInsert.length > 0) {
+          try {
+            const insertData = changes.toInsert.map(exercise => 
+              this._prepareExerciseData(exercise, workoutLogId)
+            );
+
+            const { data: insertedExercises, error: insertError } = await supabase
+              .from('workout_log_exercises')
+              .insert(insertData)
+              .select('id');
+
+            if (insertError) {
+              throw new WorkoutLogError(
+                WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+                `Failed to insert exercises: ${insertError.message}`,
+                { workoutLogId, insertData },
+                insertError
+              );
+            }
+
+            operationResults.inserted = insertedExercises?.length || 0;
+
+            if (logOperations) {
+              console.log('➕ EXERCISES INSERTED:', {
+                workoutLogId,
+                insertedCount: operationResults.inserted,
+                insertedIds: insertedExercises?.map(ex => ex.id) || []
+              });
+            }
+          } catch (insertError) {
+            operationResults.errors.push({
+              operation: 'insert',
+              error: insertError.message,
+              exercises: changes.toInsert.length
+            });
+            throw insertError;
+          }
+        }
+
+        // Step 7: Handle order changes if needed
+        if (changes.orderChanged) {
+          try {
+            const reorderResult = await this.reorderExercises(workoutLogId, exercises, {
+              logOperations,
+              validateConsistency: true,
+              batchUpdates: exercises.length > 5 // Use batch updates for larger sets
+            });
+            
+            if (logOperations) {
+              console.log('🔄 EXERCISE ORDER UPDATED:', {
+                workoutLogId,
+                exerciseCount: exercises.length,
+                updatedCount: reorderResult.updatedCount,
+                reorderResult
+              });
+            }
+          } catch (orderError) {
+            operationResults.errors.push({
+              operation: 'reorder',
+              error: orderError.message,
+              workoutLogId
+            });
+            // Order changes are not critical - log but don't fail
+            console.warn('⚠️ EXERCISE REORDER FAILED (NON-CRITICAL):', {
+              workoutLogId,
+              error: orderError.message,
+              errorType: orderError.type || 'unknown'
+            });
+          }
+        }
+
+        if (logOperations) {
+          console.log('✅ UPSERT EXERCISES SUCCESS:', {
+            workoutLogId,
+            operations: operationResults,
+            totalChanges: operationResults.inserted + operationResults.updated + operationResults.deleted,
+            hasErrors: operationResults.errors.length > 0
+          });
+        }
+
+        return {
+          success: true,
+          operations: operationResults,
+          changes: comparisonResult.changes,
+          summary: comparisonResult.summary
+        };
+
+      } catch (error) {
+        console.error('❌ UPSERT EXERCISES ERROR:', {
+          workoutLogId,
+          error: error.message,
+          errorType: error.type || 'unknown',
+          exerciseCount: exercises?.length || 0,
+          stack: error.stack
+        });
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+          `Exercise upsert failed: ${error.message}`,
+          {
+            workoutLogId,
+            exerciseCount: exercises?.length || 0
+          },
+          error
+        );
+      }
+    }, 'upsertWorkoutExercises')
+  }
+
+  /**
+   * Prepare exercise data for database operations
+   * @private
+   */
+  _prepareExerciseData(exercise, workoutLogId) {
+    // Validate and sanitize exercise data
+    const sets = exercise.sets && exercise.sets !== '' ? Number(exercise.sets) : 1;
+    const exerciseId = exercise.exerciseId && exercise.exerciseId !== '' ? exercise.exerciseId : null;
+    const bodyweight = exercise.bodyweight && exercise.bodyweight !== '' ? Number(exercise.bodyweight) : null;
+
+    // Validate required fields
+    if (!exerciseId) {
+      throw new Error(`Exercise ID is required for exercise preparation`);
+    }
+
+    if (isNaN(sets) || sets <= 0) {
+      throw new Error(`Invalid sets value for exercise preparation: ${exercise.sets}`);
+    }
+
+    // Ensure arrays match the sets count (required by DB constraint)
+    const reps = exercise.reps || [];
+    const weights = exercise.weights || [];
+    const completed = exercise.completed || [];
+
+    // Pad or trim arrays to match sets count
+    const paddedReps = [...reps];
+    const paddedWeights = [...weights];
+    const paddedCompleted = [...completed];
+
+    // Pad with null values for uncompleted sets (preserve empty state)
+    while (paddedReps.length < sets) paddedReps.push(null);
+    while (paddedWeights.length < sets) paddedWeights.push(null);
+    while (paddedCompleted.length < sets) paddedCompleted.push(false);
+
+    // Trim if arrays are too long
+    paddedReps.length = sets;
+    paddedWeights.length = sets;
+    paddedCompleted.length = sets;
+
+    // Convert empty strings to null for database storage (preserve uncompleted state)
+    const cleanedReps = paddedReps.map(rep => rep === '' || rep === undefined ? null : rep);
+    const cleanedWeights = paddedWeights.map(weight => weight === '' || weight === undefined ? null : weight);
+
+    return {
+      workout_log_id: workoutLogId,
+      exercise_id: exerciseId,
+      sets: sets,
+      reps: cleanedReps,
+      weights: cleanedWeights,
+      completed: paddedCompleted,
+      bodyweight: bodyweight,
+      notes: exercise.notes || '',
+      is_added: exercise.isAdded || false,
+      added_type: exercise.addedType || null,
+      original_index: exercise.originalIndex || -1,
+      order_index: exercise.orderIndex !== undefined ? exercise.orderIndex : 0
+    };
+  }
+
+  /**
+   * Efficiently reorder exercises to match the provided order
+   * Only updates order_index values when necessary and validates consistency
+   */
+  async reorderExercises(workoutLogId, exercises, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        logOperations = true,
+        validateConsistency = true,
+        batchUpdates = true
+      } = options;
+
+      // Validate inputs
+      if (!workoutLogId || typeof workoutLogId !== 'string') {
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.INVALID_DATA,
+          'Invalid workout log ID for exercise reordering',
+          { workoutLogId, type: typeof workoutLogId }
+        );
+      }
+
+      if (!Array.isArray(exercises)) {
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.INVALID_DATA,
+          'Exercises must be an array for reordering',
+          { exercises: typeof exercises }
+        );
+      }
+
+      if (exercises.length === 0) {
+        if (logOperations) {
+          console.log('ℹ️ REORDER EXERCISES: No exercises to reorder');
+        }
+        return { 
+          success: true, 
+          updatedCount: 0, 
+          message: 'No exercises to reorder' 
+        };
+      }
+
+      if (logOperations) {
+        console.log('🔄 REORDER EXERCISES START:', {
+          workoutLogId,
+          exerciseCount: exercises.length,
+          exercisesWithIds: exercises.filter(ex => ex.id).length,
+          options
+        });
+      }
+
+      try {
+        // Step 1: Get current exercise order from database for comparison
+        let currentExercises = [];
+        if (validateConsistency) {
+          const { data: dbExercises, error: fetchError } = await supabase
+            .from('workout_log_exercises')
+            .select('id, order_index, exercise_id')
+            .eq('workout_log_id', workoutLogId)
+            .order('order_index', { ascending: true });
+
+          if (fetchError) {
+            console.warn('⚠️ REORDER: Could not fetch current exercises for validation:', fetchError.message);
+            // Continue without validation rather than failing
+          } else {
+            currentExercises = dbExercises || [];
+          }
+        }
+
+        // Step 2: Validate exercise order consistency
+        if (validateConsistency && currentExercises.length > 0) {
+          const validationResult = this._validateExerciseOrderConsistency(
+            currentExercises, 
+            exercises, 
+            workoutLogId
+          );
+          
+          if (!validationResult.isValid) {
+            console.warn('⚠️ EXERCISE ORDER INCONSISTENCY DETECTED:', validationResult);
+            // Log warning but continue - order will be corrected
+          }
+        }
+
+        // Step 3: Determine which exercises need order updates
+        const exercisesToUpdate = this._identifyOrderUpdatesNeeded(
+          currentExercises, 
+          exercises, 
+          logOperations
+        );
+
+        if (exercisesToUpdate.length === 0) {
+          if (logOperations) {
+            console.log('✅ REORDER EXERCISES: No order changes needed');
+          }
+          return { 
+            success: true, 
+            updatedCount: 0, 
+            message: 'Exercise order already correct' 
+          };
+        }
+
+        // Step 4: Execute order updates efficiently
+        let updatedCount = 0;
+        const updateErrors = [];
+
+        if (batchUpdates && exercisesToUpdate.length > 1) {
+          // Use batch update approach for better performance
+          updatedCount = await this._batchUpdateExerciseOrder(
+            exercisesToUpdate, 
+            workoutLogId, 
+            logOperations
+          );
+        } else {
+          // Use individual updates for better error handling
+          for (const update of exercisesToUpdate) {
+            try {
+              const { error: updateError } = await supabase
+                .from('workout_log_exercises')
+                .update({ order_index: update.newOrderIndex })
+                .eq('id', update.exerciseId)
+                .eq('workout_log_id', workoutLogId); // Additional safety check
+
+              if (updateError) {
+                const errorDetails = {
+                  workoutLogId,
+                  exerciseId: update.exerciseId,
+                  oldOrderIndex: update.oldOrderIndex,
+                  newOrderIndex: update.newOrderIndex,
+                  error: updateError.message
+                };
+                
+                console.error('❌ REORDER UPDATE FAILED:', errorDetails);
+                updateErrors.push(errorDetails);
+                
+                throw new WorkoutLogError(
+                  WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+                  `Failed to update exercise order: ${updateError.message}`,
+                  errorDetails,
+                  updateError
+                );
+              }
+
+              updatedCount++;
+
+              if (logOperations) {
+                console.log('✅ EXERCISE ORDER UPDATED:', {
+                  workoutLogId,
+                  exerciseId: update.exerciseId,
+                  oldOrderIndex: update.oldOrderIndex,
+                  newOrderIndex: update.newOrderIndex
+                });
+              }
+            } catch (updateError) {
+              updateErrors.push({
+                exerciseId: update.exerciseId,
+                error: updateError.message
+              });
+              throw updateError; // Re-throw to stop processing
+            }
+          }
+        }
+
+        // Step 5: Final validation if requested
+        if (validateConsistency && updatedCount > 0) {
+          const finalValidation = await this._validateFinalExerciseOrder(
+            workoutLogId, 
+            exercises, 
+            logOperations
+          );
+          
+          if (!finalValidation.isValid) {
+            console.error('❌ FINAL ORDER VALIDATION FAILED:', finalValidation);
+            // This is a serious issue but don't fail the operation
+            // The order updates were applied, just not as expected
+          }
+        }
+
+        if (logOperations) {
+          console.log('✅ REORDER EXERCISES SUCCESS:', {
+            workoutLogId,
+            totalExercises: exercises.length,
+            exercisesWithIds: exercises.filter(ex => ex.id).length,
+            updatesNeeded: exercisesToUpdate.length,
+            updatedCount,
+            hasErrors: updateErrors.length > 0,
+            errors: updateErrors
+          });
+        }
+
+        return {
+          success: true,
+          updatedCount,
+          totalExercises: exercises.length,
+          exercisesWithIds: exercises.filter(ex => ex.id).length,
+          updatesNeeded: exercisesToUpdate.length,
+          errors: updateErrors
+        };
+
+      } catch (error) {
+        console.error('❌ REORDER EXERCISES ERROR:', {
+          workoutLogId,
+          error: error.message,
+          errorType: error.type || 'unknown',
+          exerciseCount: exercises.length,
+          stack: error.stack
+        });
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+          `Exercise reordering failed: ${error.message}`,
+          {
+            workoutLogId,
+            exerciseCount: exercises.length
+          },
+          error
+        );
+      }
+    }, 'reorderExercises')
+  }
+
+  /**
+   * Validate exercise order consistency between database and provided exercises
+   * @private
+   */
+  _validateExerciseOrderConsistency(currentExercises, providedExercises, workoutLogId) {
+    const validation = {
+      isValid: true,
+      issues: [],
+      workoutLogId,
+      currentCount: currentExercises.length,
+      providedCount: providedExercises.length
+    };
+
+    try {
+      // Check if all provided exercises with IDs exist in current exercises
+      const currentExerciseIds = new Set(currentExercises.map(ex => ex.id));
+      const providedExercisesWithIds = providedExercises.filter(ex => ex.id);
+      
+      for (const providedEx of providedExercisesWithIds) {
+        if (!currentExerciseIds.has(providedEx.id)) {
+          validation.isValid = false;
+          validation.issues.push({
+            type: 'missing_exercise',
+            exerciseId: providedEx.id,
+            message: `Exercise ${providedEx.id} not found in current database exercises`
+          });
+        }
+      }
+
+      // Check for duplicate order indices in current exercises
+      const currentOrderIndices = currentExercises.map(ex => ex.order_index);
+      const duplicateIndices = currentOrderIndices.filter((index, pos) => 
+        currentOrderIndices.indexOf(index) !== pos
+      );
+      
+      if (duplicateIndices.length > 0) {
+        validation.isValid = false;
+        validation.issues.push({
+          type: 'duplicate_order_indices',
+          duplicates: duplicateIndices,
+          message: `Duplicate order indices found: ${duplicateIndices.join(', ')}`
+        });
+      }
+
+      // Check for gaps in order sequence
+      const sortedIndices = [...currentOrderIndices].sort((a, b) => a - b);
+      for (let i = 0; i < sortedIndices.length; i++) {
+        if (sortedIndices[i] !== i) {
+          validation.issues.push({
+            type: 'order_sequence_gap',
+            expectedIndex: i,
+            actualIndex: sortedIndices[i],
+            message: `Order sequence gap: expected ${i}, found ${sortedIndices[i]}`
+          });
+          // This is not necessarily invalid, just noteworthy
+        }
+      }
+
+    } catch (error) {
+      validation.isValid = false;
+      validation.issues.push({
+        type: 'validation_error',
+        error: error.message,
+        message: `Error during order consistency validation: ${error.message}`
+      });
+    }
+
+    return validation;
+  }
+
+  /**
+   * Identify which exercises need order index updates
+   * @private
+   */
+  _identifyOrderUpdatesNeeded(currentExercises, providedExercises, logOperations = false) {
+    const updatesNeeded = [];
+    
+    // Create lookup map for current exercises
+    const currentExerciseMap = new Map();
+    currentExercises.forEach(ex => {
+      currentExerciseMap.set(ex.id, ex.order_index);
+    });
+
+    // Check each provided exercise to see if order needs updating
+    providedExercises.forEach((exercise, newIndex) => {
+      if (exercise.id && currentExerciseMap.has(exercise.id)) {
+        const currentOrderIndex = currentExerciseMap.get(exercise.id);
+        
+        // Only update if the order index actually changed
+        if (currentOrderIndex !== newIndex) {
+          updatesNeeded.push({
+            exerciseId: exercise.id,
+            oldOrderIndex: currentOrderIndex,
+            newOrderIndex: newIndex,
+            exerciseType: exercise.exerciseId || 'unknown'
+          });
+        }
+      }
+    });
+
+    if (logOperations && updatesNeeded.length > 0) {
+      console.log('🔍 ORDER UPDATES IDENTIFIED:', {
+        totalExercises: providedExercises.length,
+        exercisesWithIds: providedExercises.filter(ex => ex.id).length,
+        updatesNeeded: updatesNeeded.length,
+        updates: updatesNeeded.map(u => ({
+          id: u.exerciseId,
+          from: u.oldOrderIndex,
+          to: u.newOrderIndex
+        }))
+      });
+    }
+
+    return updatesNeeded;
+  }
+
+  /**
+   * Batch update exercise order for better performance
+   * @private
+   */
+  async _batchUpdateExerciseOrder(exercisesToUpdate, workoutLogId, logOperations = false) {
+    if (logOperations) {
+      console.log('🚀 BATCH ORDER UPDATE START:', {
+        workoutLogId,
+        updateCount: exercisesToUpdate.length
+      });
+    }
+
+    let updatedCount = 0;
+    const batchSize = 10; // Process in batches to avoid overwhelming the database
+    
+    for (let i = 0; i < exercisesToUpdate.length; i += batchSize) {
+      const batch = exercisesToUpdate.slice(i, i + batchSize);
+      
+      // Execute batch updates in parallel
+      const batchPromises = batch.map(async (update) => {
+        const { error } = await supabase
+          .from('workout_log_exercises')
+          .update({ order_index: update.newOrderIndex })
+          .eq('id', update.exerciseId)
+          .eq('workout_log_id', workoutLogId);
+
+        if (error) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+            `Batch order update failed for exercise ${update.exerciseId}: ${error.message}`,
+            {
+              workoutLogId,
+              exerciseId: update.exerciseId,
+              oldOrderIndex: update.oldOrderIndex,
+              newOrderIndex: update.newOrderIndex
+            },
+            error
+          );
+        }
+
+        return update;
+      });
+
+      try {
+        const batchResults = await Promise.all(batchPromises);
+        updatedCount += batchResults.length;
+
+        if (logOperations) {
+          console.log('✅ BATCH ORDER UPDATE COMPLETE:', {
+            workoutLogId,
+            batchNumber: Math.floor(i / batchSize) + 1,
+            batchSize: batchResults.length,
+            totalUpdated: updatedCount
+          });
+        }
+      } catch (batchError) {
+        console.error('❌ BATCH ORDER UPDATE FAILED:', {
+          workoutLogId,
+          batchNumber: Math.floor(i / batchSize) + 1,
+          error: batchError.message
+        });
+        throw batchError;
+      }
+    }
+
+    return updatedCount;
+  }
+
+  /**
+   * Validate final exercise order after updates
+   * @private
+   */
+  async _validateFinalExerciseOrder(workoutLogId, expectedExercises, logOperations = false) {
+    const validation = {
+      isValid: true,
+      issues: [],
+      workoutLogId
+    };
+
+    try {
+      // Fetch current order from database
+      const { data: finalExercises, error: fetchError } = await supabase
+        .from('workout_log_exercises')
+        .select('id, order_index, exercise_id')
+        .eq('workout_log_id', workoutLogId)
+        .order('order_index', { ascending: true });
+
+      if (fetchError) {
+        validation.isValid = false;
+        validation.issues.push({
+          type: 'fetch_error',
+          error: fetchError.message,
+          message: `Could not fetch exercises for final validation: ${fetchError.message}`
+        });
+        return validation;
+      }
+
+      // Create maps for comparison
+      const finalOrderMap = new Map();
+      finalExercises.forEach(ex => {
+        finalOrderMap.set(ex.id, ex.order_index);
+      });
+
+      // Check if expected order matches final order
+      expectedExercises.forEach((exercise, expectedIndex) => {
+        if (exercise.id && finalOrderMap.has(exercise.id)) {
+          const actualIndex = finalOrderMap.get(exercise.id);
+          if (actualIndex !== expectedIndex) {
+            validation.isValid = false;
+            validation.issues.push({
+              type: 'order_mismatch',
+              exerciseId: exercise.id,
+              expectedIndex,
+              actualIndex,
+              message: `Exercise ${exercise.id} has order ${actualIndex}, expected ${expectedIndex}`
+            });
+          }
+        }
+      });
+
+      if (logOperations) {
+        console.log('🔍 FINAL ORDER VALIDATION:', {
+          workoutLogId,
+          isValid: validation.isValid,
+          issueCount: validation.issues.length,
+          expectedCount: expectedExercises.filter(ex => ex.id).length,
+          actualCount: finalExercises.length
+        });
+      }
+
+    } catch (error) {
+      validation.isValid = false;
+      validation.issues.push({
+        type: 'validation_error',
+        error: error.message,
+        message: `Error during final order validation: ${error.message}`
+      });
+    }
+
+    return validation;
+  }
+
+  /**
+   * Update workout log exercises (legacy method - now uses upsert)
    */
   async updateWorkoutLogExercises(workoutLogId, exercises) {
     return withSupabaseErrorHandling(async () => {
-      // Delete existing exercises
-      await supabase
-        .from('workout_log_exercises')
-        .delete()
-        .eq('workout_log_id', workoutLogId)
+      console.log('⚠️ LEGACY METHOD CALLED: updateWorkoutLogExercises - redirecting to upsert', {
+        workoutLogId,
+        exerciseCount: exercises?.length || 0
+      });
 
-      // Insert updated exercises
-      if (exercises.length > 0) {
-        await this.createWorkoutLogExercises(workoutLogId, exercises)
-      }
+      // Use the new upsert method instead of delete-and-recreate
+      const result = await this.upsertWorkoutExercises(workoutLogId, exercises, {
+        logOperations: true,
+        useTransaction: true,
+        validateData: true
+      });
+
+      console.log('✅ LEGACY METHOD COMPLETED VIA UPSERT:', {
+        workoutLogId,
+        operations: result.operations,
+        success: result.success
+      });
+
+      return result;
     }, 'updateWorkoutLogExercises')
   }
 

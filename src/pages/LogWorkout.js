@@ -4,6 +4,7 @@ import { Pencil, ThreeDotsVertical, BarChart, Plus, ArrowLeftRight, Dash, X } fr
 import { useAuth } from '../hooks/useAuth';
 import { useNumberInput } from '../hooks/useNumberInput.js';
 import useWorkoutRealtime, { useWorkoutProgressBroadcast } from '../hooks/useWorkoutRealtime';
+import useCacheManager from '../hooks/useCacheManager.js';
 import '../styles/LogWorkout.css';
 import { debounce } from 'lodash';
 import { useNavigate } from 'react-router-dom';
@@ -29,6 +30,18 @@ import {
   executeSupabaseOperation,
   SupabaseError
 } from '../utils/supabaseErrorHandler';
+
+// Enhanced workout error handling components and hooks
+import {
+  WorkoutErrorDisplay,
+  RetryMechanism,
+  OperationProgress,
+  ErrorRecoveryModal,
+  SaveStatusIndicator,
+  ErrorSummary
+} from '../components/WorkoutErrorHandler';
+import { useSaveErrorHandler } from '../hooks/useWorkoutErrorHandler';
+import '../styles/WorkoutErrorHandler.css';
 
 // Workout debugging and monitoring utilities
 import {
@@ -163,7 +176,7 @@ function WorkoutSummaryModal({ show, onHide, workoutData, exercisesList, weightU
 function LogWorkout() {
   const [programs, setPrograms] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
-  const [programLogs, setProgramLogs] = useState([]);
+  const [programLogs, setProgramLogs] = useState({});
   const [selectedWeek, setSelectedWeek] = useState(0);
   const [selectedDay, setSelectedDay] = useState(0);
   const [exercisesList, setExercisesList] = useState([]);
@@ -177,6 +190,22 @@ function LogWorkout() {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(null);
   const [exerciseNotes, setExerciseNotes] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 767);
+
+  // Enhanced cache manager integration
+  const {
+    getCachedWorkoutLog,
+    invalidateCacheEntry,
+    getCachedWorkoutLogId,
+    validateCachedWorkoutLogId,
+    cleanupInvalidCacheEntry,
+    updateProgramLogs,
+    getCacheStats,
+    updateCachedWorkoutLog
+  } = useCacheManager(programLogs, setProgramLogs, {
+    validateInDatabase: false,
+    autoCleanup: true,
+    logOperations: true
+  });
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
@@ -195,10 +224,43 @@ function LogWorkout() {
   // User message state for enhanced error handling
   const [userMessage, setUserMessage] = useState({ text: '', type: '', show: false });
 
+  // Enhanced error handling with save operations
+  const {
+    saveStatus,
+    executeSave,
+    retrySave,
+    markUnsaved,
+    clearSaveError,
+    errors,
+    errorStats,
+    addError,
+    removeError,
+    clearAllErrors,
+    retryAllErrors,
+    showErrorDetails,
+    hideErrorModal,
+    showErrorModal,
+    selectedError,
+    isProcessingRecovery,
+    hasCriticalErrors,
+    hasRetryableErrors,
+    canRetry
+  } = useSaveErrorHandler({
+    maxRetries: 3,
+    retryDelay: 1500,
+    onSaveSuccess: (result) => {
+      showUserMessage('Workout saved successfully', 'success');
+    },
+    onSaveError: (error) => {
+      // Error display is handled by the error components
+      console.error('Save operation failed:', error);
+    }
+  });
+
   const { user, isAuthenticated, userRole } = useAuth();
   const navigate = useNavigate();
 
-  // Enhanced real-time capabilities for workout updates
+  // Enhanced real-time capabilities for workout updates with cache integration
   const realtimeHook = useWorkoutRealtime(
     user?.id,
     selectedProgram?.id,
@@ -206,45 +268,85 @@ function LogWorkout() {
     selectedDay,
     {
       enabled: true,
-      onUpdate: (update) => {
-        // Handle real-time updates from other clients or server
+      onUpdate: async (update) => {
+        // Handle real-time updates from other clients or server with cache integration
         if (update.type === 'UPDATE' || update.type === 'BROADCAST') {
-          // Show real-time update notification
-          showUserMessage('Workout updated in real-time', 'info');
+          try {
+            // Log real-time update for debugging
+            workoutDebugger.logger.info('📡 REAL-TIME UPDATE: Received update', {
+              operation: 'realtime_update',
+              updateType: update.type,
+              table: update.table,
+              eventType: update.eventType,
+              userId: update.userId,
+              workoutLogId: update.workoutLogId,
+              timestamp: update.timestamp,
+              weekIndex: selectedWeek,
+              dayIndex: selectedDay
+            });
 
-          // If it's a workout log update, refresh the data
-          if (update.table === 'workout_logs' && update.eventType === 'UPDATE') {
-            // Refresh workout data to get latest changes
-            const key = `${selectedWeek}_${selectedDay}`;
-            if (programLogs[key]) {
-              // Update local state with new data
-              const updatedData = update.data;
-              setProgramLogs(prev => ({
-                ...prev,
-                [key]: {
-                  ...prev[key],
-                  isWorkoutFinished: updatedData.is_finished,
-                  workoutLogId: updatedData.id
-                }
-              }));
-              setIsWorkoutFinished(updatedData.is_finished);
+            // Handle workout log updates with intelligent merging
+            if (update.table === 'workout_logs' && update.eventType === 'UPDATE') {
+              await handleWorkoutLogRealtimeUpdate(update);
             }
-          }
 
-          // If it's an exercise update, refresh exercise data
-          if (update.table === 'workout_log_exercises') {
-            // Could refresh specific exercise data here
-            console.log('Exercise data updated in real-time:', update.data);
+            // Handle exercise updates with conflict resolution
+            if (update.table === 'workout_log_exercises') {
+              await handleExerciseRealtimeUpdate(update);
+            }
+
+            // Handle broadcast updates (progress, presence, etc.)
+            if (update.type === 'BROADCAST') {
+              await handleBroadcastUpdate(update);
+            }
+
+            // Show appropriate user notification
+            const notificationMessage = getRealtimeNotificationMessage(update);
+            if (notificationMessage) {
+              showUserMessage(notificationMessage, 'info');
+            }
+
+          } catch (error) {
+            workoutDebugger.logger.error('❌ REAL-TIME UPDATE ERROR: Failed to process update', {
+              operation: 'realtime_update',
+              error: error.message,
+              updateType: update.type,
+              table: update.table,
+              timestamp: new Date().toISOString()
+            });
+
+            // Don't show error to user for real-time update failures
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Real-time update processing failed:', error);
+            }
           }
         }
       },
       onError: (error) => {
+        // Enhanced error handling with cache cleanup if needed
+        workoutDebugger.logger.warn('⚠️ REAL-TIME CONNECTION ERROR: Connection issue detected', {
+          operation: 'realtime_connection',
+          errorType: error.type,
+          errorMessage: error.message,
+          reconnectAttempts: error.reconnectAttempts,
+          timestamp: error.timestamp
+        });
+
         // Don't show error to user unless it's critical
         if (process.env.NODE_ENV === 'development') {
           console.warn('Real-time connection error:', error);
         }
       },
       onConnectionChange: (connected, status) => {
+        workoutDebugger.logger.info(`🔗 REAL-TIME CONNECTION: Status changed to ${status}`, {
+          operation: 'realtime_connection',
+          connected,
+          status,
+          weekIndex: selectedWeek,
+          dayIndex: selectedDay,
+          timestamp: new Date().toISOString()
+        });
+
         if (process.env.NODE_ENV === 'development') {
           console.log(`Real-time connection ${connected ? 'established' : 'lost'}: ${status}`);
         }
@@ -254,6 +356,388 @@ function LogWorkout() {
 
   // Enhanced real-time progress broadcasting
   const progressBroadcast = useWorkoutProgressBroadcast(realtimeHook);
+
+  /**
+   * Handle workout log real-time updates with intelligent merging
+   * Preserves user input while applying remote changes
+   */
+  const handleWorkoutLogRealtimeUpdate = useCallback(async (update) => {
+    const updatedData = update.data;
+    const key = `${selectedWeek}_${selectedDay}`;
+    
+    // Check if this update is for the current workout session
+    if (!programLogs[key] || updatedData.user_id !== user?.id) {
+      return;
+    }
+
+    // Get current cached data
+    const currentCachedData = await getCachedWorkoutLog(selectedWeek, selectedDay);
+    
+    // Detect and resolve conflicts
+    const conflicts = await detectAndResolveConflicts(currentCachedData, update);
+    
+    // Intelligent merging: preserve user input, apply remote changes
+    const mergedData = {
+      ...currentCachedData,
+      workoutLogId: updatedData.id,
+      isWorkoutFinished: updatedData.is_finished,
+      lastSaved: updatedData.updated_at || new Date().toISOString(),
+      // Preserve current exercises if user is actively editing
+      exercises: currentCachedData?.exercises || [],
+      metadata: {
+        ...currentCachedData?.metadata,
+        remoteUpdate: true,
+        remoteTimestamp: update.timestamp,
+        source: 'realtime_workout_log_update',
+        conflicts: conflicts.length > 0 ? conflicts : undefined
+      }
+    };
+
+    // Update cache with merged data
+    await updateCachedWorkoutLog(selectedWeek, selectedDay, mergedData, {
+      source: 'realtime_workout_log_update',
+      preserveUserInput: true,
+      hasConflicts: conflicts.length > 0
+    });
+
+    // Update local state if workout completion status changed
+    if (updatedData.is_finished !== isWorkoutFinished) {
+      setIsWorkoutFinished(updatedData.is_finished);
+      
+      workoutDebugger.logger.info('🏁 WORKOUT STATUS CHANGED: Real-time update changed completion status', {
+        operation: 'realtime_workout_status_change',
+        previousStatus: isWorkoutFinished,
+        newStatus: updatedData.is_finished,
+        workoutLogId: updatedData.id,
+        timestamp: new Date().toISOString(),
+        hasConflicts: conflicts.length > 0
+      });
+    }
+
+    // Handle cache invalidation based on conflicts and timing
+    const timeDiff = new Date(update.timestamp) - new Date(currentCachedData?.lastSaved || 0);
+    if (timeDiff > 30000 || conflicts.length > 0) {
+      const reason = conflicts.length > 0 ? 'conflict_detected' : 'timestamp_conflict';
+      await handleRealtimeCacheInvalidation(update, reason);
+    }
+
+  }, [selectedWeek, selectedDay, programLogs, user, getCachedWorkoutLog, updateCachedWorkoutLog, invalidateCacheEntry, isWorkoutFinished]);
+
+  /**
+   * Handle exercise real-time updates with conflict resolution
+   * Preserves user input while merging remote exercise changes
+   */
+  const handleExerciseRealtimeUpdate = useCallback(async (update) => {
+    const updatedExercise = update.data;
+    
+    // Check if this update affects current workout
+    if (!updatedExercise.workout_log_id) {
+      return;
+    }
+
+    const currentCachedData = await getCachedWorkoutLog(selectedWeek, selectedDay);
+    if (!currentCachedData || currentCachedData.workoutLogId !== updatedExercise.workout_log_id) {
+      return;
+    }
+
+    // Find the exercise in current data
+    const currentExercises = logData || [];
+    const exerciseIndex = currentExercises.findIndex(ex => 
+      ex.exerciseId === updatedExercise.exercise_id && 
+      ex.orderIndex === updatedExercise.order_index
+    );
+
+    if (exerciseIndex === -1) {
+      // New exercise added remotely - add to current data
+      const newExercise = transformSupabaseExerciseToLocal(updatedExercise);
+      const updatedExercises = [...currentExercises, newExercise].sort((a, b) => a.orderIndex - b.orderIndex);
+      
+      setLogData(updatedExercises);
+      
+      await updateCachedWorkoutLog(selectedWeek, selectedDay, {
+        exercises: updatedExercises
+      }, {
+        source: 'realtime_exercise_add',
+        exerciseId: updatedExercise.exercise_id
+      });
+
+      workoutDebugger.logger.info('➕ EXERCISE ADDED: Real-time exercise addition', {
+        operation: 'realtime_exercise_add',
+        exerciseId: updatedExercise.exercise_id,
+        orderIndex: updatedExercise.order_index,
+        workoutLogId: updatedExercise.workout_log_id
+      });
+
+    } else {
+      // Exercise updated remotely - merge with local changes
+      const currentExercise = currentExercises[exerciseIndex];
+      
+      // Check for conflicts before merging
+      const hasLocalChanges = currentExercise.lastModified && 
+        new Date(currentExercise.lastModified) > new Date(updatedExercise.updated_at);
+      
+      const mergedExercise = mergeExerciseData(currentExercise, updatedExercise);
+      
+      const updatedExercises = [...currentExercises];
+      updatedExercises[exerciseIndex] = mergedExercise;
+      
+      setLogData(updatedExercises);
+      
+      await updateCachedWorkoutLog(selectedWeek, selectedDay, {
+        exercises: updatedExercises
+      }, {
+        source: 'realtime_exercise_update',
+        exerciseId: updatedExercise.exercise_id,
+        preserveUserInput: true,
+        hasConflicts: hasLocalChanges
+      });
+
+      workoutDebugger.logger.info('🔄 EXERCISE UPDATED: Real-time exercise merge', {
+        operation: 'realtime_exercise_update',
+        exerciseId: updatedExercise.exercise_id,
+        orderIndex: updatedExercise.order_index,
+        hasLocalChanges,
+        conflictResolution: mergedExercise.metadata?.conflictResolution
+      });
+
+      // Invalidate cache if there are significant conflicts
+      if (hasLocalChanges) {
+        await handleRealtimeCacheInvalidation(update, 'exercise_conflict');
+      }
+    }
+
+  }, [selectedWeek, selectedDay, logData, getCachedWorkoutLog, updateCachedWorkoutLog]);
+
+  /**
+   * Handle broadcast updates (progress, presence, etc.)
+   */
+  const handleBroadcastUpdate = useCallback(async (update) => {
+    const broadcastData = update.data;
+    
+    // Handle different broadcast types
+    switch (broadcastData.type) {
+      case 'workout_progress':
+        // Update progress indicators if needed
+        workoutDebugger.logger.debug('📊 PROGRESS BROADCAST: Received progress update', {
+          operation: 'realtime_progress_broadcast',
+          completedSets: broadcastData.completedSets,
+          totalSets: broadcastData.totalSets,
+          percentage: broadcastData.percentage
+        });
+        break;
+        
+      case 'set_completion':
+        // Handle set completion broadcasts
+        workoutDebugger.logger.debug('✅ SET COMPLETION BROADCAST: Received set completion', {
+          operation: 'realtime_set_completion',
+          exerciseIndex: broadcastData.exerciseIndex,
+          setIndex: broadcastData.setIndex,
+          completed: broadcastData.completed
+        });
+        break;
+        
+      default:
+        workoutDebugger.logger.debug('📡 GENERIC BROADCAST: Received broadcast update', {
+          operation: 'realtime_generic_broadcast',
+          broadcastType: broadcastData.type,
+          timestamp: broadcastData.timestamp
+        });
+    }
+  }, []);
+
+  /**
+   * Get appropriate notification message for real-time updates
+   */
+  const getRealtimeNotificationMessage = useCallback((update) => {
+    if (update.table === 'workout_logs' && update.eventType === 'UPDATE') {
+      if (update.data.is_finished !== isWorkoutFinished) {
+        return update.data.is_finished ? 'Workout completed remotely' : 'Workout reopened remotely';
+      }
+      return 'Workout updated remotely';
+    }
+    
+    if (update.table === 'workout_log_exercises') {
+      return 'Exercise data updated remotely';
+    }
+    
+    if (update.type === 'BROADCAST') {
+      // Don't show notifications for broadcasts to avoid spam
+      return null;
+    }
+    
+    return 'Workout updated in real-time';
+  }, [isWorkoutFinished]);
+
+  /**
+   * Merge exercise data preserving user input
+   */
+  const mergeExerciseData = useCallback((localExercise, remoteExercise) => {
+    // Preserve user input if local changes are more recent
+    const localTimestamp = new Date(localExercise.lastModified || 0);
+    const remoteTimestamp = new Date(remoteExercise.updated_at || 0);
+    
+    if (localTimestamp > remoteTimestamp) {
+      // Local changes are newer, preserve them
+      return {
+        ...localExercise,
+        // Only update non-user-input fields
+        id: remoteExercise.id,
+        notes: remoteExercise.notes || localExercise.notes,
+        metadata: {
+          ...localExercise.metadata,
+          remoteId: remoteExercise.id,
+          remoteTimestamp: remoteExercise.updated_at,
+          conflictResolution: 'local_preferred'
+        }
+      };
+    } else {
+      // Remote changes are newer, merge carefully
+      return {
+        ...remoteExercise,
+        // Transform remote data to local format
+        exerciseId: remoteExercise.exercise_id,
+        orderIndex: remoteExercise.order_index,
+        sets: remoteExercise.sets,
+        reps: remoteExercise.reps || localExercise.reps,
+        weights: remoteExercise.weights || localExercise.weights,
+        completed: remoteExercise.completed || localExercise.completed,
+        bodyweight: remoteExercise.bodyweight || localExercise.bodyweight,
+        notes: remoteExercise.notes || localExercise.notes,
+        lastModified: remoteExercise.updated_at,
+        metadata: {
+          ...localExercise.metadata,
+          remoteUpdate: true,
+          remoteTimestamp: remoteExercise.updated_at,
+          conflictResolution: 'remote_preferred'
+        }
+      };
+    }
+  }, []);
+
+  /**
+   * Transform Supabase exercise data to local format
+   */
+  const transformSupabaseExerciseToLocal = useCallback((supabaseExercise) => {
+    return {
+      id: supabaseExercise.id,
+      exerciseId: supabaseExercise.exercise_id,
+      orderIndex: supabaseExercise.order_index,
+      sets: supabaseExercise.sets,
+      reps: supabaseExercise.reps || [],
+      weights: supabaseExercise.weights || [],
+      completed: supabaseExercise.completed || [],
+      bodyweight: supabaseExercise.bodyweight,
+      notes: supabaseExercise.notes || '',
+      lastModified: supabaseExercise.updated_at,
+      metadata: {
+        source: 'realtime_transform',
+        remoteId: supabaseExercise.id,
+        remoteTimestamp: supabaseExercise.updated_at
+      }
+    };
+  }, []);
+
+  /**
+   * Handle cache invalidation for real-time updates
+   * Intelligently decides when to invalidate cache based on update context
+   */
+  const handleRealtimeCacheInvalidation = useCallback(async (update, reason) => {
+    try {
+      const currentCachedData = await getCachedWorkoutLog(selectedWeek, selectedDay);
+      
+      // Don't invalidate if user has recent input (within last 30 seconds)
+      const lastUserInput = new Date(currentCachedData?.lastUserInput || 0);
+      const timeSinceUserInput = Date.now() - lastUserInput.getTime();
+      
+      if (timeSinceUserInput < 30000) {
+        workoutDebugger.logger.info('🛡️ CACHE PROTECTION: Preserving cache due to recent user input', {
+          operation: 'realtime_cache_protection',
+          timeSinceUserInput,
+          reason,
+          updateType: update.type,
+          table: update.table
+        });
+        return;
+      }
+
+      // Invalidate cache for significant conflicts
+      await invalidateCacheEntry(selectedWeek, selectedDay, reason, {
+        source: 'realtime_invalidation',
+        updateType: update.type,
+        table: update.table,
+        timestamp: update.timestamp
+      });
+
+      workoutDebugger.logger.info('🗑️ CACHE INVALIDATED: Real-time update triggered cache invalidation', {
+        operation: 'realtime_cache_invalidation',
+        reason,
+        updateType: update.type,
+        table: update.table,
+        timeSinceUserInput
+      });
+
+    } catch (error) {
+      workoutDebugger.logger.error('❌ CACHE INVALIDATION ERROR: Failed to invalidate cache', {
+        operation: 'realtime_cache_invalidation',
+        error: error.message,
+        reason,
+        updateType: update.type
+      });
+    }
+  }, [selectedWeek, selectedDay, getCachedWorkoutLog, invalidateCacheEntry]);
+
+  /**
+   * Detect and resolve conflicts between local and remote changes
+   */
+  const detectAndResolveConflicts = useCallback(async (localData, remoteUpdate) => {
+    const conflicts = [];
+    
+    // Check for workout-level conflicts
+    if (localData.isWorkoutFinished !== remoteUpdate.data.is_finished) {
+      conflicts.push({
+        type: 'workout_completion',
+        local: localData.isWorkoutFinished,
+        remote: remoteUpdate.data.is_finished,
+        resolution: 'remote_wins' // Remote completion status takes precedence
+      });
+    }
+
+    // Check for exercise-level conflicts
+    if (remoteUpdate.table === 'workout_log_exercises') {
+      const localExercise = localData.exercises?.find(ex => 
+        ex.exerciseId === remoteUpdate.data.exercise_id &&
+        ex.orderIndex === remoteUpdate.data.order_index
+      );
+
+      if (localExercise && localExercise.lastModified) {
+        const localTime = new Date(localExercise.lastModified);
+        const remoteTime = new Date(remoteUpdate.data.updated_at);
+        
+        if (Math.abs(localTime - remoteTime) < 5000) { // 5 second window
+          conflicts.push({
+            type: 'exercise_concurrent_edit',
+            exerciseId: remoteUpdate.data.exercise_id,
+            localTime,
+            remoteTime,
+            resolution: 'merge_required'
+          });
+        }
+      }
+    }
+
+    // Log conflicts for monitoring
+    if (conflicts.length > 0) {
+      workoutDebugger.logger.warn('⚠️ CONFLICT DETECTED: Real-time update conflicts with local changes', {
+        operation: 'conflict_detection',
+        conflictCount: conflicts.length,
+        conflicts: conflicts.map(c => ({ type: c.type, resolution: c.resolution })),
+        updateType: remoteUpdate.type,
+        table: remoteUpdate.table
+      });
+    }
+
+    return conflicts;
+  }, []);
 
   // Enhanced user message function with Supabase error handling
   const showUserMessage = (text, type = 'info') => {
@@ -304,6 +788,10 @@ function LogWorkout() {
     return /[^\d\s]/.test(value.toString()) && value.toString().trim() !== '';
   };
 
+  // Cache validation and cleanup functions are now provided by useCacheManager hook
+
+  // Cache functions are now provided by useCacheManager hook
+
   // Check window size on resize
   useEffect(() => {
     const handleResize = () => {
@@ -314,142 +802,107 @@ function LogWorkout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Optimized debounced save function with caching and batch operations
+  // Enhanced debounced save function using the new error handling system
   const debouncedSaveLog = useCallback(
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
       if (!userData || !programData || exerciseData.length === 0) return;
 
+      // Mark as having unsaved changes
+      markUnsaved();
+
       try {
-        await workoutDebugger.trackOperation(
-          WORKOUT_OPERATIONS.SAVE_WORKOUT_LOG,
-          async () => {
-            await executeSupabaseOperation(async () => {
-              // Use cached workout log if available to avoid redundant queries
-              const cacheKey = `workout_log_${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
-              const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
+        // Execute save operation with error handling
+        const result = await executeSave(async () => {
+          // Transform exercise data to Supabase format
+          const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
 
-              // Debug logging for cached workout log ID
-              if (process.env.NODE_ENV === 'development') {
-                const isValid = cachedWorkoutLogId &&
-                  cachedWorkoutLogId !== 'undefined' &&
-                  cachedWorkoutLogId !== undefined &&
-                  cachedWorkoutLogId !== null &&
-                  cachedWorkoutLogId !== '';
-                console.log('🔍 Cached workout log ID check:', {
-                  key: `${weekIndex}_${dayIndex}`,
-                  cachedWorkoutLogId,
-                  type: typeof cachedWorkoutLogId,
-                  isValid,
-                  willUseCached: isValid
-                });
-              }
-
-              let existingLog = null;
-
-              if (cachedWorkoutLogId &&
-                cachedWorkoutLogId !== 'undefined' &&
-                cachedWorkoutLogId !== undefined &&
-                cachedWorkoutLogId !== null &&
-                cachedWorkoutLogId !== '') {
-                existingLog = { id: cachedWorkoutLogId };
-                console.log('✅ Using cached workout log ID:', cachedWorkoutLogId);
-              } else {
-                console.log('🔍 Fetching workout log from database:', {
-                  userId: userData.id,
-                  userIdType: typeof userData.id,
-                  programId: programData.id,
-                  programIdType: typeof programData.id,
-                  weekIndex,
-                  weekIndexType: typeof weekIndex,
-                  dayIndex,
-                  dayIndexType: typeof dayIndex
-                });
-
-              }
-
-              // Additional validation for existing log
-              if (existingLog && Array.isArray(existingLog)) {
-                console.warn('⚠️ getWorkoutLog returned array instead of object, treating as new workout:', existingLog);
-                existingLog = null;
-              } else if (existingLog && (!existingLog.id || existingLog.id === 'undefined' || existingLog.id === undefined || existingLog.id === null || existingLog.id === '')) {
-                console.warn('⚠️ Invalid existing log ID detected, treating as new workout:', existingLog);
-                existingLog = null;
-              }
-
-              // Transform exercise data to Supabase format (memoized)
-              const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
-
-              const workoutData = createWorkoutDataForSupabase({
-                program: programData,
-                weekIndex: weekIndex,
-                dayIndex: dayIndex,
-                exercises: transformedExercises,
-                isFinished: existingLog?.is_finished || false
-              });
-
-              if (existingLog && existingLog.id) {
-                // Optimized update: only send changed fields
-                const updateData = {
-                  name: workoutData.name,
-                  isFinished: workoutData.isFinished,
-                  isDraft: workoutData.isDraft,
-                  exercises: transformedExercises
-                };
-
-                // Debug logging for update operation
-                if (process.env.NODE_ENV === 'development') {
-                  console.log('🔄 Updating workout log:', {
-                    logId: existingLog.id,
-                    logIdType: typeof existingLog.id,
-                    updateData: { ...updateData, exercises: `${updateData.exercises.length} exercises` }
-                  });
-                }
-
-                await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
-
-                workoutDebugger.logger.debug('📝 Workout log updated (optimized)', {
-                  logId: existingLog.id,
-                  exerciseCount: transformedExercises.length
-                });
-              } else {
-                // Create new log and cache the ID for future updates
-                const newLog = await workoutLogService.createWorkoutLog(userData.id, workoutData);
-
-                // Update local cache with new log ID (only if we got a valid ID)
-                if (newLog && newLog.id) {
-                  const key = `${weekIndex}_${dayIndex}`;
-                  setProgramLogs(prev => ({
-                    ...prev,
-                    [key]: {
-                      ...prev[key],
-                      workoutLogId: newLog.id
-                    }
-                  }));
-                }
-
-                workoutDebugger.logger.debug('📝 Workout log created (cached)', {
-                  logId: newLog?.id,
-                  exerciseCount: transformedExercises.length
-                });
-              }
-            }, 'auto-saving workout log');
-          },
-          {
-            userId: userData.id,
-            programId: programData.id,
+          // Use the enhanced cache-first save method
+          const saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
+            userData.id,
+            programData.id,
             weekIndex,
             dayIndex,
-            exerciseCount: exerciseData.length
+            transformedExercises,
+            {
+              useCache: true,
+              validateCache: true,
+              autoCleanupInvalidCache: true,
+              logOperations: true,
+              source: 'debounced_save'
+            }
+          );
+
+          // Update local cache with the result
+          if (saveResult && saveResult.id) {
+            await updateCachedWorkoutLog(weekIndex, dayIndex, {
+              workoutLogId: saveResult.id,
+              exercises: exerciseData,
+              isWorkoutFinished: saveResult.is_finished || false,
+              userId: userData.id,
+              programId: programData.id
+            }, {
+              source: 'debounced_save_result'
+            });
+
+            workoutDebugger.logger.info('✅ DEBOUNCED SAVE SUCCESS: Workout log saved and cached', {
+              operation: 'debouncedSaveLog',
+              logId: saveResult.id,
+              userId: userData.id,
+              programId: programData.id,
+              programName: programData.name,
+              weekIndex,
+              dayIndex,
+              exerciseCount: transformedExercises.length,
+              timestamp: new Date().toISOString(),
+              wasUpdate: saveResult.wasUpdate,
+              cacheHit: saveResult.cacheHit
+            });
           }
-        );
+
+          return saveResult;
+        }, 'auto');
+
+        return result;
+
       } catch (error) {
-        handleError(error, 'auto-saving workout log', 'Error saving workout. Please try again.');
+        // Error is handled by the error handling system
+        workoutDebugger.logger.error('❌ DEBOUNCED SAVE ERROR: Operation failed', {
+          operation: 'debouncedSaveLog',
+          error: error.message,
+          errorType: error.type || 'unknown',
+          errorCode: error.code,
+          userId: userData.id,
+          programId: programData.id,
+          programName: programData.name,
+          weekIndex,
+          dayIndex,
+          exerciseCount: exerciseData.length,
+          timestamp: new Date().toISOString(),
+          recoverable: error.recoverable,
+          retryable: error.retryable
+        });
+
+        // Add error to error handling system with context for recovery
+        addError(error, {
+          operation: () => debouncedSaveLog(userData, programData, weekIndex, dayIndex, exerciseData),
+          operationType: 'auto',
+          source: 'debounced_save',
+          userData,
+          programData,
+          weekIndex,
+          dayIndex,
+          exerciseData,
+          cacheManager: { cleanup: cleanupInvalidCacheEntry },
+          cacheKey: `${weekIndex}_${dayIndex}`
+        });
+
+        throw error;
       }
     }, 1500), // Increased debounce to 1.5s to reduce API calls
-    [showUserMessage, handleError, programLogs] // Include programLogs for caching
+    [executeSave, markUnsaved, addError, workoutLogService, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]
   );
 
-  // Create a non-debounced version for immediate saves
+  // Enhanced immediate save function using the new error handling system
   const immediateSaveLog = useCallback(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
     // Cancel any pending debounced saves
     debouncedSaveLog.cancel();
@@ -458,93 +911,97 @@ function LogWorkout() {
     if (!userData || !programData || exerciseData.length === 0) return;
 
     try {
-      await workoutDebugger.trackOperation(
-        WORKOUT_OPERATIONS.SAVE_WORKOUT_LOG,
-        async () => {
-          await executeSupabaseOperation(async () => {
-            // Use cached workout log if available to avoid redundant queries
-            const cachedWorkoutLogId = programLogs[`${weekIndex}_${dayIndex}`]?.workoutLogId;
+      // Execute save operation with error handling
+      const result = await executeSave(async () => {
+        // Transform exercise data to Supabase format
+        const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
 
-            let existingLog = null;
-
-            if (cachedWorkoutLogId &&
-              cachedWorkoutLogId !== 'undefined' &&
-              cachedWorkoutLogId !== undefined &&
-              cachedWorkoutLogId !== null &&
-              cachedWorkoutLogId !== '') {
-              existingLog = { id: cachedWorkoutLogId };
-            } else {
-              existingLog = await workoutLogService.getWorkoutLog(userData.id, programData.id, weekIndex, dayIndex);
-            }
-
-            // Additional validation for existing log
-            if (existingLog && Array.isArray(existingLog)) {
-              existingLog = null;
-            } else if (existingLog && (!existingLog.id || existingLog.id === 'undefined' || existingLog.id === undefined || existingLog.id === null || existingLog.id === '')) {
-              existingLog = null;
-            }
-
-            // Transform exercise data to Supabase format
-            const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
-
-            const workoutData = createWorkoutDataForSupabase({
-              program: programData,
-              weekIndex: weekIndex,
-              dayIndex: dayIndex,
-              exercises: transformedExercises,
-              isFinished: existingLog?.is_finished || false
-            });
-
-            if (existingLog && existingLog.id) {
-              // Optimized update: only send changed fields
-              const updateData = {
-                name: workoutData.name,
-                isFinished: workoutData.isFinished,
-                isDraft: workoutData.isDraft,
-                exercises: transformedExercises
-              };
-
-              await workoutLogService.updateWorkoutLog(existingLog.id, updateData);
-
-              workoutDebugger.logger.debug('📝 Workout log updated (immediate)', {
-                logId: existingLog.id,
-                exerciseCount: transformedExercises.length
-              });
-            } else {
-              // Create new log and cache the ID for future updates
-              const newLog = await workoutLogService.createWorkoutLog(userData.id, workoutData);
-
-              // Update local cache with new log ID
-              if (newLog && newLog.id) {
-                const key = `${weekIndex}_${dayIndex}`;
-                setProgramLogs(prev => ({
-                  ...prev,
-                  [key]: {
-                    ...prev[key],
-                    workoutLogId: newLog.id
-                  }
-                }));
-              }
-
-              workoutDebugger.logger.debug('📝 Workout log created (immediate)', {
-                logId: newLog?.id,
-                exerciseCount: transformedExercises.length
-              });
-            }
-          }, 'immediately saving workout log');
-        },
-        {
-          userId: userData.id,
-          programId: programData.id,
+        // Use the enhanced cache-first save method with immediate priority
+        const saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
+          userData.id,
+          programData.id,
           weekIndex,
           dayIndex,
-          exerciseCount: exerciseData.length
+          transformedExercises,
+          {
+            useCache: true,
+            validateCache: true,
+            autoCleanupInvalidCache: true,
+            logOperations: true,
+            source: 'immediate_save',
+            priority: 'high'
+          }
+        );
+
+        // Update local cache with the result
+        if (saveResult && saveResult.id) {
+          await updateCachedWorkoutLog(weekIndex, dayIndex, {
+            workoutLogId: saveResult.id,
+            exercises: exerciseData,
+            isWorkoutFinished: saveResult.is_finished || false,
+            userId: userData.id,
+            programId: programData.id
+          }, {
+            source: 'immediate_save_result'
+          });
+
+          workoutDebugger.logger.info('✅ IMMEDIATE SAVE SUCCESS: Workout log saved and cached', {
+            operation: 'immediateSaveLog',
+            logId: saveResult.id,
+            userId: userData.id,
+            programId: programData.id,
+            programName: programData.name,
+            weekIndex,
+            dayIndex,
+            exerciseCount: transformedExercises.length,
+            timestamp: new Date().toISOString(),
+            wasUpdate: saveResult.wasUpdate,
+            cacheHit: saveResult.cacheHit,
+            saveType: 'immediate'
+          });
         }
-      );
+
+        return saveResult;
+      }, 'manual');
+
+      return result;
+
     } catch (error) {
-      handleError(error, 'immediately saving workout log', 'Error saving workout. Please try again.');
+      // Error is handled by the error handling system
+      workoutDebugger.logger.error('❌ IMMEDIATE SAVE ERROR: Operation failed', {
+        operation: 'immediateSaveLog',
+        error: error.message,
+        errorType: error.type || 'unknown',
+        errorCode: error.code,
+        userId: userData.id,
+        programId: programData.id,
+        programName: programData.name,
+        weekIndex,
+        dayIndex,
+        exerciseCount: exerciseData.length,
+        timestamp: new Date().toISOString(),
+        saveType: 'immediate',
+        recoverable: error.recoverable,
+        retryable: error.retryable
+      });
+
+      // Add error to error handling system with context for recovery
+      addError(error, {
+        operation: () => immediateSaveLog(userData, programData, weekIndex, dayIndex, exerciseData),
+        operationType: 'manual',
+        source: 'immediate_save',
+        userData,
+        programData,
+        weekIndex,
+        dayIndex,
+        exerciseData,
+        cacheManager: { cleanup: cleanupInvalidCacheEntry },
+        cacheKey: `${weekIndex}_${dayIndex}`
+      });
+
+      throw error;
     }
-  }, [workoutDebugger, executeSupabaseOperation, workoutLogService, programLogs, handleError, debouncedSaveLog]);
+  }, [debouncedSaveLog, executeSave, addError, workoutLogService, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]);
 
   // Initialize debugging and monitoring systems
   useEffect(() => {
@@ -743,7 +1200,43 @@ function LogWorkout() {
 
         // Memoized transformation to avoid repeated processing
         const logsMap = transformSupabaseWorkoutLogs(logsData);
-        setProgramLogs(logsMap);
+        
+        // Merge with existing programLogs to preserve any cached data
+        setProgramLogs(prev => {
+          const merged = { ...prev };
+          
+          // For each log from database, merge with existing cached data
+          Object.keys(logsMap).forEach(key => {
+            const dbLog = logsMap[key];
+            const existingLog = prev[key];
+            
+            // If we have existing cached data, preserve workoutLogId and other cached fields
+            if (existingLog) {
+              merged[key] = {
+                ...dbLog,
+                // Preserve cached workoutLogId if it exists and is valid, otherwise use DB value
+                workoutLogId: existingLog.workoutLogId || dbLog.workoutLogId,
+                // Use the more recent lastSaved timestamp
+                lastSaved: existingLog.lastSaved && new Date(existingLog.lastSaved) > new Date(dbLog.lastSaved) 
+                  ? existingLog.lastSaved 
+                  : dbLog.lastSaved
+              };
+              
+              workoutDebugger.logger.debug('🔄 Merged cached data with database data', {
+                key,
+                hadCachedWorkoutLogId: !!existingLog.workoutLogId,
+                dbWorkoutLogId: dbLog.workoutLogId,
+                finalWorkoutLogId: merged[key].workoutLogId,
+                timestamp: new Date().toISOString()
+              });
+            } else {
+              // No existing cached data, use database data as-is
+              merged[key] = dbLog;
+            }
+          });
+          
+          return merged;
+        });
 
         workoutDebugger.logger.info('📊 Program logs loaded (optimized)', {
           programId: selectedProgram.id,
@@ -802,10 +1295,31 @@ function LogWorkout() {
       setLogData(processedExercises);
       setIsWorkoutFinished(programLogs[key].isWorkoutFinished);
 
+      // Preserve cached workout log ID when switching between weeks/days
+      const cachedWorkoutLogId = programLogs[key].workoutLogId;
+      if (cachedWorkoutLogId) {
+        workoutDebugger.logger.debug('💾 Preserving cached workout log ID during data initialization', {
+          key,
+          cachedWorkoutLogId,
+          programId: selectedProgram.id,
+          weekIndex: selectedWeek,
+          dayIndex: selectedDay,
+          timestamp: new Date().toISOString(),
+          preservationSource: 'existing_workout_data_load'
+        });
+        
+        console.log('💾 Preserving cached workout log ID:', {
+          key,
+          cachedWorkoutLogId,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       workoutDebugger.logger.debug('📋 Loaded existing workout data', {
         key,
         exerciseCount: processedExercises.length,
-        isFinished: programLogs[key].isWorkoutFinished
+        isFinished: programLogs[key].isWorkoutFinished,
+        hasCachedWorkoutLogId: !!cachedWorkoutLogId
       });
     } else {
       // Initialize from program configuration with optimized processing
@@ -834,12 +1348,15 @@ function LogWorkout() {
 
         setLogData(dayExercises);
 
-        // Cache the initialized data for future use
+        // Cache the initialized data for future use, preserving any existing cached data
         setProgramLogs(prev => ({
           ...prev,
           [key]: {
             exercises: dayExercises,
-            isWorkoutFinished: false
+            isWorkoutFinished: false,
+            // Preserve existing workoutLogId if it exists, otherwise set to null
+            workoutLogId: prev[key]?.workoutLogId || null,
+            lastSaved: new Date().toISOString()
           }
         }));
 
@@ -980,7 +1497,9 @@ function LogWorkout() {
               ...prev,
               [key]: {
                 exercises: newLogData,
-                isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+                isWorkoutFinished: prev[key]?.isWorkoutFinished || false,
+                workoutLogId: prev[key]?.workoutLogId || null,
+                lastSaved: new Date().toISOString()
               }
             }));
 
@@ -1068,7 +1587,7 @@ function LogWorkout() {
     e.currentTarget.select();
   };
 
-  const handleChange = (exerciseIndex, setIndex, value, field) => {
+  const handleChange = useCallback(async (exerciseIndex, setIndex, value, field) => {
     if (isWorkoutFinished) return; // Don't allow changes if workout is finished
 
     const newLogData = [...logData];
@@ -1100,12 +1619,81 @@ function LogWorkout() {
       );
     }
 
+    // Update local state
     setLogData(newLogData);
-    const key = `${selectedWeek}_${selectedDay}`;
-    setProgramLogs(prev => ({
-      ...prev,
-      [key]: { exercises: newLogData, isWorkoutFinished: prev[key]?.isWorkoutFinished || false }
-    }));
+
+    // Mark as having unsaved changes
+    markUnsaved();
+
+    // Update cache using the enhanced CacheManager with real-time conflict detection
+    try {
+      // Mark exercise as locally modified for conflict resolution
+      const exerciseWithTimestamp = {
+        ...newLogData[exerciseIndex],
+        lastModified: new Date().toISOString(),
+        metadata: {
+          ...newLogData[exerciseIndex].metadata,
+          localChange: true,
+          changeSource: 'user_input',
+          field,
+          setIndex
+        }
+      };
+      
+      const updatedExercises = [...newLogData];
+      updatedExercises[exerciseIndex] = exerciseWithTimestamp;
+
+      await updateCachedWorkoutLog(selectedWeek, selectedDay, {
+        exercises: updatedExercises,
+        isWorkoutFinished: isWorkoutFinished,
+        userId: user?.id,
+        programId: selectedProgram?.id,
+        lastUserInput: new Date().toISOString()
+      }, {
+        source: 'handle_change',
+        field,
+        exerciseIndex,
+        setIndex,
+        preserveUserInput: true
+      });
+
+      workoutDebugger.logger.debug('📝 CACHE UPDATED: Exercise data changed with conflict detection', {
+        operation: 'handleChange',
+        field,
+        exerciseIndex,
+        setIndex,
+        value,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        timestamp: new Date().toISOString(),
+        hasLocalModification: true
+      });
+
+    } catch (cacheError) {
+      workoutDebugger.logger.warn('⚠️ CACHE UPDATE FAILED: Falling back to direct state update', {
+        operation: 'handleChange',
+        error: cacheError.message,
+        field,
+        exerciseIndex,
+        setIndex,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        timestamp: new Date().toISOString()
+      });
+
+      // Fallback to direct state update if cache fails
+      const key = `${selectedWeek}_${selectedDay}`;
+      setProgramLogs(prev => ({
+        ...prev,
+        [key]: { 
+          exercises: newLogData, 
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false,
+          workoutLogId: prev[key]?.workoutLogId || null,
+          lastSaved: new Date().toISOString(),
+          lastUserInput: new Date().toISOString()
+        }
+      }));
+    }
 
     // Broadcast overall workout progress if a set was completed/uncompleted
     if (broadcastUpdate) {
@@ -1121,8 +1709,21 @@ function LogWorkout() {
       });
     }
 
+    // Trigger debounced save with enhanced service
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
-  };
+  }, [
+    isWorkoutFinished, 
+    logData, 
+    exercisesList, 
+    selectedWeek, 
+    selectedDay, 
+    user, 
+    selectedProgram,
+    updateCachedWorkoutLog,
+    progressBroadcast,
+    debouncedSaveLog,
+    workoutDebugger
+  ]);
 
   // Helper function to check if a set can be marked as complete
   const canMarkSetComplete = (exercise, setIndex) => {
@@ -1208,13 +1809,89 @@ function LogWorkout() {
     setIsLoading(true);
     try {
       await executeSupabaseOperation(async () => {
-        // Use workoutLogService to get existing workout log
-        const existingLog = await workoutLogService.getWorkoutLog(
-          user.id,
-          selectedProgram.id,
-          selectedWeek,
-          selectedDay
-        );
+        // Step 1: Check cached workout log ID first with validation
+        let cachedWorkoutLogId = await getCachedWorkoutLogId(selectedWeek, selectedDay, false);
+
+        let existingLog = null;
+
+        if (cachedWorkoutLogId) {
+          // Validate cached ID exists in database before using it
+          const isValidInDatabase = await validateCachedWorkoutLogId(cachedWorkoutLogId, selectedWeek, selectedDay);
+          
+          if (!isValidInDatabase) {
+            // Clean up invalid cache entry and fall back to database query
+            cleanupInvalidCacheEntry(selectedWeek, selectedDay, 'database_validation_failed');
+            cachedWorkoutLogId = null;
+          }
+        }
+
+        if (cachedWorkoutLogId) {
+          // Use cached ID directly for update
+          console.log('🔍 Using cached workout log ID (saveLog):', { 
+            key: `${selectedWeek}_${selectedDay}`, 
+            cachedId: cachedWorkoutLogId,
+            timestamp: new Date().toISOString()
+          });
+          existingLog = { id: cachedWorkoutLogId };
+        } else {
+          // Step 2: Query database if no cached ID
+          console.log('🔍 No cached ID, querying database (saveLog):', { 
+            key: `${selectedWeek}_${selectedDay}`,
+            userId: user.id,
+            programId: selectedProgram.id,
+            weekIndex: selectedWeek,
+            dayIndex: selectedDay,
+            timestamp: new Date().toISOString()
+          });
+
+          try {
+            existingLog = await workoutLogService.getWorkoutLog(
+              user.id,
+              selectedProgram.id,
+              selectedWeek,
+              selectedDay
+            );
+            
+            // Cache the ID for future operations if found
+            if (existingLog && existingLog.id) {
+              const key = `${selectedWeek}_${selectedDay}`;
+              console.log('💾 Caching workout log ID from database query (saveLog):', {
+                key,
+                logId: existingLog.id,
+                timestamp: new Date().toISOString()
+              });
+              
+              setProgramLogs(prev => ({
+                ...prev,
+                [key]: {
+                  ...prev[key],
+                  workoutLogId: existingLog.id,
+                  lastSaved: new Date().toISOString()
+                }
+              }));
+            } else {
+              // Handle cases where database query returns null
+              console.log('📝 Database query returned null - no existing workout log found (saveLog):', {
+                key: `${selectedWeek}_${selectedDay}`,
+                userId: user.id,
+                programId: selectedProgram.id,
+                weekIndex: selectedWeek,
+                dayIndex: selectedDay,
+                timestamp: new Date().toISOString()
+              });
+            }
+          } catch (dbError) {
+            console.error('❌ Database query failed (saveLog), treating as new workout:', {
+              error: dbError.message,
+              userId: user.id,
+              programId: selectedProgram.id,
+              weekIndex: selectedWeek,
+              dayIndex: selectedDay,
+              timestamp: new Date().toISOString()
+            });
+            existingLog = null;
+          }
+        }
 
         // Transform exercise data to Supabase format
         const transformedExercises = logData.map(ex => ({
@@ -1231,7 +1908,24 @@ function LogWorkout() {
           originalIndex: ex.originalIndex || -1
         }));
 
-        if (existingLog && existingLog.id && existingLog.id !== 'undefined' && existingLog.id !== undefined && existingLog.id !== null && existingLog.id !== '') {
+        // Additional validation for existing log
+        if (existingLog && Array.isArray(existingLog)) {
+          console.warn('⚠️ getWorkoutLog returned array instead of object (saveLog), treating as new workout:', existingLog);
+          existingLog = null;
+        } else if (existingLog && (!existingLog.id || existingLog.id === 'undefined' || existingLog.id === undefined || existingLog.id === null || existingLog.id === '')) {
+          console.warn('⚠️ Invalid existing log ID detected (saveLog), treating as new workout:', existingLog);
+          existingLog = null;
+        }
+
+        if (existingLog && existingLog.id) {
+          // Log create vs update decision with context
+          console.log('🔄 Decision: UPDATE existing workout log (saveLog)', {
+            logId: existingLog.id,
+            source: cachedWorkoutLogId ? 'cache' : 'database',
+            exerciseCount: transformedExercises.length,
+            timestamp: new Date().toISOString()
+          });
+
           // Update existing log
           await workoutLogService.updateWorkoutLog(existingLog.id, {
             name: existingLog.name,
@@ -1252,7 +1946,47 @@ function LogWorkout() {
             isDraft: true,
             exercises: transformedExercises
           };
-          await workoutLogService.createWorkoutLog(user.id, workoutData);
+          
+          // Log create vs update decision with context
+          console.log('🆕 Decision: CREATE new workout log (saveLog)', {
+            reason: 'No existing log found',
+            exerciseCount: transformedExercises.length,
+            timestamp: new Date().toISOString()
+          });
+
+          // Create new log and cache the ID for future updates
+          const newLog = await workoutLogService.createWorkoutLog(user.id, workoutData);
+
+          // Update local cache with new log ID
+          if (newLog && newLog.id) {
+            const key = `${selectedWeek}_${selectedDay}`;
+            console.log('💾 Caching new workout log ID (saveLog):', {
+              key,
+              logId: newLog.id,
+              timestamp: new Date().toISOString()
+            });
+            
+            setProgramLogs(prev => ({
+              ...prev,
+              [key]: {
+                ...prev[key],
+                workoutLogId: newLog.id,
+                lastSaved: new Date().toISOString()
+              }
+            }));
+
+            console.log('✅ Successfully cached workout log ID after creation (saveLog):', {
+              key,
+              logId: newLog.id,
+              operation: 'create',
+              timestamp: new Date().toISOString()
+            });
+          } else {
+            console.warn('⚠️ Failed to cache workout log ID - invalid response from createWorkoutLog (saveLog):', {
+              newLog,
+              timestamp: new Date().toISOString()
+            });
+          }
         }
         showUserMessage('Workout saved successfully!', 'success');
       }, 'saving workout log');
@@ -1292,17 +2026,57 @@ function LogWorkout() {
   const finishWorkout = async () => {
     if (isWorkoutFinished || !user || !selectedProgram) return;
     setIsLoading(true);
+
     try {
-      // Use workoutLogService.finishWorkout method with enhanced error handling
-      await executeSupabaseOperation(async () => {
-        const result = await workoutLogService.finishWorkout(
+      // Execute workout completion with error handling
+      const result = await executeSave(async () => {
+        // First, save the current workout data with completion flag
+        const transformedExercises = transformExercisesToSupabaseFormat(logData);
+        
+        const saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
           user.id,
           selectedProgram.id,
           selectedWeek,
           selectedDay,
-          logData
+          transformedExercises,
+          {
+            useCache: true,
+            validateCache: true,
+            autoCleanupInvalidCache: true,
+            logOperations: true,
+            source: 'workout_completion',
+            priority: 'high',
+            markAsFinished: true // Special flag for completion
+          }
         );
-      }, 'finishing workout');
+
+        if (saveResult && saveResult.id) {
+          // Update local cache and state
+          await updateCachedWorkoutLog(selectedWeek, selectedDay, {
+            workoutLogId: saveResult.id,
+            exercises: logData,
+            isWorkoutFinished: true,
+            userId: user.id,
+            programId: selectedProgram.id
+          }, {
+            source: 'workout_completion_result'
+          });
+
+          workoutDebugger.logger.info('✅ WORKOUT COMPLETION SUCCESS: Workout finished and saved', {
+            operation: 'finishWorkout',
+            logId: saveResult.id,
+            userId: user.id,
+            programId: selectedProgram.id,
+            programName: selectedProgram.name,
+            weekIndex: selectedWeek,
+            dayIndex: selectedDay,
+            exerciseCount: transformedExercises.length,
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        return saveResult;
+      }, 'completion');
 
       setIsWorkoutFinished(true);
 
@@ -1362,15 +2136,46 @@ function LogWorkout() {
 
       setShowSummaryModal(true);
     } catch (error) {
+      // Enhanced error logging
+      workoutDebugger.logger.error('❌ WORKOUT COMPLETION ERROR: Failed to finish workout', {
+        operation: 'finishWorkout',
+        error: error.message,
+        errorType: error.type || 'unknown',
+        errorCode: error.code,
+        userId: user.id,
+        programId: selectedProgram.id,
+        programName: selectedProgram.name,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        exerciseCount: logData.length,
+        timestamp: new Date().toISOString(),
+        recoverable: error.recoverable,
+        retryable: error.retryable
+      });
+
+      // Add error to error handling system with context for recovery
+      addError(error, {
+        operation: () => finishWorkout(),
+        operationType: 'completion',
+        source: 'workout_completion',
+        userData: user,
+        programData: selectedProgram,
+        weekIndex: selectedWeek,
+        dayIndex: selectedDay,
+        exerciseData: logData,
+        cacheManager: { cleanup: cleanupInvalidCacheEntry },
+        cacheKey: `${selectedWeek}_${selectedDay}`
+      });
+
       // Handle both workout completion and processing errors
       if (error.message && error.message.includes('processing')) {
         // Non-critical error - workout is saved but processing failed
-        handleError(error, 'triggering workout processing', 'Workout saved but processing failed. Analytics may be delayed.');
+        showUserMessage('Workout saved but processing failed. Analytics may be delayed.', 'warning');
         setIsWorkoutFinished(true);
         setShowSummaryModal(true);
       } else {
         // Critical error - workout completion failed
-        handleError(error, 'finishing workout', 'Error finishing workout. Please try again.');
+        showUserMessage(error.userFriendly?.message || 'Error finishing workout. Please try again.', 'error');
       }
     } finally {
       setIsLoading(false);
@@ -1431,7 +2236,9 @@ function LogWorkout() {
         ...prev,
         [key]: {
           exercises: newLogData,
-          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false,
+          workoutLogId: prev[key]?.workoutLogId || null,
+          lastSaved: new Date().toISOString()
         }
       }));
 
@@ -1530,7 +2337,9 @@ function LogWorkout() {
         ...prev,
         [key]: {
           exercises: newLogData,
-          isWorkoutFinished: prev[key]?.isWorkoutFinished || false
+          isWorkoutFinished: prev[key]?.isWorkoutFinished || false,
+          workoutLogId: prev[key]?.workoutLogId || null,
+          lastSaved: new Date().toISOString()
         }
       }));
 
@@ -1598,6 +2407,40 @@ function LogWorkout() {
                   aria-label="Close"
                   onClick={hideUserMessage}
                 ></button>
+              </div>
+            )}
+
+            {/* Enhanced Error Display */}
+            {errors.length > 0 && (
+              <div className="mb-3">
+                <ErrorSummary
+                  errors={errors}
+                  onClearAll={clearAllErrors}
+                  onRetryAll={hasRetryableErrors ? retryAllErrors : null}
+                  maxVisible={2}
+                />
+              </div>
+            )}
+
+            {/* Enhanced Save Status Indicator */}
+            {selectedProgram && logData.length > 0 && (
+              <div className="d-flex align-items-center justify-content-between mb-3 p-2 bg-light rounded">
+                <SaveStatusIndicator
+                  saveStatus={saveStatus}
+                  onRetry={canRetry ? retrySave : null}
+                  onShowDetails={saveStatus.saveError ? () => showErrorDetails(saveStatus.saveError) : null}
+                  className="flex-grow-1"
+                />
+                
+                {!saveStatus.isSaving && saveStatus.hasUnsavedChanges && (
+                  <Button
+                    size="sm"
+                    variant="outline-primary"
+                    onClick={() => immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData)}
+                  >
+                    Save Now
+                  </Button>
+                )}
               </div>
             )}
 
@@ -2233,6 +3076,61 @@ function LogWorkout() {
         workoutData={logData.map(ex => ({ ...ex, name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown' }))}
         exercisesList={exercisesList}
         weightUnit={selectedProgram?.weightUnit || 'LB'}
+      />
+
+      {/* Error Recovery Modal */}
+      <ErrorRecoveryModal
+        show={showErrorModal}
+        onHide={hideErrorModal}
+        error={selectedError}
+        onRetry={selectedError ? () => retrySave() : null}
+        onSkip={() => {
+          if (selectedError) {
+            removeError(selectedError.errorId);
+          }
+          hideErrorModal();
+        }}
+        onUserAction={(error) => {
+          // Handle user intervention based on error type
+          if (error.type === 'session_expired') {
+            // Redirect to login
+            navigate('/login');
+          } else if (error.type === 'cache_validation_failed') {
+            // Clear cache and retry
+            clearSaveError();
+            hideErrorModal();
+          }
+        }}
+        recoveryOptions={selectedError ? [
+          {
+            title: 'Clear Cache and Retry',
+            description: 'Clear local cache and attempt the operation again',
+            action: async () => {
+              if (selectedError.context?.cacheKey) {
+                await cleanupInvalidCacheEntry(
+                  selectedError.context.weekIndex,
+                  selectedError.context.dayIndex,
+                  'user_initiated_cleanup'
+                );
+              }
+              await retrySave();
+            }
+          },
+          {
+            title: 'Save as New Workout',
+            description: 'Create a new workout log instead of updating existing one',
+            action: async () => {
+              // Force create new workout by clearing cache
+              const key = `${selectedWeek}_${selectedDay}`;
+              setProgramLogs(prev => {
+                const updated = { ...prev };
+                delete updated[key];
+                return updated;
+              });
+              await immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData);
+            }
+          }
+        ] : []}
       />
     </Container>
   );

@@ -241,7 +241,8 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
         originalIndex: ex.original_index || -1
       })),
       isWorkoutFinished: log.is_finished || false,
-      workoutLogId: log.id // Add the missing workoutLogId
+      workoutLogId: log.id, // Add the missing workoutLogId
+      lastSaved: log.updated_at || new Date().toISOString() // Add lastSaved timestamp
     };
   });
   

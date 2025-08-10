@@ -1,0 +1,315 @@
+/**
+ * Workout Error Handler Component Styles
+ * 
+ * Provides styling for error display components, retry mechanisms,
+ * and progress indicators.
+ */
+
+/* Main error alert styling */
+.workout-error-alert {
+  border-left: 4px solid;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1rem;
+}
+
+.workout-error-alert.alert-danger {
+  border-left-color: #dc3545;
+  background-color: #f8d7da;
+}
+
+.workout-error-alert.alert-warning {
+  border-left-color: #ffc107;
+  background-color: #fff3cd;
+}
+
+.workout-error-alert.alert-info {
+  border-left-color: #0dcaf0;
+  background-color: #d1ecf1;
+}
+
+/* Error icon styling */
+.workout-error-alert .me-3 {
+  flex-shrink: 0;
+}
+
+/* Retry mechanism styling */
+.retry-mechanism {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px solid #dee2e6;
+  transition: all 0.3s ease;
+}
+
+.retry-mechanism:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.retry-mechanism .progress {
+  height: 6px;
+  background-color: #e9ecef;
+}
+
+.retry-mechanism .progress-bar {
+  transition: width 0.3s ease;
+}
+
+/* Operation progress styling */
+.operation-progress {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.operation-progress:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.operation-progress .progress {
+  height: 8px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+}
+
+.operation-progress .progress-bar {
+  transition: width 0.6s ease;
+  border-radius: 4px;
+}
+
+.operation-progress .progress-bar.progress-bar-animated {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  animation: progress-bar-stripes 1s linear infinite;
+}
+
+/* Save status indicator styling */
+.save-status-indicator {
+  padding: 0.5rem;
+  border-radius: 6px;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+  transition: all 0.3s ease;
+}
+
+.save-status-indicator:hover {
+  background-color: #e9ecef;
+}
+
+.save-status-indicator .spinner-border {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+/* Error summary styling */
+.error-summary {
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.error-summary .error-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.error-summary .error-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.error-summary .error-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.error-summary .error-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.error-summary .error-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Error recovery modal styling */
+.modal .modal-header .modal-title {
+  font-weight: 600;
+}
+
+.modal .form-check {
+  padding: 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.modal .form-check:hover {
+  background-color: #f8f9fa;
+  border-color: #0d6efd;
+}
+
+.modal .form-check-input:checked ~ .form-check-label {
+  color: #0d6efd;
+}
+
+/* Severity badge styling */
+.badge.bg-danger {
+  background-color: #dc3545 !important;
+}
+
+.badge.bg-warning {
+  background-color: #ffc107 !important;
+  color: #000 !important;
+}
+
+.badge.bg-info {
+  background-color: #0dcaf0 !important;
+  color: #000 !important;
+}
+
+.badge.bg-secondary {
+  background-color: #6c757d !important;
+}
+
+/* Animation for error appearance */
+@keyframes errorSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workout-error-alert {
+  animation: errorSlideIn 0.3s ease-out;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .workout-error-alert {
+    margin-bottom: 0.75rem;
+  }
+  
+  .workout-error-alert .d-flex {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  
+  .workout-error-alert .me-3 {
+    margin-bottom: 0.5rem !important;
+    margin-right: 0 !important;
+  }
+  
+  .retry-mechanism,
+  .operation-progress {
+    padding: 0.75rem;
+  }
+  
+  .error-summary {
+    padding: 0.75rem;
+  }
+  
+  .modal .form-check {
+    padding: 0.5rem;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .workout-error-alert {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  
+  .retry-mechanism,
+  .operation-progress,
+  .error-summary {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+  }
+  
+  .save-status-indicator {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .save-status-indicator:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .workout-error-alert {
+    border-width: 2px;
+    border-left-width: 6px;
+  }
+  
+  .retry-mechanism,
+  .operation-progress,
+  .error-summary {
+    border-width: 2px;
+  }
+  
+  .badge {
+    border: 1px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .workout-error-alert,
+  .retry-mechanism,
+  .operation-progress,
+  .save-status-indicator {
+    transition: none;
+    animation: none;
+  }
+  
+  .progress-bar {
+    transition: none;
+  }
+  
+  .progress-bar.progress-bar-animated {
+    animation: none;
+  }
+}
+
+/* Focus styles for accessibility */
+.workout-error-alert button:focus,
+.retry-mechanism button:focus,
+.operation-progress button:focus {
+  outline: 2px solid #0d6efd;
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .workout-error-alert,
+  .retry-mechanism,
+  .operation-progress,
+  .error-summary {
+    break-inside: avoid;
+    border: 1px solid #000;
+    background: transparent !important;
+  }
+  
+  .spinner-border {
+    display: none;
+  }
+}
