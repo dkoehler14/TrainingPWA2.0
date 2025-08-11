@@ -653,7 +653,8 @@ class WorkoutLogService {
             is_draft: workoutData.isDraft || false,
             weight_unit: workoutData.weightUnit || 'LB',
             duration: workoutData.duration,
-            notes: workoutData.notes
+            notes: workoutData.notes,
+            completed_date: workoutData.completedDate
           })
           .select()
           .single()
@@ -913,7 +914,8 @@ class WorkoutLogService {
         workoutName = null,
         isFinished = false,
         isDraft = false,
-        notes = ''
+        notes = '',
+        completedDate = null
       } = options;
 
       const cacheKey = cacheManager.generateKey(weekIndex, dayIndex);
@@ -1034,6 +1036,7 @@ class WorkoutLogService {
               isFinished,
               isDraft,
               notes,
+              completedDate: isFinished ? (completedDate || new Date().toISOString()) : null,
               exercises: exerciseData
             });
           } catch (updateError) {
@@ -1071,6 +1074,7 @@ class WorkoutLogService {
               isFinished,
               isDraft,
               notes,
+              completedDate: isFinished ? (completedDate || new Date().toISOString()) : null,
               exercises: exerciseData
             });
 

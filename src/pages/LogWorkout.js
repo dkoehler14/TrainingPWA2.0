@@ -2050,7 +2050,8 @@ function LogWorkout() {
             logOperations: true,
             source: 'workout_completion',
             priority: 'high',
-            markAsFinished: true // Special flag for completion
+            isFinished: true, // Mark workout as finished
+            completedDate: new Date().toISOString() // Set completion date
           }
         );
 
@@ -2061,7 +2062,7 @@ function LogWorkout() {
             exercises: logData,
             isWorkoutFinished: true,
             userId: user.id,
-            programId: selectedProgram.id
+            programId: selectedProgram.id,
           }, {
             source: 'workout_completion_result'
           });
