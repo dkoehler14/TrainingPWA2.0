@@ -364,7 +364,7 @@ function LogWorkout() {
   const handleWorkoutLogRealtimeUpdate = useCallback(async (update) => {
     const updatedData = update.data;
     const key = `${selectedWeek}_${selectedDay}`;
-    
+
     // Check if this update is for the current workout session
     if (!programLogs[key] || updatedData.user_id !== user?.id) {
       return;
@@ -372,10 +372,10 @@ function LogWorkout() {
 
     // Get current cached data
     const currentCachedData = await getCachedWorkoutLog(selectedWeek, selectedDay);
-    
+
     // Detect and resolve conflicts
     const conflicts = await detectAndResolveConflicts(currentCachedData, update);
-    
+
     // Intelligent merging: preserve user input, apply remote changes
     const mergedData = {
       ...currentCachedData,
@@ -403,7 +403,7 @@ function LogWorkout() {
     // Update local state if workout completion status changed
     if (updatedData.is_finished !== isWorkoutFinished) {
       setIsWorkoutFinished(updatedData.is_finished);
-      
+
       workoutDebugger.logger.info('🏁 WORKOUT STATUS CHANGED: Real-time update changed completion status', {
         operation: 'realtime_workout_status_change',
         previousStatus: isWorkoutFinished,
@@ -429,7 +429,7 @@ function LogWorkout() {
    */
   const handleExerciseRealtimeUpdate = useCallback(async (update) => {
     const updatedExercise = update.data;
-    
+
     // Check if this update affects current workout
     if (!updatedExercise.workout_log_id) {
       return;
@@ -442,8 +442,8 @@ function LogWorkout() {
 
     // Find the exercise in current data
     const currentExercises = logData || [];
-    const exerciseIndex = currentExercises.findIndex(ex => 
-      ex.exerciseId === updatedExercise.exercise_id && 
+    const exerciseIndex = currentExercises.findIndex(ex =>
+      ex.exerciseId === updatedExercise.exercise_id &&
       ex.orderIndex === updatedExercise.order_index
     );
 
@@ -451,9 +451,9 @@ function LogWorkout() {
       // New exercise added remotely - add to current data
       const newExercise = transformSupabaseExerciseToLocal(updatedExercise);
       const updatedExercises = [...currentExercises, newExercise].sort((a, b) => a.orderIndex - b.orderIndex);
-      
+
       setLogData(updatedExercises);
-      
+
       await updateCachedWorkoutLog(selectedWeek, selectedDay, {
         exercises: updatedExercises
       }, {
@@ -471,18 +471,18 @@ function LogWorkout() {
     } else {
       // Exercise updated remotely - merge with local changes
       const currentExercise = currentExercises[exerciseIndex];
-      
+
       // Check for conflicts before merging
-      const hasLocalChanges = currentExercise.lastModified && 
+      const hasLocalChanges = currentExercise.lastModified &&
         new Date(currentExercise.lastModified) > new Date(updatedExercise.updated_at);
-      
+
       const mergedExercise = mergeExerciseData(currentExercise, updatedExercise);
-      
+
       const updatedExercises = [...currentExercises];
       updatedExercises[exerciseIndex] = mergedExercise;
-      
+
       setLogData(updatedExercises);
-      
+
       await updateCachedWorkoutLog(selectedWeek, selectedDay, {
         exercises: updatedExercises
       }, {
@@ -513,7 +513,7 @@ function LogWorkout() {
    */
   const handleBroadcastUpdate = useCallback(async (update) => {
     const broadcastData = update.data;
-    
+
     // Handle different broadcast types
     switch (broadcastData.type) {
       case 'workout_progress':
@@ -525,7 +525,7 @@ function LogWorkout() {
           percentage: broadcastData.percentage
         });
         break;
-        
+
       case 'set_completion':
         // Handle set completion broadcasts
         workoutDebugger.logger.debug('✅ SET COMPLETION BROADCAST: Received set completion', {
@@ -535,7 +535,7 @@ function LogWorkout() {
           completed: broadcastData.completed
         });
         break;
-        
+
       default:
         workoutDebugger.logger.debug('📡 GENERIC BROADCAST: Received broadcast update', {
           operation: 'realtime_generic_broadcast',
@@ -555,16 +555,16 @@ function LogWorkout() {
       }
       return 'Workout updated remotely';
     }
-    
+
     if (update.table === 'workout_log_exercises') {
       return 'Exercise data updated remotely';
     }
-    
+
     if (update.type === 'BROADCAST') {
       // Don't show notifications for broadcasts to avoid spam
       return null;
     }
-    
+
     return 'Workout updated in real-time';
   }, [isWorkoutFinished]);
 
@@ -575,7 +575,7 @@ function LogWorkout() {
     // Preserve user input if local changes are more recent
     const localTimestamp = new Date(localExercise.lastModified || 0);
     const remoteTimestamp = new Date(remoteExercise.updated_at || 0);
-    
+
     if (localTimestamp > remoteTimestamp) {
       // Local changes are newer, preserve them
       return {
@@ -644,11 +644,11 @@ function LogWorkout() {
   const handleRealtimeCacheInvalidation = useCallback(async (update, reason) => {
     try {
       const currentCachedData = await getCachedWorkoutLog(selectedWeek, selectedDay);
-      
+
       // Don't invalidate if user has recent input (within last 30 seconds)
       const lastUserInput = new Date(currentCachedData?.lastUserInput || 0);
       const timeSinceUserInput = Date.now() - lastUserInput.getTime();
-      
+
       if (timeSinceUserInput < 30000) {
         workoutDebugger.logger.info('🛡️ CACHE PROTECTION: Preserving cache due to recent user input', {
           operation: 'realtime_cache_protection',
@@ -691,7 +691,7 @@ function LogWorkout() {
    */
   const detectAndResolveConflicts = useCallback(async (localData, remoteUpdate) => {
     const conflicts = [];
-    
+
     // Check for workout-level conflicts
     if (localData.isWorkoutFinished !== remoteUpdate.data.is_finished) {
       conflicts.push({
@@ -704,7 +704,7 @@ function LogWorkout() {
 
     // Check for exercise-level conflicts
     if (remoteUpdate.table === 'workout_log_exercises') {
-      const localExercise = localData.exercises?.find(ex => 
+      const localExercise = localData.exercises?.find(ex =>
         ex.exerciseId === remoteUpdate.data.exercise_id &&
         ex.orderIndex === remoteUpdate.data.order_index
       );
@@ -712,7 +712,7 @@ function LogWorkout() {
       if (localExercise && localExercise.lastModified) {
         const localTime = new Date(localExercise.lastModified);
         const remoteTime = new Date(remoteUpdate.data.updated_at);
-        
+
         if (Math.abs(localTime - remoteTime) < 5000) { // 5 second window
           conflicts.push({
             type: 'exercise_concurrent_edit',
@@ -1200,16 +1200,16 @@ function LogWorkout() {
 
         // Memoized transformation to avoid repeated processing
         const logsMap = transformSupabaseWorkoutLogs(logsData);
-        
+
         // Merge with existing programLogs to preserve any cached data
         setProgramLogs(prev => {
           const merged = { ...prev };
-          
+
           // For each log from database, merge with existing cached data
           Object.keys(logsMap).forEach(key => {
             const dbLog = logsMap[key];
             const existingLog = prev[key];
-            
+
             // If we have existing cached data, preserve workoutLogId and other cached fields
             if (existingLog) {
               merged[key] = {
@@ -1217,11 +1217,11 @@ function LogWorkout() {
                 // Preserve cached workoutLogId if it exists and is valid, otherwise use DB value
                 workoutLogId: existingLog.workoutLogId || dbLog.workoutLogId,
                 // Use the more recent lastSaved timestamp
-                lastSaved: existingLog.lastSaved && new Date(existingLog.lastSaved) > new Date(dbLog.lastSaved) 
-                  ? existingLog.lastSaved 
+                lastSaved: existingLog.lastSaved && new Date(existingLog.lastSaved) > new Date(dbLog.lastSaved)
+                  ? existingLog.lastSaved
                   : dbLog.lastSaved
               };
-              
+
               workoutDebugger.logger.debug('🔄 Merged cached data with database data', {
                 key,
                 hadCachedWorkoutLogId: !!existingLog.workoutLogId,
@@ -1234,7 +1234,7 @@ function LogWorkout() {
               merged[key] = dbLog;
             }
           });
-          
+
           return merged;
         });
 
@@ -1307,7 +1307,7 @@ function LogWorkout() {
           timestamp: new Date().toISOString(),
           preservationSource: 'existing_workout_data_load'
         });
-        
+
         console.log('💾 Preserving cached workout log ID:', {
           key,
           cachedWorkoutLogId,
@@ -1639,7 +1639,7 @@ function LogWorkout() {
           setIndex
         }
       };
-      
+
       const updatedExercises = [...newLogData];
       updatedExercises[exerciseIndex] = exerciseWithTimestamp;
 
@@ -1685,8 +1685,8 @@ function LogWorkout() {
       const key = `${selectedWeek}_${selectedDay}`;
       setProgramLogs(prev => ({
         ...prev,
-        [key]: { 
-          exercises: newLogData, 
+        [key]: {
+          exercises: newLogData,
           isWorkoutFinished: prev[key]?.isWorkoutFinished || false,
           workoutLogId: prev[key]?.workoutLogId || null,
           lastSaved: new Date().toISOString(),
@@ -1712,12 +1712,12 @@ function LogWorkout() {
     // Trigger debounced save with enhanced service
     debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
   }, [
-    isWorkoutFinished, 
-    logData, 
-    exercisesList, 
-    selectedWeek, 
-    selectedDay, 
-    user, 
+    isWorkoutFinished,
+    logData,
+    exercisesList,
+    selectedWeek,
+    selectedDay,
+    user,
     selectedProgram,
     updateCachedWorkoutLog,
     progressBroadcast,
@@ -1767,13 +1767,15 @@ function LogWorkout() {
     setLogData(newLogData);
 
     // Broadcast workout structure change
-    progressBroadcast.broadcastProgress({
-      type: 'set_added',
-      exerciseIndex,
-      exerciseId: newLogData[exerciseIndex].exerciseId,
-      exerciseName: exercise?.name,
-      newSetCount: newLogData[exerciseIndex].sets
-    });
+    if (realtimeHook?.broadcastProgress) {
+      realtimeHook.broadcastProgress({
+        type: 'set_added',
+        exerciseIndex,
+        exerciseId: newLogData[exerciseIndex].exerciseId,
+        exerciseName: exercise?.name,
+        newSetCount: newLogData[exerciseIndex].sets
+      });
+    }
 
     // Use immediate save for structural changes
     immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
@@ -1791,13 +1793,15 @@ function LogWorkout() {
 
       // Broadcast workout structure change
       const exercise = exercisesList.find(e => e.id === newLogData[exerciseIndex].exerciseId);
-      progressBroadcast.broadcastProgress({
-        type: 'set_removed',
-        exerciseIndex,
-        exerciseId: newLogData[exerciseIndex].exerciseId,
-        exerciseName: exercise?.name,
-        newSetCount: newLogData[exerciseIndex].sets
-      });
+      if (realtimeHook?.broadcastProgress) {
+        realtimeHook.broadcastProgress({
+          type: 'set_removed',
+          exerciseIndex,
+          exerciseId: newLogData[exerciseIndex].exerciseId,
+          exerciseName: exercise?.name,
+          newSetCount: newLogData[exerciseIndex].sets
+        });
+      }
 
       // Use immediate save for structural changes
       immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
@@ -1817,7 +1821,7 @@ function LogWorkout() {
         if (cachedWorkoutLogId) {
           // Validate cached ID exists in database before using it
           const isValidInDatabase = await validateCachedWorkoutLogId(cachedWorkoutLogId, selectedWeek, selectedDay);
-          
+
           if (!isValidInDatabase) {
             // Clean up invalid cache entry and fall back to database query
             cleanupInvalidCacheEntry(selectedWeek, selectedDay, 'database_validation_failed');
@@ -1827,15 +1831,15 @@ function LogWorkout() {
 
         if (cachedWorkoutLogId) {
           // Use cached ID directly for update
-          console.log('🔍 Using cached workout log ID (saveLog):', { 
-            key: `${selectedWeek}_${selectedDay}`, 
+          console.log('🔍 Using cached workout log ID (saveLog):', {
+            key: `${selectedWeek}_${selectedDay}`,
             cachedId: cachedWorkoutLogId,
             timestamp: new Date().toISOString()
           });
           existingLog = { id: cachedWorkoutLogId };
         } else {
           // Step 2: Query database if no cached ID
-          console.log('🔍 No cached ID, querying database (saveLog):', { 
+          console.log('🔍 No cached ID, querying database (saveLog):', {
             key: `${selectedWeek}_${selectedDay}`,
             userId: user.id,
             programId: selectedProgram.id,
@@ -1851,7 +1855,7 @@ function LogWorkout() {
               selectedWeek,
               selectedDay
             );
-            
+
             // Cache the ID for future operations if found
             if (existingLog && existingLog.id) {
               const key = `${selectedWeek}_${selectedDay}`;
@@ -1860,7 +1864,7 @@ function LogWorkout() {
                 logId: existingLog.id,
                 timestamp: new Date().toISOString()
               });
-              
+
               setProgramLogs(prev => ({
                 ...prev,
                 [key]: {
@@ -1946,7 +1950,7 @@ function LogWorkout() {
             isDraft: true,
             exercises: transformedExercises
           };
-          
+
           // Log create vs update decision with context
           console.log('🆕 Decision: CREATE new workout log (saveLog)', {
             reason: 'No existing log found',
@@ -1965,7 +1969,7 @@ function LogWorkout() {
               logId: newLog.id,
               timestamp: new Date().toISOString()
             });
-            
+
             setProgramLogs(prev => ({
               ...prev,
               [key]: {
@@ -2032,7 +2036,7 @@ function LogWorkout() {
       const result = await executeSave(async () => {
         // First, save the current workout data with completion flag
         const transformedExercises = transformExercisesToSupabaseFormat(logData);
-        
+
         const saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
           user.id,
           selectedProgram.id,
@@ -2122,17 +2126,19 @@ function LogWorkout() {
           );
         }
       });
-      progressBroadcast.broadcastProgress({
-        type: 'workout_completed',
-        programId: selectedProgram.id,
-        programName: selectedProgram.name,
-        weekIndex: selectedWeek + 1,
-        dayIndex: selectedDay + 1,
-        completedAt: new Date().toISOString(),
-        totalExercises: logData.length,
-        totalSets: logData.reduce((sum, ex) => sum + ex.sets, 0),
-        completedSets: logData.reduce((sum, ex) => sum + ex.completed.filter(Boolean).length, 0)
-      });
+      if (realtimeHook?.broadcastProgress) {
+        realtimeHook.broadcastProgress({
+          type: 'workout_completed',
+          programId: selectedProgram.id,
+          programName: selectedProgram.name,
+          weekIndex: selectedWeek + 1,
+          dayIndex: selectedDay + 1,
+          completedAt: new Date().toISOString(),
+          totalExercises: logData.length,
+          totalSets: logData.reduce((sum, ex) => sum + ex.sets, 0),
+          completedSets: logData.reduce((sum, ex) => sum + ex.completed.filter(Boolean).length, 0)
+        });
+      }
 
       setShowSummaryModal(true);
     } catch (error) {
@@ -2431,7 +2437,7 @@ function LogWorkout() {
                   onShowDetails={saveStatus.saveError ? () => showErrorDetails(saveStatus.saveError) : null}
                   className="flex-grow-1"
                 />
-                
+
                 {!saveStatus.isSaving && saveStatus.hasUnsavedChanges && (
                   <Button
                     size="sm"

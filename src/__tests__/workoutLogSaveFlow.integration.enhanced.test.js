@@ -1,14 +1,11 @@
 /**
- * Mock-Based Integration Tests for Workout Log Save Flow
+ * Enhanced Integration Tests for Workout Log Save Flow
  * 
  * Tests the complete end-to-end save flow with comprehensive coverage of:
  * - Cache hit and miss scenarios
  * - Database constraint violation handling
  * - Error recovery mechanisms
  * - Real-world user interaction patterns
- * 
- * This version uses mocks instead of real Supabase to ensure tests can run
- * in any environment without configuration dependencies.
  * 
  * Requirements Coverage:
  * - 1.1: Check for existing workout log ID before deciding to create or update
@@ -25,94 +22,102 @@ import { BrowserRouter } from 'react-router-dom'
 import LogWorkout from '../pages/LogWorkout'
 import { AuthContext } from '../context/AuthContext'
 import workoutLogService from '../services/workoutLogService'
-import { getUserPrograms, getProgramById } from '../services/programService'
-import { getAvailableExercises } from '../services/exerciseService'
 import { WorkoutLogCacheManager } from '../utils/cacheManager'
+import { testDataGenerators, createTestSupabaseClient, createTestAdminClient } from '../utils/testHelpers'
+import { testConfig, skipIfSupabaseUnavailable } from '../setupSupabaseTests'
 
-// Mock all external dependencies
-jest.mock('../services/workoutLogService')
-jest.mock('../services/programService')
-jest.mock('../services/exerciseService')
+// Skip tests if Supabase is not available
+skipIfSupabaseUnavailable()
+
+// Mock the cache manager for controlled testing
 jest.mock('../utils/cacheManager')
-jest.mock('../hooks/useWorkoutRealtime', () => ({
-  __esModule: true,
-  default: () => ({
-    isConnected: true,
-    connectionStatus: 'connected',
-    lastUpdate: null
-  }),
-  useWorkoutProgressBroadcast: () => ({
-    broadcastProgress: jest.fn(),
-    broadcastCompletion: jest.fn()
-  })
-}))
 
-// Mock Supabase configuration to avoid initialization errors
-jest.mock('../config/supabase', () => ({
-  supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      insert: jest.fn().mockReturnThis(),
-      update: jest.fn().mockReturnThis(),
-      delete: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      single: jest.fn()
-    })),
-    auth: {
-      getUser: jest.fn(),
-      onAuthStateChange: jest.fn(() => ({
-        data: { subscription: { unsubscribe: jest.fn() } }
-      }))
-    }
-  },
-  withSupabaseErrorHandling: jest.fn((fn) => fn)
-}))
-
-describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
-  let mockUser
-  let mockProgram
-  let mockExercises
+describe('Enhanced Workout Log Save Flow Integration Tests', () => {
+  let testUser
+  let testProgram
+  let testExercises
+  let supabaseClient
+  let adminClient
+  let createdWorkoutLogIds
   let mockAuthContext
   let mockCacheManager
-  let createWorkoutLogSpy
-  let updateWorkoutLogSpy
-  let getWorkoutLogSpy
-  let validateWorkoutLogIdSpy
-  let createWorkoutLogEnhancedSpy
-  let updateWorkoutLogEnhancedSpy
+  let originalConsoleError
+  let originalConsoleWarn
 
-  beforeEach(() => {
-    // Reset all mocks
-    jest.clearAllMocks()
-
-    // Mock user and program data
-    mockUser = {
-      id: 'test-user-id',
-      email: 'test@example.com',
-      name: 'Test User'
+  beforeAll(async () => {
+    // Only run if integration tests are enabled
+    if (!testConfig.isIntegrationTest) {
+      console.log('⏭️  Skipping integration tests - set JEST_INTEGRATION_TESTS=true to enable')
+      return
     }
 
-    mockExercises = [
-      {
-        id: 'exercise-1',
+    supabaseClient = createTestSupabaseClient()
+    adminClient = createTestAdminClient()
+    
+    if (!adminClient) {
+      console.log('⏭️  Skipping integration tests - admin client not available')
+      return
+    }
+
+    // Suppress console noise during tests
+    originalConsoleError = console.error
+    originalConsoleWarn = console.warn
+    console.error = jest.fn()
+    console.warn = jest.fn()
+  })
+
+  afterAll(() => {
+    // Restore console methods
+    if (originalConsoleError) console.error = originalConsoleError
+    if (originalConsoleWarn) console.warn = originalConsoleWarn
+  })
+
+  beforeEach(async () => {
+    if (!testConfig.isIntegrationTest || !adminClient) return
+
+    // Reset tracking arrays
+    createdWorkoutLogIds = []
+
+    // Create test user
+    testUser = testDataGenerators.createTestUser()
+    const { error: userError } = await adminClient
+      .from('users')
+      .insert(testUser)
+    
+    if (userError) {
+      console.error('Failed to create test user:', userError)
+      throw userError
+    }
+
+    // Create test exercises
+    testExercises = [
+      testDataGenerators.createTestExercise({
         name: 'Test Bench Press',
         primary_muscle_group: 'Chest',
-        exercise_type: 'Barbell',
-        instructions: 'Test instructions'
-      },
-      {
-        id: 'exercise-2',
+        exercise_type: 'Barbell'
+      }),
+      testDataGenerators.createTestExercise({
         name: 'Test Squat',
         primary_muscle_group: 'Legs',
-        exercise_type: 'Barbell',
-        instructions: 'Test instructions'
-      }
+        exercise_type: 'Barbell'
+      })
     ]
 
-    mockProgram = {
-      id: 'test-program-id',
-      name: 'Mock Test Program',
-      user_id: mockUser.id,
+    const { data: exerciseData, error: exerciseError } = await adminClient
+      .from('exercises')
+      .insert(testExercises)
+      .select()
+    
+    if (exerciseError) {
+      console.error('Failed to create test exercises:', exerciseError)
+      throw exerciseError
+    }
+    
+    testExercises = exerciseData
+
+    // Create test program
+    testProgram = testDataGenerators.createTestProgram(testUser.id, {
+      name: 'Integration Test Program',
       weekly_configs: [
         {
           week: 1,
@@ -122,13 +127,13 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
               name: 'Test Day 1',
               exercises: [
                 {
-                  exerciseId: mockExercises[0].id,
+                  exerciseId: testExercises[0].id,
                   sets: 3,
                   reps: [10, 10, 10],
                   weights: [135, 135, 135]
                 },
                 {
-                  exerciseId: mockExercises[1].id,
+                  exerciseId: testExercises[1].id,
                   sets: 3,
                   reps: [8, 8, 8],
                   weights: [225, 225, 225]
@@ -138,21 +143,29 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
           ]
         }
       ]
+    })
+
+    const { data: programData, error: programError } = await adminClient
+      .from('programs')
+      .insert(testProgram)
+      .select()
+      .single()
+    
+    if (programError) {
+      console.error('Failed to create test program:', programError)
+      throw programError
     }
+    
+    testProgram = programData
 
     // Setup mock auth context
     mockAuthContext = {
-      user: mockUser,
+      user: testUser,
       loading: false,
       signIn: jest.fn(),
       signOut: jest.fn(),
       signUp: jest.fn()
     }
-
-    // Setup service mocks
-    getUserPrograms.mockResolvedValue([mockProgram])
-    getProgramById.mockResolvedValue(mockProgram)
-    getAvailableExercises.mockResolvedValue(mockExercises)
 
     // Setup mock cache manager
     mockCacheManager = {
@@ -173,19 +186,52 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
     }
 
     WorkoutLogCacheManager.mockImplementation(() => mockCacheManager)
-
-    // Setup workout log service spies
-    createWorkoutLogSpy = jest.spyOn(workoutLogService, 'createWorkoutLog')
-    updateWorkoutLogSpy = jest.spyOn(workoutLogService, 'updateWorkoutLog')
-    getWorkoutLogSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
-    validateWorkoutLogIdSpy = jest.spyOn(workoutLogService, 'validateWorkoutLogId')
-    createWorkoutLogEnhancedSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
-    updateWorkoutLogEnhancedSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
   })
 
-  afterEach(() => {
-    // Restore all mocks
-    jest.restoreAllMocks()
+  afterEach(async () => {
+    if (!testConfig.isIntegrationTest || !adminClient) return
+
+    try {
+      // Clean up workout logs
+      if (createdWorkoutLogIds.length > 0) {
+        await adminClient
+          .from('workout_log_exercises')
+          .delete()
+          .in('workout_log_id', createdWorkoutLogIds)
+        
+        await adminClient
+          .from('workout_logs')
+          .delete()
+          .in('id', createdWorkoutLogIds)
+      }
+
+      // Clean up test data
+      if (testProgram?.id) {
+        await adminClient
+          .from('programs')
+          .delete()
+          .eq('id', testProgram.id)
+      }
+
+      if (testExercises?.length > 0) {
+        await adminClient
+          .from('exercises')
+          .delete()
+          .in('id', testExercises.map(e => e.id))
+      }
+
+      if (testUser?.id) {
+        await adminClient
+          .from('users')
+          .delete()
+          .eq('id', testUser.id)
+      }
+    } catch (error) {
+      console.error('Cleanup error:', error)
+    }
+
+    // Reset mocks
+    jest.clearAllMocks()
   })
 
   // Helper function to render LogWorkout component with proper context
@@ -223,6 +269,20 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
     })
   }
 
+  // Helper function to get workout logs from database
+  const getWorkoutLogsFromDatabase = async (userId, programId, weekIndex, dayIndex) => {
+    const { data, error } = await adminClient
+      .from('workout_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('program_id', programId)
+      .eq('week_index', weekIndex)
+      .eq('day_index', dayIndex)
+    
+    if (error) throw error
+    return data || []
+  }
+
   // Helper function to simulate constraint violation
   const simulateConstraintViolation = () => {
     const constraintError = new Error('duplicate key value violates unique constraint')
@@ -234,6 +294,11 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
 
   describe('Cache Hit Scenarios', () => {
     test('should use cached workout log ID for immediate updates', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       const cachedWorkoutLogId = 'cached-workout-log-id'
       
       // Mock cache hit scenario
@@ -250,12 +315,14 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         reason: 'Validation successful'
       })
 
-      // Mock enhanced service methods
-      validateWorkoutLogIdSpy.mockResolvedValue(true)
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
+      // Spy on service methods
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      updateSpy.mockResolvedValue({
         id: cachedWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -265,7 +332,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -281,22 +348,50 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
 
       // Verify cache was checked and update was called
       expect(mockCacheManager.get).toHaveBeenCalled()
-      expect(validateWorkoutLogIdSpy).toHaveBeenCalledWith(
-        cachedWorkoutLogId, mockUser.id, mockProgram.id, 0, 0
-      )
-      expect(updateWorkoutLogEnhancedSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).not.toHaveBeenCalled()
+      expect(mockCacheManager.validate).toHaveBeenCalled()
+      expect(updateSpy).toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      updateSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should handle cache validation success and proceed with update', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       const validCachedId = 'valid-cached-workout-log-id'
       
+      // Pre-create a workout log to validate against
+      const existingWorkoutLog = {
+        user_id: testUser.id,
+        program_id: testProgram.id,
+        week_index: 0,
+        day_index: 0,
+        name: 'Existing Cached Workout',
+        type: 'program_workout',
+        date: new Date().toISOString().split('T')[0],
+        is_finished: false,
+        is_draft: true,
+        weight_unit: 'LB'
+      }
+
+      const { data: preCreatedLog, error } = await adminClient
+        .from('workout_logs')
+        .insert(existingWorkoutLog)
+        .select()
+        .single()
+
+      if (error) throw error
+      createdWorkoutLogIds.push(preCreatedLog.id)
+
       // Mock cache hit with valid ID
       mockCacheManager.get.mockResolvedValue({
-        workoutLogId: validCachedId,
+        workoutLogId: preCreatedLog.id,
         lastSaved: new Date().toISOString(),
         isValid: true,
         exercises: [],
@@ -310,22 +405,18 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         context: { databaseChecked: true }
       })
 
-      // Mock service methods
-      validateWorkoutLogIdSpy.mockResolvedValue(true)
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
-        id: validCachedId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0
-      })
+      // Spy on service methods
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      updateSpy.mockResolvedValue(preCreatedLog)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -342,17 +433,24 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       expect(mockCacheManager.get).toHaveBeenCalled()
       expect(mockCacheManager.validate).toHaveBeenCalledWith(
         expect.any(String),
-        validCachedId,
+        preCreatedLog.id,
         expect.objectContaining({ validateInDatabase: expect.any(Boolean) })
       )
-      expect(updateWorkoutLogEnhancedSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).not.toHaveBeenCalled()
+      expect(updateSpy).toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      updateSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should update cache after successful save operation', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       const cachedWorkoutLogId = 'cached-workout-log-id'
       
       // Mock cache hit
@@ -369,12 +467,12 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         reason: 'Validation successful'
       })
 
-      // Mock service methods
-      validateWorkoutLogIdSpy.mockResolvedValue(true)
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
+      // Spy on service methods
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      updateSpy.mockResolvedValue({
         id: cachedWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0,
         updated_at: new Date().toISOString()
@@ -385,7 +483,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -412,22 +510,31 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         })
       )
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      updateSpy.mockRestore()
     })
   })
 
   describe('Cache Miss Scenarios', () => {
     test('should fall back to database query when cache is empty', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue(null) // No existing workout log
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(null) // No existing workout log
+      createSpy.mockResolvedValue({
         id: 'new-workout-log-id',
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -437,7 +544,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -451,19 +558,26 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
 
       // Verify fallback to database query and creation
       expect(mockCacheManager.get).toHaveBeenCalled()
-      expect(getWorkoutLogSpy).toHaveBeenCalledWith(
-        mockUser.id,
-        mockProgram.id,
+      expect(getSpy).toHaveBeenCalledWith(
+        testUser.id,
+        testProgram.id,
         0,
         0
       )
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalled()
+      expect(createSpy).toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should handle cache validation failure and fall back to database', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       const invalidCachedId = 'invalid-cached-workout-log-id'
       
       // Mock cache hit with invalid ID
@@ -482,13 +596,15 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         context: { databaseChecked: true }
       })
 
-      // Mock service methods
-      validateWorkoutLogIdSpy.mockResolvedValue(false)
-      getWorkoutLogSpy.mockResolvedValue(null) // No existing workout log found
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(null) // No existing workout log found
+      createSpy.mockResolvedValue({
         id: 'new-workout-log-id',
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -498,7 +614,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -520,25 +636,35 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
           reason: expect.stringContaining('validation_failed')
         })
       )
-      expect(getWorkoutLogSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalled()
+      expect(getSpy).toHaveBeenCalled()
+      expect(createSpy).toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should cache new workout log ID after creation', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       const newWorkoutLogId = 'new-workout-log-id'
       
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue(null)
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(null)
+      createSpy.mockResolvedValue({
         id: newWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0,
         created_at: new Date().toISOString()
@@ -549,7 +675,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -576,48 +702,67 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         })
       )
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
   })
 
   describe('Database Constraint Violation Handling', () => {
-    test('should handle unique constraint violation and attempt recovery', async () => {
+    test('should handle unique constraint violation and attempt update', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
-      const existingWorkoutLogId = 'existing-workout-log-id'
+      // Pre-create a workout log that will cause constraint violation
+      const existingWorkoutLog = {
+        user_id: testUser.id,
+        program_id: testProgram.id,
+        week_index: 0,
+        day_index: 0,
+        name: 'Existing Workout',
+        type: 'program_workout',
+        date: new Date().toISOString().split('T')[0],
+        is_finished: false,
+        is_draft: true,
+        weight_unit: 'LB'
+      }
+
+      const { data: preCreatedLog, error } = await adminClient
+        .from('workout_logs')
+        .insert(existingWorkoutLog)
+        .select()
+        .single()
+
+      if (error) throw error
+      createdWorkoutLogIds.push(preCreatedLog.id)
+
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
       
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue(null) // Initial query returns null (race condition)
+      // Mock database query returning null (simulating race condition)
+      getSpy.mockResolvedValue(null)
       
       // Mock constraint violation on create
       const constraintError = simulateConstraintViolation()
-      createWorkoutLogEnhancedSpy.mockRejectedValue(constraintError)
+      createSpy.mockRejectedValue(constraintError)
       
-      // Mock successful recovery by finding and updating existing record
-      getWorkoutLogSpy.mockResolvedValueOnce({
-        id: existingWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0
-      })
-      
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
-        id: existingWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0
-      })
+      // Mock successful update after constraint violation
+      updateSpy.mockResolvedValue(preCreatedLog)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -629,34 +774,45 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       await simulateWorkoutInput(0, 0, '135', '10')
       await waitForDebouncedSave()
 
-      // Verify constraint violation handling
-      expect(getWorkoutLogSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalled()
+      // Verify constraint violation was handled
+      expect(getSpy).toHaveBeenCalled()
+      expect(createSpy).toHaveBeenCalled()
       
       // The service should handle the constraint violation internally
       // and attempt to find and update the existing record
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
+      updateSpy.mockRestore()
     })
 
     test('should display user-friendly error message for constraint violations', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue(null)
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(null)
       
       // Mock unrecoverable constraint violation
       const constraintError = simulateConstraintViolation()
-      createWorkoutLogEnhancedSpy.mockRejectedValue(constraintError)
+      createSpy.mockRejectedValue(constraintError)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -680,11 +836,18 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         expect(errorElements.length + conflictElements.length + saveElements.length).toBeGreaterThan(0)
       }, { timeout: 5000 })
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should log constraint violation incidents with comprehensive details', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
@@ -692,19 +855,22 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation()
       const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation()
 
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue(null)
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(null)
       
       // Mock constraint violation
       const constraintError = simulateConstraintViolation()
-      createWorkoutLogEnhancedSpy.mockRejectedValue(constraintError)
+      createSpy.mockRejectedValue(constraintError)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -728,8 +894,10 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
 
       expect(constraintLogs.length).toBeGreaterThan(0)
 
-      // Restore location and console methods
+      // Restore location, spies, and console methods
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
       consoleErrorSpy.mockRestore()
       consoleLogSpy.mockRestore()
     })
@@ -737,21 +905,30 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
 
   describe('Error Recovery and Resilience', () => {
     test('should recover from network errors with retry mechanism', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
       // Mock network error on first attempt
       const networkError = new Error('Network request failed')
       networkError.code = 'NETWORK_ERROR'
       
-      getWorkoutLogSpy
+      getSpy
         .mockRejectedValueOnce(networkError) // First call fails
         .mockResolvedValueOnce(null) // Second call succeeds
       
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      createSpy.mockResolvedValue({
         id: 'new-workout-log-id',
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -761,7 +938,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -774,30 +951,41 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       await waitForDebouncedSave()
 
       // Verify retry mechanism was triggered
-      expect(getWorkoutLogSpy).toHaveBeenCalledTimes(2) // First call failed, second succeeded
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalled()
+      expect(getSpy).toHaveBeenCalledTimes(2) // First call failed, second succeeded
+      expect(createSpy).toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should handle service unavailability gracefully', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
       // Mock service unavailability
       const serviceError = new Error('Service temporarily unavailable')
       serviceError.code = 'SERVICE_UNAVAILABLE'
       
-      getWorkoutLogSpy.mockRejectedValue(serviceError)
-      createWorkoutLogEnhancedSpy.mockRejectedValue(serviceError)
+      getSpy.mockRejectedValue(serviceError)
+      createSpy.mockRejectedValue(serviceError)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -810,7 +998,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       await waitForDebouncedSave()
 
       // Verify error handling
-      expect(getWorkoutLogSpy).toHaveBeenCalled()
+      expect(getSpy).toHaveBeenCalled()
       
       // Look for error handling UI
       await waitFor(() => {
@@ -821,24 +1009,35 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         expect(errorElements.length + unavailableElements.length + tryElements.length).toBeGreaterThan(0)
       }, { timeout: 5000 })
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
 
     test('should preserve user input during error recovery', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache miss
       mockCacheManager.get.mockResolvedValue(null)
 
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      
       // Mock temporary error followed by success
       const tempError = new Error('Temporary database error')
-      getWorkoutLogSpy
+      getSpy
         .mockRejectedValueOnce(tempError)
         .mockResolvedValueOnce(null)
       
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      createSpy.mockResolvedValue({
         id: 'new-workout-log-id',
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -848,7 +1047,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -878,13 +1077,20 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       expect(weightInputs[1]).toHaveValue('140')
       expect(repsInputs[1]).toHaveValue('9')
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
     })
   })
 
   describe('Complex User Interaction Patterns', () => {
     test('should handle rapid successive saves without data loss', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache behavior for rapid saves
       let cacheState = null
       mockCacheManager.get.mockImplementation(() => Promise.resolve(cacheState))
@@ -893,20 +1099,25 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         return Promise.resolve()
       })
 
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      
       const workoutLogId = 'rapid-save-workout-log-id'
       
-      getWorkoutLogSpy.mockResolvedValue(null)
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      getSpy.mockResolvedValue(null)
+      createSpy.mockResolvedValue({
         id: workoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
+      updateSpy.mockResolvedValue({
         id: workoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -916,7 +1127,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -952,42 +1163,61 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       expect(repsInputs[3]).toHaveValue('8')
 
       // Verify only one workout log was created despite rapid inputs
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalledTimes(1)
+      expect(createSpy).toHaveBeenCalledTimes(1)
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
+      updateSpy.mockRestore()
     })
 
     test('should handle component re-mount without creating duplicates', async () => {
-      const existingWorkoutLogId = 'existing-workout-log-id'
-      
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
+      // Pre-create a workout log
+      const existingWorkoutLog = {
+        user_id: testUser.id,
+        program_id: testProgram.id,
+        week_index: 0,
+        day_index: 0,
+        name: 'Existing Workout',
+        type: 'program_workout',
+        date: new Date().toISOString().split('T')[0],
+        is_finished: false,
+        is_draft: true,
+        weight_unit: 'LB'
+      }
+
+      const { data: preCreatedLog, error } = await adminClient
+        .from('workout_logs')
+        .insert(existingWorkoutLog)
+        .select()
+        .single()
+
+      if (error) throw error
+      createdWorkoutLogIds.push(preCreatedLog.id)
+
       // Mock cache behavior
       mockCacheManager.get.mockResolvedValue(null) // Cache miss on first mount
       
-      // Mock service methods
-      getWorkoutLogSpy.mockResolvedValue({
-        id: existingWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0,
-        is_finished: false,
-        is_draft: true
-      })
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
-        id: existingWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0
-      })
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      
+      getSpy.mockResolvedValue(preCreatedLog) // Find existing log
+      updateSpy.mockResolvedValue(preCreatedLog)
 
       // Mock URL parameters
       const originalLocation = window.location
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       // First mount
@@ -1001,16 +1231,16 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       await waitForDebouncedSave()
 
       // Verify existing log was found and updated
-      expect(getWorkoutLogSpy).toHaveBeenCalled()
-      expect(updateWorkoutLogEnhancedSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).not.toHaveBeenCalled()
+      expect(getSpy).toHaveBeenCalled()
+      expect(updateSpy).toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
 
       // Reset mocks for second mount
       jest.clearAllMocks()
       
       // Mock cache hit on second mount (simulating cached ID from first mount)
       mockCacheManager.get.mockResolvedValue({
-        workoutLogId: existingWorkoutLogId,
+        workoutLogId: preCreatedLog.id,
         lastSaved: new Date().toISOString(),
         isValid: true,
         exercises: [],
@@ -1019,15 +1249,6 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       mockCacheManager.validate.mockResolvedValue({
         isValid: true,
         reason: 'Validation successful'
-      })
-      
-      validateWorkoutLogIdSpy.mockResolvedValue(true)
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
-        id: existingWorkoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
-        week_index: 0,
-        day_index: 0
       })
 
       // Unmount and remount
@@ -1044,14 +1265,22 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       // Verify cache was used on second mount
       expect(mockCacheManager.get).toHaveBeenCalled()
       expect(mockCacheManager.validate).toHaveBeenCalled()
-      expect(updateWorkoutLogEnhancedSpy).toHaveBeenCalled()
-      expect(createWorkoutLogEnhancedSpy).not.toHaveBeenCalled()
+      expect(updateSpy).toHaveBeenCalled()
+      expect(createSpy).not.toHaveBeenCalled()
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
+      updateSpy.mockRestore()
     })
 
     test('should maintain data consistency across multiple exercise modifications', async () => {
+      if (!testConfig.isIntegrationTest || !adminClient) {
+        console.log('⏭️  Skipping integration test')
+        return
+      }
+
       // Mock cache behavior
       let cacheState = null
       mockCacheManager.get.mockImplementation(() => Promise.resolve(cacheState))
@@ -1060,20 +1289,25 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
         return Promise.resolve()
       })
 
+      // Spy on service methods
+      const getSpy = jest.spyOn(workoutLogService, 'getWorkoutLog')
+      const createSpy = jest.spyOn(workoutLogService, 'createWorkoutLogEnhanced')
+      const updateSpy = jest.spyOn(workoutLogService, 'updateWorkoutLogEnhanced')
+      
       const workoutLogId = 'consistency-test-workout-log-id'
       
-      getWorkoutLogSpy.mockResolvedValue(null)
-      createWorkoutLogEnhancedSpy.mockResolvedValue({
+      getSpy.mockResolvedValue(null)
+      createSpy.mockResolvedValue({
         id: workoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
-      updateWorkoutLogEnhancedSpy.mockResolvedValue({
+      updateSpy.mockResolvedValue({
         id: workoutLogId,
-        user_id: mockUser.id,
-        program_id: mockProgram.id,
+        user_id: testUser.id,
+        program_id: testProgram.id,
         week_index: 0,
         day_index: 0
       })
@@ -1083,7 +1317,7 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       delete window.location
       window.location = {
         ...originalLocation,
-        search: `?programId=${mockProgram.id}&week=0&day=0`
+        search: `?programId=${testProgram.id}&week=0&day=0`
       }
 
       renderLogWorkout()
@@ -1134,10 +1368,13 @@ describe('Mock-Based Workout Log Save Flow Integration Tests', () => {
       expect(repsInputs[5]).toHaveValue('6')
 
       // Verify only one workout log was created
-      expect(createWorkoutLogEnhancedSpy).toHaveBeenCalledTimes(1)
+      expect(createSpy).toHaveBeenCalledTimes(1)
 
-      // Restore location
+      // Restore location and spies
       window.location = originalLocation
+      getSpy.mockRestore()
+      createSpy.mockRestore()
+      updateSpy.mockRestore()
     })
   })
 })

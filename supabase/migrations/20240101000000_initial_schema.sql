@@ -79,7 +79,8 @@ CREATE TABLE program_exercises (
     rest_minutes INTEGER,
     notes TEXT,
     order_index INTEGER NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Workout logs table
