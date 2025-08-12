@@ -24,7 +24,7 @@ function ExerciseHistoryModal({
 }) {
   const [historyData, setHistoryData] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  
+
   const { user, isAuthenticated } = useContext(AuthContext);
 
   // Fetch exercise history when modal opens
@@ -105,14 +105,14 @@ function ExerciseHistoryModal({
                 }
 
                 // Parse date properly - Supabase returns ISO strings
-                const logDate = log.completed_date ? new Date(log.completed_date) : 
-                               log.date ? new Date(log.date) : new Date();
+                const logDate = log.completed_date ? new Date(log.completed_date) :
+                  log.date ? new Date(log.date) : new Date();
 
                 historyData.push({
                   date: logDate,
                   week: log.week_index !== null && log.week_index !== undefined ? log.week_index + 1 : null,
                   day: log.day_index !== null && log.day_index !== undefined ? log.day_index + 1 : null,
-                  workoutName: log.name || (log.week_index !== null && log.day_index !== null ? 
+                  workoutName: log.name || (log.week_index !== null && log.day_index !== null ?
                     `W${log.week_index + 1} D${log.day_index + 1}` : 'Quick Workout'),
                   set: setIndex + 1,
                   weight: weightValue,
@@ -131,7 +131,7 @@ function ExerciseHistoryModal({
 
       // Sort by date (most recent first)
       historyData.sort((a, b) => b.date - a.date);
-      
+
       // Group the data into workout sessions
       const groupedSessions = groupExerciseHistoryBySessions(historyData);
       setHistoryData(groupedSessions);
@@ -191,7 +191,7 @@ function ExerciseHistoryModal({
                 </div>
               </div>
             ))}
-            
+
             {/* Modern Performance Summary */}
             {historyData.length > 0 && (
               <div className="modern-performance-summary">
@@ -205,12 +205,12 @@ function ExerciseHistoryModal({
                     const allSets = historyData.flatMap(session => session.sets);
                     const exerciseType = historyData[0]?.exerciseType;
                     const weightLabel = exerciseType === 'Bodyweight' ? 'Bodyweight' : 'Weight';
-                    
+
                     const maxWeight = Math.max(...allSets.map(set => set.totalWeight || set.weight || 0));
                     const maxReps = Math.max(...allSets.map(set => set.reps || 0));
                     const avgWeight = (allSets.reduce((sum, set) => sum + (set.totalWeight || set.weight || 0), 0) / allSets.length).toFixed(1);
                     const avgReps = (allSets.reduce((sum, set) => sum + (set.reps || 0), 0) / allSets.length).toFixed(1);
-                    
+
                     return (
                       <>
                         <div className="stat-card highlight">
