@@ -158,6 +158,73 @@ export function useCacheManager(programLogs, setProgramLogs, options = {}) {
   }, [cacheManager, programLogs]);
 
   /**
+   * Update cache after exercise-only save
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {Object} exerciseData - Updated exercise data
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  const updateCacheAfterExerciseSave = useCallback(async (weekIndex, dayIndex, exerciseData, operationOptions = {}) => {
+    const key = cacheManager.generateKey(weekIndex, dayIndex);
+    await cacheManager.updateCacheAfterExerciseSave(key, exerciseData, programLogs, setProgramLogs, operationOptions);
+  }, [cacheManager, programLogs, setProgramLogs]);
+
+  /**
+   * Update cache after metadata-only save
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {Object} metadataData - Updated metadata
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  const updateCacheAfterMetadataSave = useCallback(async (weekIndex, dayIndex, metadataData, operationOptions = {}) => {
+    const key = cacheManager.generateKey(weekIndex, dayIndex);
+    await cacheManager.updateCacheAfterMetadataSave(key, metadataData, programLogs, setProgramLogs, operationOptions);
+  }, [cacheManager, programLogs, setProgramLogs]);
+
+  /**
+   * Update cache after full save
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {Object} fullData - Complete workout data
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  const updateCacheAfterFullSave = useCallback(async (weekIndex, dayIndex, fullData, operationOptions = {}) => {
+    const key = cacheManager.generateKey(weekIndex, dayIndex);
+    await cacheManager.updateCacheAfterFullSave(key, fullData, programLogs, setProgramLogs, operationOptions);
+  }, [cacheManager, programLogs, setProgramLogs]);
+
+  /**
+   * Mark cache entry as having unsaved changes
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {string} changeType - Type of change ('exercise', 'metadata', 'both')
+   * @param {string} pendingSaveType - Pending save type
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  const markCacheAsChanged = useCallback(async (weekIndex, dayIndex, changeType, pendingSaveType, operationOptions = {}) => {
+    const key = cacheManager.generateKey(weekIndex, dayIndex);
+    await cacheManager.markAsChanged(key, changeType, pendingSaveType, programLogs, setProgramLogs, operationOptions);
+  }, [cacheManager, programLogs, setProgramLogs]);
+
+  /**
+   * Invalidate cache on save failure
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {string} saveType - Type of save that failed
+   * @param {Error} error - Save error
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  const invalidateCacheOnSaveFailure = useCallback(async (weekIndex, dayIndex, saveType, error, operationOptions = {}) => {
+    const key = cacheManager.generateKey(weekIndex, dayIndex);
+    await cacheManager.invalidateOnSaveFailure(key, saveType, error, programLogs, setProgramLogs, operationOptions);
+  }, [cacheManager, programLogs, setProgramLogs]);
+
+  /**
    * Enhanced programLogs update with cache integration
    * @param {number} weekIndex - Week index
    * @param {number} dayIndex - Day index
@@ -176,6 +243,13 @@ export function useCacheManager(programLogs, setProgramLogs, options = {}) {
       lastSaved: new Date().toISOString(),
       isValid: true,
       metadata: {
+        name: data.name || '',
+        isFinished: data.isWorkoutFinished || false,
+        isDraft: data.isDraft !== false,
+        duration: data.duration || null,
+        notes: data.notes || '',
+        completedDate: data.completedDate || null,
+        weightUnit: data.weightUnit || 'lbs',
         userId: data.userId,
         programId: data.programId,
         weekIndex,
@@ -206,6 +280,13 @@ export function useCacheManager(programLogs, setProgramLogs, options = {}) {
     cacheEntryExists,
     clearAllCache,
     getCacheStats,
+    
+    // Enhanced cache operations for different save types
+    updateCacheAfterExerciseSave,
+    updateCacheAfterMetadataSave,
+    updateCacheAfterFullSave,
+    markCacheAsChanged,
+    invalidateCacheOnSaveFailure,
     
     // Enhanced programLogs integration
     updateProgramLogs,

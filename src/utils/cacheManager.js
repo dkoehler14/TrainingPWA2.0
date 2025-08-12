@@ -64,14 +64,14 @@ const ValidationUtils = {
   },
 
   /**
-   * Validate workout log cache structure
+   * Validate workout log cache structure (enhanced for change tracking)
    * @param {Object} cache - Cache data to validate
    * @returns {boolean} Whether cache structure is valid
    */
   isValidCacheStructure(cache) {
     if (!cache || typeof cache !== 'object') return false;
     
-    // Check required fields
+    // Check required fields (backward compatibility)
     if (cache.workoutLogId !== null && !this.isValidUUID(cache.workoutLogId)) return false;
     if (!cache.lastSaved || typeof cache.lastSaved !== 'string') return false;
     if (typeof cache.isValid !== 'boolean') return false;
@@ -81,6 +81,23 @@ const ValidationUtils = {
     // Validate exercises
     for (const exercise of cache.exercises) {
       if (!this.isValidExerciseData(exercise)) return false;
+    }
+    
+    // Enhanced validation for change tracking structure (optional for backward compatibility)
+    if (cache.cacheInfo) {
+      if (typeof cache.cacheInfo !== 'object') return false;
+      if (cache.cacheInfo.lastExerciseUpdate && typeof cache.cacheInfo.lastExerciseUpdate !== 'string') return false;
+      if (cache.cacheInfo.lastMetadataUpdate && typeof cache.cacheInfo.lastMetadataUpdate !== 'string') return false;
+      if (cache.cacheInfo.saveStrategy && typeof cache.cacheInfo.saveStrategy !== 'string') return false;
+    }
+    
+    if (cache.changeTracking) {
+      if (typeof cache.changeTracking !== 'object') return false;
+      if (typeof cache.changeTracking.hasUnsavedExerciseChanges !== 'boolean') return false;
+      if (typeof cache.changeTracking.hasUnsavedMetadataChanges !== 'boolean') return false;
+      if (cache.changeTracking.lastUserInput && typeof cache.changeTracking.lastUserInput !== 'string') return false;
+      if (cache.changeTracking.pendingSaveType && 
+          !['exercise-only', 'metadata-only', 'full-save'].includes(cache.changeTracking.pendingSaveType)) return false;
     }
     
     return true;
@@ -210,6 +227,20 @@ const ValidationUtils = {
     
     const baseKey = `${weekIndex}_${dayIndex}`;
     return prefix ? `${prefix}_${baseKey}` : baseKey;
+  },
+
+  /**
+   * Parse cache key into components
+   * @param {string} key - Cache key to parse
+   * @returns {Object} Parsed key components
+   */
+  parseCacheKey(key) {
+    if (!this.isValidCacheKey(key)) {
+      throw new Error('Invalid cache key format');
+    }
+    
+    const [weekIndex, dayIndex] = key.split('_').map(Number);
+    return { weekIndex, dayIndex };
   }
 };
 
@@ -325,6 +356,164 @@ export class WorkoutLogCacheManager {
   }
 
   /**
+   * Create enhanced cache entry with change tracking
+   * @param {Object} data - Cache data
+   * @param {Object} options - Creation options
+   * @returns {Object} Enhanced cache entry
+   */
+  createEnhancedCacheEntry(data, options = {}) {
+    const {
+      userId,
+      programId,
+      weekIndex,
+      dayIndex,
+      source = 'cache_manager',
+      saveStrategy = 'unknown'
+    } = options;
+
+    const now = new Date().toISOString();
+
+    // Create enhanced cache structure
+    const enhancedEntry = {
+      // Core identifiers
+      workoutLogId: data.workoutLogId || null,
+      userId: userId || data.userId || null,
+      programId: programId || data.programId || null,
+      weekIndex: weekIndex !== undefined ? weekIndex : data.weekIndex,
+      dayIndex: dayIndex !== undefined ? dayIndex : data.dayIndex,
+
+      // Cached data
+      exercises: data.exercises || [],
+      metadata: data.metadata || {
+        name: data.name || '',
+        isFinished: data.isWorkoutFinished || false,
+        isDraft: data.isDraft !== false, // Default to true
+        duration: data.duration || null,
+        notes: data.notes || '',
+        completedDate: data.completedDate || null,
+        weightUnit: data.weightUnit || 'lbs'
+      },
+
+      // Cache metadata
+      cacheInfo: {
+        lastSaved: data.lastSaved || now,
+        lastExerciseUpdate: data.lastExerciseUpdate || now,
+        lastMetadataUpdate: data.lastMetadataUpdate || now,
+        isValid: data.isValid !== false, // Default to true
+        source,
+        saveStrategy
+      },
+
+      // Change tracking
+      changeTracking: {
+        hasUnsavedExerciseChanges: data.hasUnsavedExerciseChanges || false,
+        hasUnsavedMetadataChanges: data.hasUnsavedMetadataChanges || false,
+        lastUserInput: data.lastUserInput || now,
+        pendingSaveType: data.pendingSaveType || null
+      },
+
+      // Backward compatibility fields
+      lastSaved: data.lastSaved || now,
+      isValid: data.isValid !== false,
+      isWorkoutFinished: data.isWorkoutFinished || false
+    };
+
+    return enhancedEntry;
+  }
+
+  /**
+   * Update cache entry with change tracking
+   * @param {Object} existingEntry - Existing cache entry
+   * @param {Object} updates - Updates to apply
+   * @param {string} changeType - Type of change ('exercise', 'metadata', 'both')
+   * @returns {Object} Updated cache entry
+   */
+  updateCacheEntryWithChangeTracking(existingEntry, updates, changeType = 'both') {
+    const now = new Date().toISOString();
+    
+    const updatedEntry = {
+      ...existingEntry,
+      ...updates
+    };
+
+    // Update cache info
+    updatedEntry.cacheInfo = {
+      ...existingEntry.cacheInfo,
+      lastSaved: now,
+      ...(changeType === 'exercise' || changeType === 'both' ? { lastExerciseUpdate: now } : {}),
+      ...(changeType === 'metadata' || changeType === 'both' ? { lastMetadataUpdate: now } : {})
+    };
+
+    // Update change tracking based on change type
+    updatedEntry.changeTracking = {
+      ...existingEntry.changeTracking,
+      lastUserInput: now,
+      ...(changeType === 'exercise' ? {
+        hasUnsavedExerciseChanges: false,
+        pendingSaveType: null
+      } : {}),
+      ...(changeType === 'metadata' ? {
+        hasUnsavedMetadataChanges: false,
+        pendingSaveType: null
+      } : {}),
+      ...(changeType === 'both' ? {
+        hasUnsavedExerciseChanges: false,
+        hasUnsavedMetadataChanges: false,
+        pendingSaveType: null
+      } : {})
+    };
+
+    // Update backward compatibility fields
+    updatedEntry.lastSaved = now;
+    updatedEntry.isValid = true;
+
+    return updatedEntry;
+  }
+
+  /**
+   * Mark cache entry as having unsaved changes
+   * @param {Object} existingEntry - Existing cache entry
+   * @param {string} changeType - Type of change ('exercise', 'metadata', 'both')
+   * @param {string} pendingSaveType - Pending save type
+   * @returns {Object} Updated cache entry
+   */
+  markCacheEntryAsChanged(existingEntry, changeType = 'both', pendingSaveType = null) {
+    const now = new Date().toISOString();
+    
+    const updatedEntry = {
+      ...existingEntry
+    };
+
+    // Update change tracking
+    updatedEntry.changeTracking = {
+      ...existingEntry.changeTracking,
+      lastUserInput: now,
+      pendingSaveType,
+      ...(changeType === 'exercise' || changeType === 'both' ? { hasUnsavedExerciseChanges: true } : {}),
+      ...(changeType === 'metadata' || changeType === 'both' ? { hasUnsavedMetadataChanges: true } : {})
+    };
+
+    return updatedEntry;
+  }
+
+  /**
+   * Convert legacy cache entry to enhanced structure
+   * @param {Object} legacyEntry - Legacy cache entry
+   * @param {Object} options - Conversion options
+   * @returns {Object} Enhanced cache entry
+   */
+  convertLegacyToEnhanced(legacyEntry, options = {}) {
+    if (!legacyEntry) return null;
+
+    // Check if already enhanced
+    if (legacyEntry.cacheInfo && legacyEntry.changeTracking) {
+      return legacyEntry;
+    }
+
+    return this.createEnhancedCacheEntry(legacyEntry, options);
+  }
+
+  /**
    * Get cached workout log data
    * @param {string} key - Cache key
    * @param {Object} cacheStore - Cache store object (programLogs)
@@ -417,7 +606,7 @@ export class WorkoutLogCacheManager {
   }
 
   /**
-   * Set cached workout log data
+   * Set cached workout log data with enhanced change tracking
    * @param {string} key - Cache key
    * @param {Object} value - Cache value
    * @param {Object} cacheStore - Cache store object (programLogs)
@@ -434,24 +623,37 @@ export class WorkoutLogCacheManager {
         throw new Error(`Invalid cache key format: ${key}`);
       }
 
-      // Validate cache structure
-      if (!ValidationUtils.isValidCacheStructure(value)) {
-        throw new Error('Invalid cache structure provided');
+      // Parse key to get week and day indices
+      let weekIndex = null, dayIndex = null;
+      try {
+        const parsed = ValidationUtils.parseCacheKey(key);
+        weekIndex = parsed.weekIndex;
+        dayIndex = parsed.dayIndex;
+      } catch (error) {
+        // Key parsing failed, will use values from options or value object
       }
 
-      // Enhance cache entry with metadata
-      const enhancedValue = {
-        ...value,
-        cacheKey: key,
-        lastSaved: new Date().toISOString(),
-        isValid: true,
-        version: (cacheStore[key]?.version || 0) + 1,
-        metadata: {
-          ...value.metadata,
-          source: opts.source || 'set_operation',
-          timestamp: new Date().toISOString()
-        }
-      };
+      // Get existing entry for version tracking
+      const existingEntry = cacheStore[key];
+
+      // Create enhanced cache entry
+      const enhancedValue = this.createEnhancedCacheEntry(value, {
+        userId: opts.userId,
+        programId: opts.programId,
+        weekIndex: weekIndex !== null ? weekIndex : value.weekIndex,
+        dayIndex: dayIndex !== null ? dayIndex : value.dayIndex,
+        source: opts.source || 'set_operation',
+        saveStrategy: opts.saveStrategy || 'unknown'
+      });
+
+      // Add additional metadata
+      enhancedValue.cacheKey = key;
+      enhancedValue.version = (existingEntry?.version || 0) + 1;
+
+      // Validate enhanced structure
+      if (!ValidationUtils.isValidCacheStructure(enhancedValue)) {
+        throw new Error('Invalid cache structure provided');
+      }
 
       // Update cache store
       setCacheStore(prev => ({
@@ -460,18 +662,21 @@ export class WorkoutLogCacheManager {
       }));
 
       if (opts.logOperations) {
-        CacheLoggingUtils.logOperation('SET', 'info', 'Cache entry updated successfully', {
+        CacheLoggingUtils.logOperation('SET', 'info', 'Enhanced cache entry updated successfully', {
           key,
-          workoutLogId: value.workoutLogId,
-          exerciseCount: value.exercises?.length || 0,
-          isFinished: value.isWorkoutFinished,
+          workoutLogId: enhancedValue.workoutLogId,
+          exerciseCount: enhancedValue.exercises?.length || 0,
+          isFinished: enhancedValue.metadata?.isFinished || false,
           version: enhancedValue.version,
-          source: opts.source
+          source: opts.source,
+          saveStrategy: enhancedValue.cacheInfo?.saveStrategy,
+          hasUnsavedExerciseChanges: enhancedValue.changeTracking?.hasUnsavedExerciseChanges,
+          hasUnsavedMetadataChanges: enhancedValue.changeTracking?.hasUnsavedMetadataChanges
         });
       }
     } catch (error) {
       if (opts.logOperations) {
-        CacheLoggingUtils.logOperation('SET', 'error', 'Cache set operation failed', {
+        CacheLoggingUtils.logOperation('SET', 'error', 'Enhanced cache set operation failed', {
           key,
           error: error.message,
           stack: error.stack
@@ -711,22 +916,354 @@ export class WorkoutLogCacheManager {
   }
 
   /**
-   * Get cache statistics
+   * Update cache after exercise-only save
+   * @param {string} key - Cache key
+   * @param {Object} exerciseData - Updated exercise data
    * @param {Object} cacheStore - Cache store object
-   * @returns {Object} Cache statistics
+   * @param {Function} setCacheStore - Function to update cache store
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  async updateCacheAfterExerciseSave(key, exerciseData, cacheStore, setCacheStore, options = {}) {
+    const opts = { ...this.options, ...options };
+    
+    try {
+      const existingEntry = cacheStore[key];
+      if (!existingEntry) {
+        throw new Error('Cache entry not found for exercise update');
+      }
+
+      // Convert to enhanced structure if needed
+      const enhancedEntry = this.convertLegacyToEnhanced(existingEntry, opts);
+
+      // Update with exercise data only
+      const updatedEntry = this.updateCacheEntryWithChangeTracking(
+        enhancedEntry,
+        { exercises: exerciseData },
+        'exercise'
+      );
+
+      // Update save strategy info
+      updatedEntry.cacheInfo.saveStrategy = 'exercise-only';
+
+      // Update cache store
+      setCacheStore(prev => ({
+        ...prev,
+        [key]: updatedEntry
+      }));
+
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_EXERCISE', 'info', 'Cache updated after exercise-only save', {
+          key,
+          exerciseCount: exerciseData?.length || 0,
+          saveStrategy: 'exercise-only',
+          hasUnsavedExerciseChanges: false
+        });
+      }
+    } catch (error) {
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_EXERCISE', 'error', 'Exercise cache update failed', {
+          key,
+          error: error.message
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Update cache after metadata-only save
+   * @param {string} key - Cache key
+   * @param {Object} metadataData - Updated metadata
+   * @param {Object} cacheStore - Cache store object
+   * @param {Function} setCacheStore - Function to update cache store
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  async updateCacheAfterMetadataSave(key, metadataData, cacheStore, setCacheStore, options = {}) {
+    const opts = { ...this.options, ...options };
+    
+    try {
+      const existingEntry = cacheStore[key];
+      if (!existingEntry) {
+        throw new Error('Cache entry not found for metadata update');
+      }
+
+      // Convert to enhanced structure if needed
+      const enhancedEntry = this.convertLegacyToEnhanced(existingEntry, opts);
+
+      // Update with metadata only
+      const updatedEntry = this.updateCacheEntryWithChangeTracking(
+        enhancedEntry,
+        { metadata: { ...enhancedEntry.metadata, ...metadataData } },
+        'metadata'
+      );
+
+      // Update save strategy info
+      updatedEntry.cacheInfo.saveStrategy = 'metadata-only';
+
+      // Update backward compatibility fields
+      if (metadataData.isFinished !== undefined) {
+        updatedEntry.isWorkoutFinished = metadataData.isFinished;
+      }
+
+      // Update cache store
+      setCacheStore(prev => ({
+        ...prev,
+        [key]: updatedEntry
+      }));
+
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_METADATA', 'info', 'Cache updated after metadata-only save', {
+          key,
+          saveStrategy: 'metadata-only',
+          hasUnsavedMetadataChanges: false,
+          isFinished: metadataData.isFinished
+        });
+      }
+    } catch (error) {
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_METADATA', 'error', 'Metadata cache update failed', {
+          key,
+          error: error.message
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Update cache after full save
+   * @param {string} key - Cache key
+   * @param {Object} fullData - Complete workout data
+   * @param {Object} cacheStore - Cache store object
+   * @param {Function} setCacheStore - Function to update cache store
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  async updateCacheAfterFullSave(key, fullData, cacheStore, setCacheStore, options = {}) {
+    const opts = { ...this.options, ...options };
+    
+    try {
+      const existingEntry = cacheStore[key];
+      
+      // Convert to enhanced structure if needed
+      const enhancedEntry = existingEntry ? 
+        this.convertLegacyToEnhanced(existingEntry, opts) : 
+        this.createEnhancedCacheEntry({}, opts);
+
+      // Update with full data
+      const updatedEntry = this.updateCacheEntryWithChangeTracking(
+        enhancedEntry,
+        {
+          workoutLogId: fullData.workoutLogId,
+          exercises: fullData.exercises,
+          metadata: fullData.metadata
+        },
+        'both'
+      );
+
+      // Update save strategy info
+      updatedEntry.cacheInfo.saveStrategy = 'full-save';
+
+      // Update backward compatibility fields
+      updatedEntry.isWorkoutFinished = fullData.metadata?.isFinished || false;
+
+      // Update cache store
+      setCacheStore(prev => ({
+        ...prev,
+        [key]: updatedEntry
+      }));
+
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_FULL', 'info', 'Cache updated after full save', {
+          key,
+          workoutLogId: fullData.workoutLogId,
+          exerciseCount: fullData.exercises?.length || 0,
+          saveStrategy: 'full-save',
+          hasUnsavedChanges: false
+        });
+      }
+    } catch (error) {
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('UPDATE_FULL', 'error', 'Full cache update failed', {
+          key,
+          error: error.message
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Mark cache entry as having unsaved changes
+   * @param {string} key - Cache key
+   * @param {string} changeType - Type of change ('exercise', 'metadata', 'both')
+   * @param {string} pendingSaveType - Pending save type
+   * @param {Object} cacheStore - Cache store object
+   * @param {Function} setCacheStore - Function to update cache store
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  async markAsChanged(key, changeType, pendingSaveType, cacheStore, setCacheStore, options = {}) {
+    const opts = { ...this.options, ...options };
+    
+    try {
+      const existingEntry = cacheStore[key];
+      if (!existingEntry) {
+        if (opts.logOperations) {
+          CacheLoggingUtils.logOperation('MARK_CHANGED', 'warn', 'Cache entry not found for change marking', {
+            key,
+            changeType,
+            pendingSaveType
+          });
+        }
+        return;
+      }
+
+      // Convert to enhanced structure if needed
+      const enhancedEntry = this.convertLegacyToEnhanced(existingEntry, opts);
+
+      // Mark as changed
+      const updatedEntry = this.markCacheEntryAsChanged(enhancedEntry, changeType, pendingSaveType);
+
+      // Update cache store
+      setCacheStore(prev => ({
+        ...prev,
+        [key]: updatedEntry
+      }));
+
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('MARK_CHANGED', 'info', 'Cache entry marked as changed', {
+          key,
+          changeType,
+          pendingSaveType,
+          hasUnsavedExerciseChanges: updatedEntry.changeTracking.hasUnsavedExerciseChanges,
+          hasUnsavedMetadataChanges: updatedEntry.changeTracking.hasUnsavedMetadataChanges
+        });
+      }
+    } catch (error) {
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('MARK_CHANGED', 'error', 'Failed to mark cache entry as changed', {
+          key,
+          changeType,
+          pendingSaveType,
+          error: error.message
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Invalidate cache on save failure
+   * @param {string} key - Cache key
+   * @param {string} saveType - Type of save that failed
+   * @param {Error} error - Save error
+   * @param {Object} cacheStore - Cache store object
+   * @param {Function} setCacheStore - Function to update cache store
+   * @param {Object} options - Operation options
+   * @returns {Promise<void>}
+   */
+  async invalidateOnSaveFailure(key, saveType, error, cacheStore, setCacheStore, options = {}) {
+    const opts = { ...this.options, ...options };
+    
+    try {
+      const existingEntry = cacheStore[key];
+      if (!existingEntry) {
+        return;
+      }
+
+      // Convert to enhanced structure if needed
+      const enhancedEntry = this.convertLegacyToEnhanced(existingEntry, opts);
+
+      // Mark as invalid but preserve change tracking
+      const invalidatedEntry = {
+        ...enhancedEntry,
+        cacheInfo: {
+          ...enhancedEntry.cacheInfo,
+          isValid: false,
+          lastSaved: new Date().toISOString(),
+          saveStrategy: `${saveType}-failed`
+        },
+        isValid: false,
+        lastSaved: new Date().toISOString()
+      };
+
+      // Update cache store
+      setCacheStore(prev => ({
+        ...prev,
+        [key]: invalidatedEntry
+      }));
+
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('INVALIDATE_SAVE_FAILURE', 'error', 'Cache invalidated due to save failure', {
+          key,
+          saveType,
+          error: error.message,
+          preservedChangeTracking: true
+        });
+      }
+    } catch (cacheError) {
+      if (opts.logOperations) {
+        CacheLoggingUtils.logOperation('INVALIDATE_SAVE_FAILURE', 'error', 'Failed to invalidate cache on save failure', {
+          key,
+          saveType,
+          originalError: error.message,
+          cacheError: cacheError.message
+        });
+      }
+    }
+  }
+
+  /**
+   * Get cache statistics with enhanced change tracking info
+   * @param {Object} cacheStore - Cache store object
+   * @returns {Object} Enhanced cache statistics
    */
   getStats(cacheStore) {
     const entries = Object.entries(cacheStore);
     const validEntries = entries.filter(([, entry]) => entry?.isValid === true);
     const invalidEntries = entries.filter(([, entry]) => entry?.isValid === false);
     const entriesWithWorkoutLogId = entries.filter(([, entry]) => entry?.workoutLogId);
+    
+    // Enhanced statistics
+    const enhancedEntries = entries.filter(([, entry]) => entry?.cacheInfo && entry?.changeTracking);
+    const entriesWithUnsavedExerciseChanges = entries.filter(([, entry]) => 
+      entry?.changeTracking?.hasUnsavedExerciseChanges === true);
+    const entriesWithUnsavedMetadataChanges = entries.filter(([, entry]) => 
+      entry?.changeTracking?.hasUnsavedMetadataChanges === true);
+    const entriesWithPendingSaves = entries.filter(([, entry]) => 
+      entry?.changeTracking?.pendingSaveType);
+
+    // Save strategy distribution
+    const saveStrategyStats = {};
+    entries.forEach(([, entry]) => {
+      const strategy = entry?.cacheInfo?.saveStrategy || 'unknown';
+      saveStrategyStats[strategy] = (saveStrategyStats[strategy] || 0) + 1;
+    });
 
     return {
+      // Basic statistics
       totalEntries: entries.length,
       validEntries: validEntries.length,
       invalidEntries: invalidEntries.length,
       entriesWithWorkoutLogId: entriesWithWorkoutLogId.length,
       hitRate: entries.length > 0 ? (validEntries.length / entries.length) * 100 : 0,
+      
+      // Enhanced structure statistics
+      enhancedEntries: enhancedEntries.length,
+      enhancedPercentage: entries.length > 0 ? (enhancedEntries.length / entries.length) * 100 : 0,
+      
+      // Change tracking statistics
+      entriesWithUnsavedExerciseChanges: entriesWithUnsavedExerciseChanges.length,
+      entriesWithUnsavedMetadataChanges: entriesWithUnsavedMetadataChanges.length,
+      entriesWithPendingSaves: entriesWithPendingSaves.length,
+      
+      // Save strategy distribution
+      saveStrategyStats,
+      
+      // Keys and metadata
       keys: entries.map(([key]) => key),
       lastUpdated: new Date().toISOString()
     };

@@ -259,8 +259,8 @@ describe('WorkoutLogCacheManager', () => {
         source: 'test_source'
       });
 
-      expect(mockCacheStore['1_2'].metadata.source).toBe('test_source');
-      expect(mockCacheStore['1_2'].metadata.timestamp).toBeDefined();
+      expect(mockCacheStore['1_2'].cacheInfo.source).toBe('test_source');
+      expect(mockCacheStore['1_2'].cacheInfo.lastSaved).toBeDefined();
     });
   });  
 describe('Cache Validation', () => {
@@ -985,4 +985,243 @@ describe('CacheLoggingUtils', () => {
       );
     });
   });
+
+  describe('Enhanced Cache Structure for Change Tracking', () => {
+  describe('createEnhancedCacheEntry', () => {
+    it('should create enhanced cache entry with all required fields', () => {
+      const data = {
+        workoutLogId: 'test-id',
+        exercises: [{ exerciseId: 'ex1', sets: 3, reps: [10, 10, 10], weights: [100, 100, 100], completed: [true, true, false] }],
+        isWorkoutFinished: false
+      };
+
+      const options = {
+        userId: 'user1',
+        programId: 'prog1',
+        weekIndex: 1,
+        dayIndex: 2,
+        source: 'test',
+        saveStrategy: 'full-save'
+      };
+
+      const enhanced = cacheManager.createEnhancedCacheEntry(data, options);
+
+      expect(enhanced).toMatchObject({
+        workoutLogId: 'test-id',
+        userId: 'user1',
+        programId: 'prog1',
+        weekIndex: 1,
+        dayIndex: 2,
+        exercises: data.exercises,
+        metadata: expect.objectContaining({
+          isFinished: false,
+          isDraft: true
+        }),
+        cacheInfo: expect.objectContaining({
+          source: 'test',
+          saveStrategy: 'full-save',
+          isValid: true
+        }),
+        changeTracking: expect.objectContaining({
+          hasUnsavedExerciseChanges: false,
+          hasUnsavedMetadataChanges: false,
+          pendingSaveType: null
+        })
+      });
+
+      expect(enhanced.cacheInfo.lastSaved).toBeDefined();
+      expect(enhanced.cacheInfo.lastExerciseUpdate).toBeDefined();
+      expect(enhanced.cacheInfo.lastMetadataUpdate).toBeDefined();
+      expect(enhanced.changeTracking.lastUserInput).toBeDefined();
+    });
+
+    it('should handle minimal data with defaults', () => {
+      const data = {};
+      const enhanced = cacheManager.createEnhancedCacheEntry(data);
+
+      expect(enhanced).toMatchObject({
+        workoutLogId: null,
+        exercises: [],
+        metadata: expect.objectContaining({
+          name: '',
+          isFinished: false,
+          isDraft: true,
+          weightUnit: 'lbs'
+        }),
+        cacheInfo: expect.objectContaining({
+          isValid: true,
+          source: 'cache_manager',
+          saveStrategy: 'unknown'
+        }),
+        changeTracking: expect.objectContaining({
+          hasUnsavedExerciseChanges: false,
+          hasUnsavedMetadataChanges: false,
+          pendingSaveType: null
+        })
+      });
+    });
+  });
+
+  describe('updateCacheEntryWithChangeTracking', () => {
+    it('should update cache entry for exercise changes', () => {
+      const existingEntry = cacheManager.createEnhancedCacheEntry({
+        exercises: [{ exerciseId: 'ex1', sets: 3, reps: [10, 10, 10], weights: [100, 100, 100], completed: [true, true, false] }]
+      });
+
+      const updates = {
+        exercises: [{ exerciseId: 'ex1', sets: 3, reps: [12, 12, 12], weights: [105, 105, 105], completed: [true, true, true] }]
+      };
+
+      const updated = cacheManager.updateCacheEntryWithChangeTracking(existingEntry, updates, 'exercise');
+
+      expect(updated.exercises).toEqual(updates.exercises);
+      expect(updated.changeTracking.hasUnsavedExerciseChanges).toBe(false);
+      expect(updated.changeTracking.pendingSaveType).toBe(null);
+      expect(updated.cacheInfo.lastExerciseUpdate).not.toBe(existingEntry.cacheInfo.lastExerciseUpdate);
+      expect(updated.cacheInfo.lastMetadataUpdate).toBe(existingEntry.cacheInfo.lastMetadataUpdate);
+    });
+
+    it('should update cache entry for metadata changes', () => {
+      const existingEntry = cacheManager.createEnhancedCacheEntry({
+        metadata: { isFinished: false, notes: '' }
+      });
+
+      const updates = {
+        metadata: { isFinished: true, notes: 'Great workout!' }
+      };
+
+      const updated = cacheManager.updateCacheEntryWithChangeTracking(existingEntry, updates, 'metadata');
+
+      expect(updated.metadata).toEqual(updates.metadata);
+      expect(updated.changeTracking.hasUnsavedMetadataChanges).toBe(false);
+      expect(updated.changeTracking.pendingSaveType).toBe(null);
+      expect(updated.cacheInfo.lastMetadataUpdate).not.toBe(existingEntry.cacheInfo.lastMetadataUpdate);
+      expect(updated.cacheInfo.lastExerciseUpdate).toBe(existingEntry.cacheInfo.lastExerciseUpdate);
+    });
+
+    it('should update cache entry for both changes', () => {
+      const existingEntry = cacheManager.createEnhancedCacheEntry({});
+
+      const updates = {
+        exercises: [{ exerciseId: 'ex1', sets: 3, reps: [10, 10, 10], weights: [100, 100, 100], completed: [true, true, false] }],
+        metadata: { isFinished: true }
+      };
+
+      const updated = cacheManager.updateCacheEntryWithChangeTracking(existingEntry, updates, 'both');
+
+      expect(updated.exercises).toEqual(updates.exercises);
+      expect(updated.metadata).toEqual(updates.metadata);
+      expect(updated.changeTracking.hasUnsavedExerciseChanges).toBe(false);
+      expect(updated.changeTracking.hasUnsavedMetadataChanges).toBe(false);
+      expect(updated.changeTracking.pendingSaveType).toBe(null);
+      expect(updated.cacheInfo.lastExerciseUpdate).not.toBe(existingEntry.cacheInfo.lastExerciseUpdate);
+      expect(updated.cacheInfo.lastMetadataUpdate).not.toBe(existingEntry.cacheInfo.lastMetadataUpdate);
+    });
+  });
+
+  describe('Enhanced Cache Operations', () => {
+    describe('updateCacheAfterExerciseSave', () => {
+      it('should update cache after exercise-only save', async () => {
+        const key = '1_2';
+        const existingEntry = cacheManager.createEnhancedCacheEntry({
+          exercises: [{ exerciseId: 'ex1', sets: 3, reps: [10, 10, 10], weights: [100, 100, 100], completed: [true, true, false] }]
+        });
+        mockCacheStore[key] = existingEntry;
+
+        const updatedExercises = [{ exerciseId: 'ex1', sets: 3, reps: [12, 12, 12], weights: [105, 105, 105], completed: [true, true, true] }];
+
+        await cacheManager.updateCacheAfterExerciseSave(key, updatedExercises, mockCacheStore, mockSetCacheStore);
+
+        expect(mockSetCacheStore).toHaveBeenCalled();
+        const updatedEntry = mockCacheStore[key];
+        expect(updatedEntry.exercises).toEqual(updatedExercises);
+        expect(updatedEntry.cacheInfo.saveStrategy).toBe('exercise-only');
+        expect(updatedEntry.changeTracking.hasUnsavedExerciseChanges).toBe(false);
+      });
+
+      it('should throw error if cache entry not found', async () => {
+        const key = '1_2';
+        const updatedExercises = [{ exerciseId: 'ex1', sets: 3, reps: [12, 12, 12], weights: [105, 105, 105], completed: [true, true, true] }];
+
+        await expect(
+          cacheManager.updateCacheAfterExerciseSave(key, updatedExercises, mockCacheStore, mockSetCacheStore)
+        ).rejects.toThrow('Cache entry not found for exercise update');
+      });
+    });
+
+    describe('updateCacheAfterMetadataSave', () => {
+      it('should update cache after metadata-only save', async () => {
+        const key = '1_2';
+        const existingEntry = cacheManager.createEnhancedCacheEntry({
+          metadata: { isFinished: false, notes: '' }
+        });
+        mockCacheStore[key] = existingEntry;
+
+        const updatedMetadata = { isFinished: true, notes: 'Great workout!' };
+
+        await cacheManager.updateCacheAfterMetadataSave(key, updatedMetadata, mockCacheStore, mockSetCacheStore);
+
+        expect(mockSetCacheStore).toHaveBeenCalled();
+        const updatedEntry = mockCacheStore[key];
+        expect(updatedEntry.metadata).toMatchObject(updatedMetadata);
+        expect(updatedEntry.cacheInfo.saveStrategy).toBe('metadata-only');
+        expect(updatedEntry.changeTracking.hasUnsavedMetadataChanges).toBe(false);
+        expect(updatedEntry.isWorkoutFinished).toBe(true);
+      });
+    });
+
+    describe('Enhanced Cache Statistics', () => {
+      it('should provide enhanced statistics with change tracking info', () => {
+        // Create various cache entries
+        const enhancedEntry1 = cacheManager.createEnhancedCacheEntry({
+          workoutLogId: 'id1'
+        });
+        enhancedEntry1.changeTracking.hasUnsavedExerciseChanges = true;
+        enhancedEntry1.cacheInfo.saveStrategy = 'exercise-only';
+
+        const enhancedEntry2 = cacheManager.createEnhancedCacheEntry({
+          workoutLogId: 'id2'
+        });
+        enhancedEntry2.changeTracking.hasUnsavedMetadataChanges = true;
+        enhancedEntry2.changeTracking.pendingSaveType = 'metadata-only';
+        enhancedEntry2.cacheInfo.saveStrategy = 'metadata-only';
+
+        const legacyEntry = {
+          workoutLogId: 'id3',
+          exercises: [],
+          isWorkoutFinished: false,
+          lastSaved: '2023-01-01T00:00:00.000Z',
+          isValid: true
+        };
+
+        mockCacheStore = {
+          '1_1': enhancedEntry1,
+          '1_2': enhancedEntry2,
+          '1_3': legacyEntry
+        };
+
+        const stats = cacheManager.getStats(mockCacheStore);
+
+        expect(stats).toMatchObject({
+          totalEntries: 3,
+          validEntries: 3,
+          entriesWithWorkoutLogId: 3,
+          enhancedEntries: 2,
+          enhancedPercentage: expect.closeTo(66.67, 1),
+          entriesWithUnsavedExerciseChanges: 1,
+          entriesWithUnsavedMetadataChanges: 1,
+          entriesWithPendingSaves: 1,
+          saveStrategyStats: {
+            'exercise-only': 1,
+            'metadata-only': 1,
+            'unknown': 1
+          }
+        });
+
+        expect(stats.keys).toEqual(['1_1', '1_2', '1_3']);
+        expect(stats.lastUpdated).toBeDefined();
+      });
+    });
+  });
+});
 });

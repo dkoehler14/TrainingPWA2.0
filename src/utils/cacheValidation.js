@@ -87,14 +87,14 @@ export function isValidExerciseData(exercise) {
 }
 
 /**
- * Validate workout log cache structure
+ * Validate workout log cache structure (enhanced for change tracking)
  * @param {Object} cache - Cache data to validate
  * @returns {boolean} Whether cache structure is valid
  */
 export function isValidCacheStructure(cache) {
   if (!cache || typeof cache !== 'object') return false;
   
-  // Check required fields
+  // Check required fields (backward compatibility)
   if (cache.workoutLogId !== null && !isValidUUID(cache.workoutLogId)) return false;
   if (!cache.lastSaved || typeof cache.lastSaved !== 'string') return false;
   if (typeof cache.isValid !== 'boolean') return false;
@@ -104,6 +104,23 @@ export function isValidCacheStructure(cache) {
   // Validate exercises
   for (const exercise of cache.exercises) {
     if (!isValidExerciseData(exercise)) return false;
+  }
+  
+  // Enhanced validation for change tracking structure (optional for backward compatibility)
+  if (cache.cacheInfo) {
+    if (typeof cache.cacheInfo !== 'object') return false;
+    if (cache.cacheInfo.lastExerciseUpdate && typeof cache.cacheInfo.lastExerciseUpdate !== 'string') return false;
+    if (cache.cacheInfo.lastMetadataUpdate && typeof cache.cacheInfo.lastMetadataUpdate !== 'string') return false;
+    if (cache.cacheInfo.saveStrategy && typeof cache.cacheInfo.saveStrategy !== 'string') return false;
+  }
+  
+  if (cache.changeTracking) {
+    if (typeof cache.changeTracking !== 'object') return false;
+    if (typeof cache.changeTracking.hasUnsavedExerciseChanges !== 'boolean') return false;
+    if (typeof cache.changeTracking.hasUnsavedMetadataChanges !== 'boolean') return false;
+    if (cache.changeTracking.lastUserInput && typeof cache.changeTracking.lastUserInput !== 'string') return false;
+    if (cache.changeTracking.pendingSaveType && 
+        !['exercise-only', 'metadata-only', 'full-save'].includes(cache.changeTracking.pendingSaveType)) return false;
   }
   
   return true;

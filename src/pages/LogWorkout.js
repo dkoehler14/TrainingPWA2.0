@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserPrograms, getProgramById, updateProgram, updateProgramExercise } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import workoutLogService from '../services/workoutLogService';
+import SaveStrategyManager from '../services/saveStrategyManager';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import {
   transformSupabaseProgramToWeeklyConfigs,
@@ -206,6 +207,17 @@ function LogWorkout() {
     autoCleanup: true,
     logOperations: true
   });
+
+  // Initialize Save Strategy Manager
+  const saveStrategyManager = useRef(null);
+  if (!saveStrategyManager.current) {
+    saveStrategyManager.current = new SaveStrategyManager({
+      enablePerformanceMonitoring: true,
+      enableDebugLogging: true,
+      defaultDebounceMs: 1500,
+      fallbackToFullSave: true
+    });
+  }
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
@@ -802,7 +814,7 @@ function LogWorkout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Enhanced debounced save function using the new error handling system
+  // Enhanced debounced save function using SaveStrategyManager
   const debouncedSaveLog = useCallback(
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData, previousData = null) => {
       if (!userData || !programData || exerciseData.length === 0) return;
@@ -816,17 +828,13 @@ function LogWorkout() {
           // Transform exercise data to Supabase format
           const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
 
-          // Use change detection to determine optimal save strategy
-          let saveResult;
-          let saveStrategy = 'full-save'; // Default fallback
-          
-          try {
-            // Import change detection service
-            const ChangeDetectionService = (await import('../services/changeDetectionService.js')).default;
-            const changeDetector = new ChangeDetectionService();
-
-            // Prepare current data for change detection
-            const currentData = {
+          // Prepare save request for SaveStrategyManager
+          const saveRequest = {
+            userId: userData.id,
+            programId: programData.id,
+            weekIndex,
+            dayIndex,
+            currentData: {
               metadata: {
                 name: `Week ${weekIndex + 1}, Day ${dayIndex + 1}`,
                 isFinished: false,
@@ -843,142 +851,66 @@ function LogWorkout() {
                 weekIndex,
                 dayIndex
               }
-            };
-
-            // Detect changes
-            const changeAnalysis = changeDetector.detectChanges(previousData, currentData);
-            saveStrategy = changeAnalysis.saveStrategy;
-
-            workoutDebugger.logger.info('🔍 CHANGE DETECTION RESULT:', {
-              operation: 'debouncedSaveLog',
-              saveStrategy: changeAnalysis.saveStrategy,
-              hasExerciseChanges: changeAnalysis.hasExerciseChanges,
-              hasMetadataChanges: changeAnalysis.hasMetadataChanges,
-              summary: changeAnalysis.summary,
-              exerciseCount: transformedExercises.length
-            });
-
-            // Execute appropriate save strategy
-            if (changeAnalysis.saveStrategy === 'exercise-only') {
-              // Ensure workout log exists first
-              const workoutLogId = await workoutLogService.ensureWorkoutLogExists(
-                userData.id,
-                programData.id,
-                weekIndex,
-                dayIndex,
-                {
-                  cacheManager,
-                  programLogs,
-                  setProgramLogs,
-                  logOperations: true,
-                  workoutName: `Week ${weekIndex + 1}, Day ${dayIndex + 1}`,
-                  source: 'debounced_save_exercise_only'
-                }
-              );
-
-              // Perform exercise-only save
-              saveResult = await workoutLogService.saveExercisesOnly(
-                workoutLogId,
-                transformedExercises,
-                {
-                  useCache: true,
-                  validateCache: true,
-                  logOperations: true,
-                  source: 'debounced_save_exercise_only'
-                }
-              );
-
-              // Convert to expected format for compatibility
-              saveResult = {
-                id: workoutLogId,
-                is_finished: false,
-                wasUpdate: true,
-                cacheHit: false,
-                saveStrategy: 'exercise-only',
-                performance: saveResult.performance
-              };
-
-            } else {
-              // Fall back to full save for metadata changes or mixed changes
-              saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
-                userData.id,
-                programData.id,
-                weekIndex,
-                dayIndex,
-                transformedExercises,
-                {
-                  useCache: true,
-                  validateCache: true,
-                  autoCleanupInvalidCache: true,
-                  logOperations: true,
-                  source: 'debounced_save_full'
-                }
-              );
-              saveResult.saveStrategy = saveStrategy;
+            },
+            previousData,
+            saveType: 'debounced',
+            options: {
+              cacheState: { isValid: true },
+              lastSaveTime: null,
+              userPreferences: {}
             }
+          };
 
-          } catch (changeDetectionError) {
-            // Fall back to full save if change detection fails
-            workoutDebugger.logger.warn('⚠️ CHANGE DETECTION FAILED, USING FULL SAVE:', {
-              operation: 'debouncedSaveLog',
-              error: changeDetectionError.message,
-              fallbackStrategy: 'full-save'
-            });
+          // Execute save using SaveStrategyManager
+          const saveResult = await saveStrategyManager.current.executeSave(saveRequest);
 
-            saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
-              userData.id,
-              programData.id,
-              weekIndex,
-              dayIndex,
-              transformedExercises,
-              {
-                useCache: true,
-                validateCache: true,
-                autoCleanupInvalidCache: true,
-                logOperations: true,
-                source: 'debounced_save_fallback'
-              }
-            );
-            saveResult.saveStrategy = 'full-save';
-          }
+          workoutDebugger.logger.info('✅ DEBOUNCED SAVE SUCCESS: SaveStrategyManager completed operation', {
+            operation: 'debouncedSaveLog',
+            operationType: saveResult.operationType,
+            saveStrategy: saveResult.changeAnalysis?.saveStrategy,
+            logId: saveResult.workoutLogId,
+            userId: userData.id,
+            programId: programData.id,
+            programName: programData.name,
+            weekIndex,
+            dayIndex,
+            exerciseCount: transformedExercises.length,
+            timestamp: new Date().toISOString(),
+            performance: saveResult.performance,
+            affectedTables: saveResult.affectedTables,
+            cacheUpdated: saveResult.cacheUpdated
+          });
 
           // Update local cache with the result
-          if (saveResult && saveResult.id) {
+          if (saveResult.workoutLogId) {
             await updateCachedWorkoutLog(weekIndex, dayIndex, {
-              workoutLogId: saveResult.id,
+              workoutLogId: saveResult.workoutLogId,
               exercises: exerciseData,
-              isWorkoutFinished: saveResult.is_finished || false,
+              isWorkoutFinished: false,
               userId: userData.id,
               programId: programData.id
             }, {
-              source: 'debounced_save_result'
-            });
-
-            workoutDebugger.logger.info('✅ DEBOUNCED SAVE SUCCESS: Workout log saved and cached', {
-              operation: 'debouncedSaveLog',
-              saveStrategy: saveResult.saveStrategy || saveStrategy,
-              logId: saveResult.id,
-              userId: userData.id,
-              programId: programData.id,
-              programName: programData.name,
-              weekIndex,
-              dayIndex,
-              exerciseCount: transformedExercises.length,
-              timestamp: new Date().toISOString(),
-              wasUpdate: saveResult.wasUpdate,
-              cacheHit: saveResult.cacheHit,
-              performance: saveResult.performance
+              source: 'save_strategy_manager_debounced'
             });
           }
 
-          return saveResult;
+          // Convert to expected format for compatibility
+          return {
+            id: saveResult.workoutLogId,
+            is_finished: false,
+            wasUpdate: true,
+            cacheHit: false,
+            saveStrategy: saveResult.operationType,
+            performance: saveResult.performance
+          };
+
         }, 'auto');
 
         return result;
 
       } catch (error) {
         // Error is handled by the error handling system
-        workoutDebugger.logger.error('❌ DEBOUNCED SAVE ERROR: Operation failed', {
+        workoutDebugger.logger.error('❌ DEBOUNCED SAVE ERROR: SaveStrategyManager operation failed', {
           operation: 'debouncedSaveLog',
           error: error.message,
           errorType: error.type || 'unknown',
@@ -998,7 +930,7 @@ function LogWorkout() {
         addError(error, {
           operation: () => debouncedSaveLog(userData, programData, weekIndex, dayIndex, exerciseData, previousData),
           operationType: 'auto',
-          source: 'debounced_save',
+          source: 'save_strategy_manager_debounced',
           userData,
           programData,
           weekIndex,
@@ -1011,11 +943,11 @@ function LogWorkout() {
 
         throw error;
       }
-    }, 1500), // Increased debounce to 1.5s to reduce API calls
-    [executeSave, markUnsaved, addError, workoutLogService, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]
+    }, 1500), // Debounce timing managed by SaveStrategyManager
+    [executeSave, markUnsaved, addError, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]
   );
 
-  // Enhanced immediate save function using the new error handling system
+  // Enhanced immediate save function using SaveStrategyManager
   const immediateSaveLog = useCallback(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
     // Cancel any pending debounced saves
     debouncedSaveLog.cancel();
@@ -1029,59 +961,90 @@ function LogWorkout() {
         // Transform exercise data to Supabase format
         const transformedExercises = transformExercisesToSupabaseFormat(exerciseData);
 
-        // Use the enhanced cache-first save method with immediate priority
-        const saveResult = await workoutLogService.saveWorkoutLogCacheFirst(
-          userData.id,
-          programData.id,
+        // Prepare save request for SaveStrategyManager
+        const saveRequest = {
+          userId: userData.id,
+          programId: programData.id,
           weekIndex,
           dayIndex,
-          transformedExercises,
-          {
-            useCache: true,
-            validateCache: true,
-            autoCleanupInvalidCache: true,
-            logOperations: true,
-            source: 'immediate_save',
-            priority: 'high'
+          currentData: {
+            metadata: {
+              name: `Week ${weekIndex + 1}, Day ${dayIndex + 1}`,
+              isFinished: isWorkoutFinished,
+              isDraft: !isWorkoutFinished,
+              duration: null,
+              notes: '',
+              completedDate: isWorkoutFinished ? new Date().toISOString() : null,
+              weightUnit: 'LB'
+            },
+            exercises: transformedExercises,
+            system: {
+              userId: userData.id,
+              programId: programData.id,
+              weekIndex,
+              dayIndex
+            }
+          },
+          previousData: null, // For immediate saves, we don't track previous data
+          saveType: 'immediate',
+          options: {
+            cacheState: { isValid: true },
+            lastSaveTime: null,
+            userPreferences: {}
           }
-        );
+        };
+
+        // Execute save using SaveStrategyManager
+        const saveResult = await saveStrategyManager.current.executeSave(saveRequest);
+
+        workoutDebugger.logger.info('✅ IMMEDIATE SAVE SUCCESS: SaveStrategyManager completed operation', {
+          operation: 'immediateSaveLog',
+          operationType: saveResult.operationType,
+          saveStrategy: saveResult.changeAnalysis?.saveStrategy,
+          logId: saveResult.workoutLogId,
+          userId: userData.id,
+          programId: programData.id,
+          programName: programData.name,
+          weekIndex,
+          dayIndex,
+          exerciseCount: transformedExercises.length,
+          timestamp: new Date().toISOString(),
+          performance: saveResult.performance,
+          affectedTables: saveResult.affectedTables,
+          cacheUpdated: saveResult.cacheUpdated,
+          saveType: 'immediate'
+        });
 
         // Update local cache with the result
-        if (saveResult && saveResult.id) {
+        if (saveResult.workoutLogId) {
           await updateCachedWorkoutLog(weekIndex, dayIndex, {
-            workoutLogId: saveResult.id,
+            workoutLogId: saveResult.workoutLogId,
             exercises: exerciseData,
-            isWorkoutFinished: saveResult.is_finished || false,
+            isWorkoutFinished: saveResult.changeAnalysis?.hasMetadataChanges ? isWorkoutFinished : false,
             userId: userData.id,
             programId: programData.id
           }, {
-            source: 'immediate_save_result'
-          });
-
-          workoutDebugger.logger.info('✅ IMMEDIATE SAVE SUCCESS: Workout log saved and cached', {
-            operation: 'immediateSaveLog',
-            logId: saveResult.id,
-            userId: userData.id,
-            programId: programData.id,
-            programName: programData.name,
-            weekIndex,
-            dayIndex,
-            exerciseCount: transformedExercises.length,
-            timestamp: new Date().toISOString(),
-            wasUpdate: saveResult.wasUpdate,
-            cacheHit: saveResult.cacheHit,
-            saveType: 'immediate'
+            source: 'save_strategy_manager_immediate'
           });
         }
 
-        return saveResult;
+        // Convert to expected format for compatibility
+        return {
+          id: saveResult.workoutLogId,
+          is_finished: isWorkoutFinished,
+          wasUpdate: true,
+          cacheHit: false,
+          saveStrategy: saveResult.operationType,
+          performance: saveResult.performance
+        };
+
       }, 'manual');
 
       return result;
 
     } catch (error) {
       // Error is handled by the error handling system
-      workoutDebugger.logger.error('❌ IMMEDIATE SAVE ERROR: Operation failed', {
+      workoutDebugger.logger.error('❌ IMMEDIATE SAVE ERROR: SaveStrategyManager operation failed', {
         operation: 'immediateSaveLog',
         error: error.message,
         errorType: error.type || 'unknown',
@@ -1102,7 +1065,7 @@ function LogWorkout() {
       addError(error, {
         operation: () => immediateSaveLog(userData, programData, weekIndex, dayIndex, exerciseData),
         operationType: 'manual',
-        source: 'immediate_save',
+        source: 'save_strategy_manager_immediate',
         userData,
         programData,
         weekIndex,
@@ -1114,7 +1077,7 @@ function LogWorkout() {
 
       throw error;
     }
-  }, [debouncedSaveLog, executeSave, addError, workoutLogService, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]);
+  }, [debouncedSaveLog, executeSave, addError, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger, isWorkoutFinished]);
 
   // Initialize debugging and monitoring systems
   useEffect(() => {
@@ -1169,8 +1132,29 @@ function LogWorkout() {
       if (debouncedSaveLog && typeof debouncedSaveLog.flush === 'function') {
         debouncedSaveLog.flush();
       }
+
+      // Log SaveStrategyManager performance metrics on cleanup
+      if (saveStrategyManager.current) {
+        const metrics = saveStrategyManager.current.getPerformanceMetrics();
+        workoutDebugger.logger.info('📊 SAVE STRATEGY PERFORMANCE METRICS:', {
+          operation: 'component_cleanup',
+          metrics: {
+            totalOperations: metrics.totalOperations,
+            successRate: metrics.successRate,
+            optimizationRate: metrics.optimizationRate,
+            operationCounts: metrics.operationCounts,
+            averageResponseTimes: metrics.averageResponseTimes,
+            databaseWriteReduction: metrics.databaseWriteReduction,
+            errorRates: Object.keys(metrics.errorRates).reduce((acc, key) => {
+              acc[key] = metrics.errorRates[key].errorRate;
+              return acc;
+            }, {})
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
     };
-  }, [debouncedSaveLog]);
+  }, [debouncedSaveLog, workoutDebugger]);
 
   // Add visibility change handler to save when page becomes hidden
   useEffect(() => {
@@ -1708,15 +1692,19 @@ function LogWorkout() {
     if (field === 'weights' && exercise?.exerciseType === 'Bodyweight') return;
 
     let broadcastUpdate = false;
+    let isExerciseOnlyChange = false;
 
     if (field === 'reps') {
       newLogData[exerciseIndex].reps[setIndex] = value;
+      isExerciseOnlyChange = true;
     } else if (field === 'weights') {
       newLogData[exerciseIndex].weights[setIndex] = value;
+      isExerciseOnlyChange = true;
     } else if (field === 'completed') {
       const wasCompleted = newLogData[exerciseIndex].completed[setIndex];
       newLogData[exerciseIndex].completed[setIndex] = !wasCompleted;
       broadcastUpdate = true;
+      isExerciseOnlyChange = true;
 
       // Broadcast set completion in real-time
       progressBroadcast.broadcastSetCompletion(
@@ -1730,6 +1718,14 @@ function LogWorkout() {
           weight: newLogData[exerciseIndex].weights[setIndex]
         }
       );
+    } else if (field === 'notes') {
+      // Exercise notes are metadata changes - use immediate save
+      newLogData[exerciseIndex].notes = value;
+      isExerciseOnlyChange = false;
+    } else if (field === 'bodyweight') {
+      // Bodyweight changes are metadata changes - use immediate save
+      newLogData[exerciseIndex].bodyweight = value;
+      isExerciseOnlyChange = false;
     }
 
     // Update local state
@@ -1749,7 +1745,8 @@ function LogWorkout() {
           localChange: true,
           changeSource: 'user_input',
           field,
-          setIndex
+          setIndex,
+          isExerciseOnlyChange
         }
       };
 
@@ -1767,15 +1764,17 @@ function LogWorkout() {
         field,
         exerciseIndex,
         setIndex,
-        preserveUserInput: true
+        preserveUserInput: true,
+        isExerciseOnlyChange
       });
 
-      workoutDebugger.logger.debug('📝 CACHE UPDATED: Exercise data changed with conflict detection', {
+      workoutDebugger.logger.debug('📝 CACHE UPDATED: Exercise data changed with optimized save strategy', {
         operation: 'handleChange',
         field,
         exerciseIndex,
         setIndex,
         value,
+        isExerciseOnlyChange,
         weekIndex: selectedWeek,
         dayIndex: selectedDay,
         timestamp: new Date().toISOString(),
@@ -1843,8 +1842,14 @@ function LogWorkout() {
       }
     } : null;
 
-    // Trigger debounced save with enhanced service and change detection
-    debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData, previousData);
+    // Use optimized save strategy based on change type
+    if (isExerciseOnlyChange) {
+      // For exercise-only changes (reps, weights, completed), use debounced save
+      debouncedSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData, previousData);
+    } else {
+      // For metadata changes (notes, bodyweight), use immediate save
+      immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, newLogData);
+    }
   }, [
     isWorkoutFinished,
     logData,
@@ -1856,6 +1861,7 @@ function LogWorkout() {
     updateCachedWorkoutLog,
     progressBroadcast,
     debouncedSaveLog,
+    immediateSaveLog,
     workoutDebugger
   ]);
 
