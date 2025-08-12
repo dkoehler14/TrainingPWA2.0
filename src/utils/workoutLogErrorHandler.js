@@ -21,8 +21,12 @@ const WorkoutLogErrorType = {
   
   // Exercise operation errors
   EXERCISE_UPSERT_FAILED: 'exercise_upsert_failed',
+  EXERCISE_SAVE_FAILED: 'exercise_save_failed',
   EXERCISE_VALIDATION_FAILED: 'exercise_validation_failed',
   EXERCISE_ORDER_CONFLICT: 'exercise_order_conflict',
+  
+  // Metadata operation errors
+  METADATA_SAVE_FAILED: 'metadata_save_failed',
   
   // Network and connectivity errors
   NETWORK_ERROR: 'network_error',
@@ -114,6 +118,7 @@ class WorkoutLogError extends Error {
       [WorkoutLogErrorType.EXERCISE_UPSERT_FAILED]: ErrorSeverity.MEDIUM,
       [WorkoutLogErrorType.EXERCISE_VALIDATION_FAILED]: ErrorSeverity.MEDIUM,
       [WorkoutLogErrorType.EXERCISE_ORDER_CONFLICT]: ErrorSeverity.LOW,
+      [WorkoutLogErrorType.METADATA_SAVE_FAILED]: ErrorSeverity.MEDIUM,
       
       [WorkoutLogErrorType.NETWORK_ERROR]: ErrorSeverity.MEDIUM,
       [WorkoutLogErrorType.CONNECTION_TIMEOUT]: ErrorSeverity.MEDIUM,
@@ -151,6 +156,7 @@ class WorkoutLogError extends Error {
       WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION,
       WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
       WorkoutLogErrorType.EXERCISE_ORDER_CONFLICT,
+      WorkoutLogErrorType.METADATA_SAVE_FAILED,
       WorkoutLogErrorType.NETWORK_ERROR,
       WorkoutLogErrorType.CONNECTION_TIMEOUT,
       WorkoutLogErrorType.RATE_LIMIT_EXCEEDED,
@@ -194,6 +200,7 @@ class WorkoutLogError extends Error {
       [WorkoutLogErrorType.EXERCISE_UPSERT_FAILED]: RecoveryStrategy.RETRY,
       [WorkoutLogErrorType.EXERCISE_VALIDATION_FAILED]: RecoveryStrategy.DATA_SANITIZATION,
       [WorkoutLogErrorType.EXERCISE_ORDER_CONFLICT]: RecoveryStrategy.FALLBACK,
+      [WorkoutLogErrorType.METADATA_SAVE_FAILED]: RecoveryStrategy.RETRY,
       
       [WorkoutLogErrorType.NETWORK_ERROR]: RecoveryStrategy.RETRY,
       [WorkoutLogErrorType.CONNECTION_TIMEOUT]: RecoveryStrategy.RETRY,
@@ -529,6 +536,13 @@ const ErrorRecoveryStrategies = {
     maxRetries: 3,
     retryDelay: 2000,
     description: 'Retry exercise upsert operation with exponential backoff'
+  },
+  
+  [WorkoutLogErrorType.METADATA_SAVE_FAILED]: {
+    strategy: RecoveryStrategy.RETRY,
+    maxRetries: 3,
+    retryDelay: 1000,
+    description: 'Retry metadata save operation with exponential backoff'
   },
   
   [WorkoutLogErrorType.NETWORK_ERROR]: {

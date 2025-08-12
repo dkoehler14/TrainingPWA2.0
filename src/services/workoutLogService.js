@@ -878,6 +878,593 @@ class WorkoutLogService {
   }
 
   /**
+   * Save only exercise data to workout_log_exercises table
+   * Optimized for frequent exercise updates during workout logging
+   * 
+   * @param {string} workoutLogId - The workout log ID to update exercises for
+   * @param {Array} exercises - Array of exercise data to save
+   * @param {Object} options - Save options
+   * @returns {Promise<Object>} Save result with performance metrics
+   */
+  async saveExercisesOnly(workoutLogId, exercises, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        useCache = true,
+        validateCache = true,
+        logOperations = true,
+        source = 'exercise-only-save'
+      } = options;
+
+      // Start performance timer
+      const timerId = startTimer('saveExercisesOnly', {
+        workoutLogId,
+        exerciseCount: exercises?.length || 0,
+        source
+      });
+
+      try {
+        if (logOperations) {
+          logInfo(OperationType.UPDATE, 'Exercise-only save started', {
+            workoutLogId,
+            exerciseCount: exercises?.length || 0,
+            source,
+            options: { useCache, validateCache }
+          });
+        }
+
+        // Validate input data
+        if (!workoutLogId || typeof workoutLogId !== 'string') {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Invalid workout log ID for exercise-only save',
+            { workoutLogId, type: typeof workoutLogId }
+          );
+        }
+
+        if (!Array.isArray(exercises)) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Exercises must be an array for exercise-only save',
+            { exercises: typeof exercises, workoutLogId }
+          );
+        }
+
+        // Validate exercise data before saving
+        for (let i = 0; i < exercises.length; i++) {
+          const exercise = exercises[i];
+          if (!exercise.exerciseId) {
+            throw new WorkoutLogError(
+              WorkoutLogErrorType.INVALID_DATA,
+              `Exercise at index ${i} missing exerciseId`,
+              { exerciseIndex: i, exercise, workoutLogId }
+            );
+          }
+
+          // Validate sets count
+          const sets = exercise.sets && exercise.sets !== '' ? Number(exercise.sets) : 1;
+          if (isNaN(sets) || sets <= 0) {
+            throw new WorkoutLogError(
+              WorkoutLogErrorType.INVALID_DATA,
+              `Invalid sets value at exercise index ${i}: ${exercise.sets}`,
+              { exerciseIndex: i, sets: exercise.sets, workoutLogId }
+            );
+          }
+        }
+
+        // Use existing upsert method for efficient exercise updates
+        const upsertResult = await this.upsertWorkoutExercises(workoutLogId, exercises, {
+          logOperations,
+          useTransaction: true,
+          validateData: true
+        });
+
+        // End performance timer
+        const timing = endTimer(timerId, {
+          workoutLogId,
+          success: true,
+          operations: upsertResult.operations
+        });
+
+        // Log performance metrics
+        logPerformanceMetric('saveExercisesOnly', {
+          workoutLogId,
+          exerciseCount: exercises.length,
+          operations: upsertResult.operations,
+          duration: timing?.duration,
+          databaseWrites: (upsertResult.operations.inserted + upsertResult.operations.updated + upsertResult.operations.deleted),
+          source
+        });
+
+        if (logOperations) {
+          logInfo(OperationType.UPDATE, 'Exercise-only save completed successfully', {
+            workoutLogId,
+            operations: upsertResult.operations,
+            exerciseCount: exercises.length,
+            duration: timing?.duration,
+            databaseWrites: (upsertResult.operations.inserted + upsertResult.operations.updated + upsertResult.operations.deleted)
+          });
+        }
+
+        return {
+          success: true,
+          workoutLogId,
+          operationType: 'exercise-only',
+          affectedTables: ['workout_log_exercises'],
+          cacheUpdated: false, // Cache updates handled separately
+          performance: {
+            duration: timing?.duration || 0,
+            databaseWrites: (upsertResult.operations.inserted + upsertResult.operations.updated + upsertResult.operations.deleted)
+          },
+          operations: upsertResult.operations,
+          changes: upsertResult.changes,
+          summary: upsertResult.summary
+        };
+
+      } catch (error) {
+        // End timer with error
+        endTimer(timerId, {
+          success: false,
+          error: error.message,
+          errorType: error.type || 'unknown'
+        });
+
+        logError(OperationType.UPDATE, 'Exercise-only save failed', {
+          workoutLogId,
+          exerciseCount: exercises?.length || 0,
+          errorType: error.type || 'unknown',
+          source
+        }, error);
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.EXERCISE_SAVE_FAILED,
+          `Exercise-only save failed: ${error.message}`,
+          {
+            workoutLogId,
+            exerciseCount: exercises?.length || 0,
+            source
+          },
+          error
+        );
+      }
+    }, 'saveExercisesOnly');
+  }
+
+  /**
+   * Save only metadata to workout_logs table
+   * Optimized for immediate metadata updates (completion status, duration, notes)
+   * 
+   * @param {string} workoutLogId - The workout log ID to update metadata for
+   * @param {Object} metadata - Metadata object to save
+   * @param {Object} options - Save options
+   * @returns {Promise<Object>} Save result with performance metrics
+   */
+  async saveMetadataOnly(workoutLogId, metadata, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        useCache = true,
+        validateCache = true,
+        logOperations = true,
+        source = 'metadata-only-save'
+      } = options;
+
+      // Start performance timer
+      const timerId = startTimer('saveMetadataOnly', {
+        workoutLogId,
+        metadataFields: Object.keys(metadata || {}),
+        source
+      });
+
+      try {
+        if (logOperations) {
+          logInfo(OperationType.UPDATE, 'Metadata-only save started', {
+            workoutLogId,
+            metadataFields: Object.keys(metadata || {}),
+            source,
+            options: { useCache, validateCache }
+          });
+        }
+
+        // Validate input data
+        if (!workoutLogId || typeof workoutLogId !== 'string') {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Invalid workout log ID for metadata-only save',
+            { workoutLogId, type: typeof workoutLogId }
+          );
+        }
+
+        if (!metadata || typeof metadata !== 'object') {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Metadata must be an object for metadata-only save',
+            { metadata: typeof metadata, workoutLogId }
+          );
+        }
+
+        // Validate metadata fields - only allow specific metadata fields
+        const allowedFields = ['is_finished', 'duration', 'notes', 'completed_date', 'name', 'is_draft'];
+        const providedFields = Object.keys(metadata);
+        const invalidFields = providedFields.filter(field => !allowedFields.includes(field));
+        
+        if (invalidFields.length > 0) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            `Invalid metadata fields provided: ${invalidFields.join(', ')}`,
+            { 
+              invalidFields, 
+              allowedFields, 
+              providedFields,
+              workoutLogId 
+            }
+          );
+        }
+
+        // Build update object with only provided fields
+        const updateData = {
+          updated_at: new Date().toISOString()
+        };
+
+        // Map metadata fields to database columns
+        if (metadata.is_finished !== undefined) updateData.is_finished = metadata.is_finished;
+        if (metadata.duration !== undefined) updateData.duration = metadata.duration;
+        if (metadata.notes !== undefined) updateData.notes = metadata.notes;
+        if (metadata.completed_date !== undefined) updateData.completed_date = metadata.completed_date;
+        if (metadata.name !== undefined) updateData.name = metadata.name;
+        if (metadata.is_draft !== undefined) updateData.is_draft = metadata.is_draft;
+
+        // Perform the metadata-only update
+        const { data, error } = await supabase
+          .from('workout_logs')
+          .update(updateData)
+          .eq('id', workoutLogId)
+          .select()
+          .single();
+
+        if (error) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.DATABASE_ERROR,
+            `Failed to update workout log metadata: ${error.message}`,
+            {
+              workoutLogId,
+              metadata: JSON.stringify(metadata, null, 2),
+              updateData: JSON.stringify(updateData, null, 2),
+              errorCode: error.code,
+              errorDetails: error.details
+            },
+            error
+          );
+        }
+
+        // End performance timer
+        const timing = endTimer(timerId, {
+          workoutLogId,
+          success: true,
+          metadataFields: providedFields
+        });
+
+        // Log performance metrics
+        logPerformanceMetric('saveMetadataOnly', {
+          workoutLogId,
+          metadataFields: providedFields,
+          duration: timing?.duration,
+          databaseWrites: 1, // Only one table update
+          source
+        });
+
+        if (logOperations) {
+          logInfo(OperationType.UPDATE, 'Metadata-only save completed successfully', {
+            workoutLogId,
+            metadataFields: providedFields,
+            duration: timing?.duration,
+            databaseWrites: 1
+          });
+        }
+
+        return {
+          success: true,
+          workoutLogId,
+          operationType: 'metadata-only',
+          affectedTables: ['workout_logs'],
+          cacheUpdated: false, // Cache updates handled separately
+          performance: {
+            duration: timing?.duration || 0,
+            databaseWrites: 1
+          },
+          updatedFields: providedFields,
+          result: data
+        };
+
+      } catch (error) {
+        // End timer with error
+        endTimer(timerId, {
+          success: false,
+          error: error.message,
+          errorType: error.type || 'unknown'
+        });
+
+        logError(OperationType.UPDATE, 'Metadata-only save failed', {
+          workoutLogId,
+          metadataFields: Object.keys(metadata || {}),
+          errorType: error.type || 'unknown',
+          source
+        }, error);
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.METADATA_SAVE_FAILED,
+          `Metadata-only save failed: ${error.message}`,
+          {
+            workoutLogId,
+            metadata: JSON.stringify(metadata, null, 2),
+            source
+          },
+          error
+        );
+      }
+    }, 'saveMetadataOnly');
+  }
+
+  /**
+   * Ensure a workout log exists for the given parameters, creating a minimal one if needed
+   * Uses cache-first approach to check for existing workout log
+   * 
+   * @param {string} userId - User ID
+   * @param {string} programId - Program ID
+   * @param {number} weekIndex - Week index
+   * @param {number} dayIndex - Day index
+   * @param {Object} options - Options for cache and creation
+   * @returns {Promise<string>} Workout log ID
+   */
+  async ensureWorkoutLogExists(userId, programId, weekIndex, dayIndex, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        cacheManager = new WorkoutLogCacheManager(),
+        programLogs = {},
+        setProgramLogs = () => {},
+        logOperations = true,
+        workoutName = null,
+        source = 'ensure-workout-log'
+      } = options;
+
+      // Start performance timer
+      const timerId = startTimer('ensureWorkoutLogExists', {
+        userId,
+        programId,
+        weekIndex,
+        dayIndex,
+        source
+      });
+
+      try {
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Ensuring workout log exists', {
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            source
+          });
+        }
+
+        // Validate input parameters
+        if (!userId || !programId || weekIndex === undefined || dayIndex === undefined) {
+          throw new WorkoutLogError(
+            WorkoutLogErrorType.INVALID_DATA,
+            'Missing required parameters for workout log existence check',
+            {
+              userId: !!userId,
+              programId: !!programId,
+              weekIndex: weekIndex !== undefined,
+              dayIndex: dayIndex !== undefined
+            }
+          );
+        }
+
+        const cacheKey = cacheManager.generateKey(weekIndex, dayIndex);
+
+        // Step 1: Check cache for existing workout log ID
+        const cachedEntry = await cacheManager.get(cacheKey, programLogs, {
+          validateInDatabase: true,
+          logOperations
+        });
+
+        if (cachedEntry && cachedEntry.workoutLogId) {
+          // Validate cached entry
+          const validationResult = await cacheManager.validate(cacheKey, cachedEntry.workoutLogId, {
+            validateInDatabase: true
+          });
+
+          if (validationResult.isValid) {
+            if (logOperations) {
+              logInfo(OperationType.CREATE, 'Workout log found in cache', {
+                workoutLogId: cachedEntry.workoutLogId,
+                cacheKey,
+                source
+              });
+            }
+
+            // End timer with cache hit
+            endTimer(timerId, {
+              success: true,
+              workoutLogId: cachedEntry.workoutLogId,
+              source: 'cache_hit'
+            });
+
+            return cachedEntry.workoutLogId;
+          } else {
+            // Cache validation failed - cleanup
+            if (logOperations) {
+              logWarn(OperationType.CREATE, 'Cache validation failed, cleaning up', {
+                workoutLogId: cachedEntry.workoutLogId,
+                reason: validationResult.reason,
+                cacheKey
+              });
+            }
+
+            await cacheManager.cleanup(cacheKey, programLogs, setProgramLogs, {
+              reason: validationResult.reason
+            });
+          }
+        }
+
+        // Step 2: Query database for existing workout log
+        let existingLog = null;
+        try {
+          existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
+          
+          if (existingLog && existingLog.id) {
+            if (logOperations) {
+              logInfo(OperationType.CREATE, 'Workout log found in database', {
+                workoutLogId: existingLog.id,
+                userId,
+                programId,
+                weekIndex,
+                dayIndex
+              });
+            }
+
+            // Update cache with found workout log
+            await cacheManager.set(cacheKey, {
+              workoutLogId: existingLog.id,
+              lastSaved: new Date().toISOString(),
+              isValid: true,
+              exercises: existingLog.workout_log_exercises || [],
+              isWorkoutFinished: existingLog.is_finished || false,
+              metadata: {
+                source: 'database_query',
+                operation: 'ensureWorkoutLogExists'
+              }
+            }, programLogs, setProgramLogs, {
+              source: 'database_found'
+            });
+
+            // End timer with database hit
+            endTimer(timerId, {
+              success: true,
+              workoutLogId: existingLog.id,
+              source: 'database_hit'
+            });
+
+            return existingLog.id;
+          }
+        } catch (dbError) {
+          if (logOperations) {
+            logWarn(OperationType.CREATE, 'Database query failed, will create new workout log', {
+              error: dbError.message,
+              userId,
+              programId,
+              weekIndex,
+              dayIndex
+            });
+          }
+          // Continue to create new workout log
+        }
+
+        // Step 3: Create minimal workout log with default metadata
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Creating minimal workout log', {
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            workoutName: workoutName || `Week ${weekIndex + 1}, Day ${dayIndex + 1}`
+          });
+        }
+
+        const newWorkoutLog = await this.createWorkoutLog(userId, {
+          programId,
+          weekIndex,
+          dayIndex,
+          name: workoutName || `Week ${weekIndex + 1}, Day ${dayIndex + 1}`,
+          isFinished: false,
+          isDraft: true, // Default to draft for new workout logs
+          notes: '',
+          exercises: [] // No exercises initially
+        });
+
+        // Cache the new workout log
+        await cacheManager.set(cacheKey, {
+          workoutLogId: newWorkoutLog.id,
+          lastSaved: new Date().toISOString(),
+          isValid: true,
+          exercises: [],
+          isWorkoutFinished: false,
+          metadata: {
+            source: 'minimal_creation',
+            operation: 'ensureWorkoutLogExists'
+          }
+        }, programLogs, setProgramLogs, {
+          source: 'minimal_create'
+        });
+
+        // End timer with creation
+        const timing = endTimer(timerId, {
+          success: true,
+          workoutLogId: newWorkoutLog.id,
+          source: 'created_new'
+        });
+
+        if (logOperations) {
+          logInfo(OperationType.CREATE, 'Minimal workout log created successfully', {
+            workoutLogId: newWorkoutLog.id,
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            duration: timing?.duration
+          });
+        }
+
+        return newWorkoutLog.id;
+
+      } catch (error) {
+        // End timer with error
+        endTimer(timerId, {
+          success: false,
+          error: error.message,
+          errorType: error.type || 'unknown'
+        });
+
+        logError(OperationType.CREATE, 'Failed to ensure workout log exists', {
+          userId,
+          programId,
+          weekIndex,
+          dayIndex,
+          errorType: error.type || 'unknown',
+          source
+        }, error);
+
+        // Re-throw WorkoutLogError as-is, wrap others
+        if (error instanceof WorkoutLogError) {
+          throw error;
+        }
+
+        throw new WorkoutLogError(
+          WorkoutLogErrorType.DATABASE_ERROR,
+          `Failed to ensure workout log exists: ${error.message}`,
+          {
+            userId,
+            programId,
+            weekIndex,
+            dayIndex,
+            source
+          },
+          error
+        );
+      }
+    }, 'ensureWorkoutLogExists');
+  }
+
+  /**
    * Validate that a workout log ID exists and belongs to the specified user/program/week/day
    */
   async validateWorkoutLogId(workoutLogId, userId, programId, weekIndex, dayIndex) {
