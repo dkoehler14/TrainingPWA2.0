@@ -103,17 +103,17 @@ export const formatWeightDisplay = (set, exerciseType, weightUnit = 'LB') => {
   
   if (exerciseType === 'Bodyweight') {
     const bodyweight = set.bodyweight || set.weight || 0;
-    return bodyweight > 0 ? `${bodyweight} × ${reps}` : `BW × ${reps}`;
+    return bodyweight > 0 ? `${bodyweight} BW × ${reps}` : `BW × ${reps}`;
   } else if (exerciseType === 'Bodyweight Loadable') {
     const bodyweight = set.bodyweight || 0;
     const additionalWeight = set.weight || 0;
     
     if (bodyweight > 0 && additionalWeight > 0) {
-      return `${bodyweight + additionalWeight} × ${reps}`;
+      return `${bodyweight} + ${additionalWeight} × ${reps}`;
     } else if (bodyweight > 0) {
-      return `${bodyweight} × ${reps}`;
+      return `${bodyweight} BW × ${reps}`;
     } else if (additionalWeight > 0) {
-      return `${additionalWeight} × ${reps}`;
+      return `+${additionalWeight} × ${reps}`;
     } else {
       return `BW × ${reps}`;
     }
