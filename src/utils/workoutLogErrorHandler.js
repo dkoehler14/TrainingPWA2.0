@@ -367,6 +367,18 @@ class ErrorClassifier {
    * Determine error type from error object and context
    */
   static determineErrorType(error, context = {}) {
+    // Normalize operation context to a string to avoid calling .includes on non-strings
+    const operationContext = (() => {
+      const candidates = [
+        context.operation,
+        context.operationType,
+        context.saveType,
+        context.source
+      ];
+      // Prefer the first string-like candidate
+      const firstString = candidates.find(v => typeof v === 'string');
+      return (firstString || '').toLowerCase();
+    })();
     // Database constraint violations
     if (error.code === '23505') {
       if (error.message?.includes('unique_user_program_week_day') || 
@@ -416,7 +428,7 @@ class ErrorClassifier {
     }
 
     // Cache-related errors
-    if (context.operation?.includes('cache') || 
+    if (operationContext.includes('cache') || 
         error.message?.includes('cache')) {
       if (error.message?.includes('validation')) {
         return WorkoutLogErrorType.CACHE_VALIDATION_FAILED;
@@ -428,8 +440,8 @@ class ErrorClassifier {
     }
 
     // Exercise-related errors
-    if (context.operation?.includes('exercise') || 
-        context.operation?.includes('upsert')) {
+    if (operationContext.includes('exercise') || 
+        operationContext.includes('upsert')) {
       if (error.message?.includes('validation')) {
         return WorkoutLogErrorType.EXERCISE_VALIDATION_FAILED;
       }

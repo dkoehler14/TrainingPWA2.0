@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Modal, Button, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
-import { getCollectionCached } from '../api/supabaseCacheMigration';
+import { supabase } from '../config/supabase';
 import {
   groupExerciseHistoryBySessions,
   formatWeightDisplay,
@@ -39,21 +39,34 @@ function ExerciseHistoryModal({
 
     setIsLoadingHistory(true);
     try {
-      // Query for all workout logs that contain this exercise
-      const logsData = await getCollectionCached(
-        'workout_logs',
-        {
-          where: [
-            ['user_id', '==', user.id],
-            ['is_finished', '==', true]
-          ],
-          orderBy: [['date', 'desc']],
-          limit: 50
-        },
-        15 * 60 * 1000 // 15 minute cache
-      );
+      // Query for all finished workout logs that contain this exercise
+      // Using Supabase structure with proper joins
+      const { data: logsData, error } = await supabase
+        .from('workout_logs')
+        .select(`
+          *,
+          workout_log_exercises!inner (
+            *,
+            exercises (
+              id,
+              name,
+              primary_muscle_group,
+              exercise_type
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_finished', true)
+        .eq('workout_log_exercises.exercise_id', exerciseId)
+        .order('date', { ascending: false })
+        .limit(50);
 
-      console.log(`Found ${logsData.length} workout logs`);
+      if (error) {
+        console.error('Error fetching exercise history:', error);
+        return;
+      }
+
+      console.log(`Found ${logsData?.length || 0} workout logs with exercise ${exerciseId}`);
 
       const historyData = [];
 
@@ -61,19 +74,19 @@ function ExerciseHistoryModal({
       const currentExercise = exercisesList.find(e => e.id === exerciseId);
       const exerciseType = currentExercise?.exerciseType || '';
 
-      logsData.forEach(log => {
-        // Find the exercise in this log
-        const exerciseInLog = log.exercises.find(ex => ex.exerciseId === exerciseId);
+      logsData?.forEach(log => {
+        // Find the exercise in this log's workout_log_exercises
+        const exerciseInLog = log.workout_log_exercises?.find(ex => ex.exercise_id === exerciseId);
 
-        if (exerciseInLog) {
+        if (exerciseInLog && exerciseInLog.weights && exerciseInLog.reps && exerciseInLog.completed) {
           for (let setIndex = 0; setIndex < exerciseInLog.weights.length; setIndex++) {
             if (Array.isArray(exerciseInLog.completed) && exerciseInLog.completed[setIndex] === true) {
               const weight = exerciseInLog.weights[setIndex];
               const reps = exerciseInLog.reps[setIndex];
               const bodyweight = exerciseInLog.bodyweight;
 
-              const weightValue = weight === '' || weight === null ? 0 : Number(weight);
-              const repsValue = reps === '' || reps === null ? 0 : Number(reps);
+              const weightValue = weight === '' || weight === null || weight === undefined ? 0 : Number(weight);
+              const repsValue = reps === '' || reps === null || reps === undefined ? 0 : Number(reps);
               const bodyweightValue = bodyweight ? Number(bodyweight) : 0;
 
               if (weightValue === 0 && repsValue === 0) continue;
@@ -91,14 +104,16 @@ function ExerciseHistoryModal({
                   displayWeight = `${bodyweightValue} + ${weightValue} = ${totalWeight}`;
                 }
 
+                // Parse date properly - Supabase returns ISO strings
+                const logDate = log.completed_date ? new Date(log.completed_date) : 
+                               log.date ? new Date(log.date) : new Date();
+
                 historyData.push({
-                  date: log.completedDate?.toDate ? log.completedDate.toDate() : 
-                        log.completedDate || 
-                        log.date?.toDate ? log.date.toDate() : log.date,
-                  week: log.weekIndex ? log.weekIndex + 1 : null,
-                  day: log.dayIndex ? log.dayIndex + 1 : null,
-                  workoutName: log.name || (log.weekIndex !== undefined && log.dayIndex !== undefined ? 
-                    `W${log.weekIndex + 1} D${log.dayIndex + 1}` : 'Quick Workout'),
+                  date: logDate,
+                  week: log.week_index !== null && log.week_index !== undefined ? log.week_index + 1 : null,
+                  day: log.day_index !== null && log.day_index !== undefined ? log.day_index + 1 : null,
+                  workoutName: log.name || (log.week_index !== null && log.day_index !== null ? 
+                    `W${log.week_index + 1} D${log.day_index + 1}` : 'Quick Workout'),
                   set: setIndex + 1,
                   weight: weightValue,
                   totalWeight: totalWeight,

@@ -237,6 +237,9 @@ class WorkoutLogService {
       failedRecoveries: 0,
       lastViolation: null
     };
+
+    // Serialize ensure operations by key to avoid duplicate creations during concurrent autosaves
+    this._ensureLocks = new Map();
   }
 
   /**
@@ -1225,7 +1228,12 @@ class WorkoutLogService {
    * @returns {Promise<string>} Workout log ID
    */
   async ensureWorkoutLogExists(userId, programId, weekIndex, dayIndex, options = {}) {
-    return withSupabaseErrorHandling(async () => {
+    const lockKey = `${userId}_${programId}_${weekIndex}_${dayIndex}`;
+    if (this._ensureLocks.has(lockKey)) {
+      return this._ensureLocks.get(lockKey);
+    }
+
+    const promise = withSupabaseErrorHandling(async () => {
       const {
         cacheManager = new WorkoutLogCacheManager(),
         programLogs = {},
@@ -1462,6 +1470,14 @@ class WorkoutLogService {
         );
       }
     }, 'ensureWorkoutLogExists');
+
+    this._ensureLocks.set(lockKey, promise);
+    try {
+      const id = await promise;
+      return id;
+    } finally {
+      this._ensureLocks.delete(lockKey);
+    }
   }
 
   /**

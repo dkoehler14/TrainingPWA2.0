@@ -613,26 +613,34 @@ class SaveStrategyManager {
   async _executeFullSave(workoutData, saveContext, strategy) {
     let result;
 
-    if (saveContext.hasExistingWorkoutLog) {
-      // Update existing workout log
-      result = await this.workoutLogService.saveWorkoutLogCacheFirst(
+    // Resolve or ensure a valid workoutLogId
+    let resolvedWorkoutLogId = saveContext.workoutLogId;
+    if (!resolvedWorkoutLogId || typeof resolvedWorkoutLogId !== 'string') {
+      resolvedWorkoutLogId = await this.workoutLogService.ensureWorkoutLogExists(
         workoutData.userId,
-        workoutData,
-        {
-          useTransaction: strategy.useTransaction,
-          validateCache: strategy.validateCache,
-          source: 'save_strategy_manager',
-          priority: strategy.priority
-        }
+        workoutData.programId,
+        workoutData.weekIndex,
+        workoutData.dayIndex,
+        { source: 'save_strategy_manager_full_save_resolve' }
       );
-    } else {
-      // Create new workout log
-      result = await this.workoutLogService.createWorkoutLogEnhanced(
-        workoutData.userId,
-        workoutData,
+    }
+
+    if (resolvedWorkoutLogId) {
+      // Update existing workout log directly using a valid ID
+      result = await this.workoutLogService.updateWorkoutLogEnhanced(
+        resolvedWorkoutLogId,
         {
-          validateConstraints: true,
-          enableRecovery: true,
+          name: workoutData.metadata?.name,
+          isFinished: !!workoutData.metadata?.isFinished,
+          isDraft: !!workoutData.metadata?.isDraft,
+          duration: workoutData.metadata?.duration || null,
+          notes: workoutData.metadata?.notes || '',
+          completedDate: workoutData.metadata?.completedDate || null,
+          exercises: workoutData.exercises
+        },
+        {
+          validateCache: strategy.validateCache,
+          invalidateCache: true,
           logOperations: this.config.enableDebugLogging
         }
       );

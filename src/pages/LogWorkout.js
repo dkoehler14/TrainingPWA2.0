@@ -218,6 +218,10 @@ function LogWorkout() {
       fallbackToFullSave: true
     });
   }
+
+  // Add save lock to prevent multiple simultaneous saves for the same workout session
+  const saveLockRef = useRef(null);
+
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
   const [isWorkoutFinished, setIsWorkoutFinished] = useState(false);
@@ -819,10 +823,26 @@ function LogWorkout() {
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData, previousData = null) => {
       if (!userData || !programData || exerciseData.length === 0) return;
 
+      // Create unique lock key for this workout session
+      const lockKey = `${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
+      
+      // Check if a save is already in progress for this session
+      if (saveLockRef.current === lockKey) {
+        console.log('🔄 SAVE LOCKED: Another save already in progress for this session, skipping', {
+          lockKey,
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
       // Mark as having unsaved changes
       markUnsaved();
 
       try {
+        // Set the save lock
+        saveLockRef.current = lockKey;
+        console.log('🔒 SAVE LOCK ACQUIRED:', { lockKey, timestamp: new Date().toISOString() });
+
         // Execute save operation with error handling
         const result = await executeSave(async () => {
           // Transform exercise data to Supabase format
@@ -942,6 +962,10 @@ function LogWorkout() {
         });
 
         throw error;
+      } finally {
+        // Release the save lock
+        saveLockRef.current = null;
+        console.log('🔓 SAVE LOCK RELEASED:', { timestamp: new Date().toISOString() });
       }
     }, 1500), // Debounce timing managed by SaveStrategyManager
     [executeSave, markUnsaved, addError, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger]
@@ -955,7 +979,23 @@ function LogWorkout() {
     // Execute the save immediately
     if (!userData || !programData || exerciseData.length === 0) return;
 
+    // Create unique lock key for this workout session
+    const lockKey = `${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
+    
+    // Check if a save is already in progress for this session
+    if (saveLockRef.current === lockKey) {
+      console.log('🔄 IMMEDIATE SAVE LOCKED: Another save already in progress for this session, skipping', {
+        lockKey,
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
     try {
+      // Set the save lock
+      saveLockRef.current = lockKey;
+      console.log('🔒 IMMEDIATE SAVE LOCK ACQUIRED:', { lockKey, timestamp: new Date().toISOString() });
+
       // Execute save operation with error handling
       const result = await executeSave(async () => {
         // Transform exercise data to Supabase format
@@ -1076,6 +1116,10 @@ function LogWorkout() {
       });
 
       throw error;
+    } finally {
+      // Release the save lock
+      saveLockRef.current = null;
+      console.log('🔓 IMMEDIATE SAVE LOCK RELEASED:', { timestamp: new Date().toISOString() });
     }
   }, [debouncedSaveLog, executeSave, addError, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger, isWorkoutFinished]);
 

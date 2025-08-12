@@ -27,7 +27,7 @@ ADD CONSTRAINT check_workout_log_exercise_bodyweight_positive CHECK (bodyweight 
 ADD CONSTRAINT check_workout_log_exercise_order_index_non_negative CHECK (order_index >= 0),
 ADD CONSTRAINT check_workout_log_exercise_original_index_valid CHECK (original_index >= -1),
 ADD CONSTRAINT check_workout_log_exercise_added_type_valid CHECK (
-    added_type IS NULL OR added_type IN ('superset', 'dropset', 'custom', 'replacement')
+    added_type IS NULL OR added_type IN ('superset', 'dropset', 'custom', 'replacement', 'temporary', 'permanent')
 );
 
 -- Add check constraints for user_analytics table

@@ -201,19 +201,44 @@ export const transformSupabaseExercises = (exercises) => {
  * @returns {Array} Transformed exercises for Supabase
  */
 export const transformExercisesToSupabaseFormat = (exerciseData) => {
-  return exerciseData.map(ex => ({
-    exerciseId: ex.exerciseId,
-    sets: Number(ex.sets),
-    reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
-    weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
-    completed: ex.completed,
-    notes: ex.notes || '',
-    bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
-    // Include added exercise metadata
-    isAdded: ex.isAdded || false,
-    addedType: ex.addedType || null,
-    originalIndex: ex.originalIndex || -1
-  }));
+  return exerciseData.map(ex => {
+    // Map client-side addedType values to database-valid values
+    let mappedAddedType = null;
+    if (ex.addedType) {
+      switch (ex.addedType) {
+        case 'temporary':
+        case 'permanent':
+        case 'superset':
+        case 'dropset':
+        case 'replacement':
+          mappedAddedType = ex.addedType; // These are already valid
+          break;
+        default:
+          mappedAddedType = 'custom'; // Default fallback
+      }
+    }
+
+    const base = {
+      // Preserve DB identity if present to enable true upserts
+      id: ex.id || null,
+      exerciseId: ex.exerciseId,
+      sets: Number(ex.sets),
+      reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
+      weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
+      completed: ex.completed,
+      notes: ex.notes || '',
+      bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
+      // Include added exercise metadata with mapped values
+      isAdded: ex.isAdded || false,
+      addedType: mappedAddedType,
+      originalIndex: ex.originalIndex || -1
+    };
+    // Only include orderIndex if it's a finite number; otherwise omit so downstream defaults apply
+    if (typeof ex.orderIndex === 'number' && isFinite(ex.orderIndex)) {
+      base.orderIndex = ex.orderIndex;
+    }
+    return base;
+  });
 };
 
 /**
@@ -227,19 +252,41 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
   workoutLogs.forEach(log => {
     const key = `${log.week_index}_${log.day_index}`;
     logsMap[key] = {
-      exercises: log.workout_log_exercises.map(ex => ({
-        exerciseId: ex.exercise_id,
-        sets: ex.sets,
-        reps: ex.reps ? ex.reps.map(rep => rep === null ? '' : rep) : Array(ex.sets).fill(''),
-        weights: ex.weights ? ex.weights.map(weight => weight === null ? '' : weight) : Array(ex.sets).fill(''),
-        completed: ex.completed || Array(ex.sets).fill(false),
-        notes: ex.notes || '',
-        bodyweight: ex.bodyweight || '',
-        // Preserve added exercise metadata
-        isAdded: ex.is_added || false,
-        addedType: ex.added_type || null,
-        originalIndex: ex.original_index || -1
-      })),
+      exercises: log.workout_log_exercises.map(ex => {
+        // Map database added_type values back to client-side values
+        let mappedAddedType = null;
+        if (ex.added_type) {
+          switch (ex.added_type) {
+            case 'custom':
+              // For now, we'll map 'custom' back to 'temporary' since we can't distinguish
+              // between temporary and permanent from the database value alone
+              // In the future, we could add a separate field to track this distinction
+              mappedAddedType = 'temporary';
+              break;
+            case 'superset':
+            case 'dropset':
+            case 'replacement':
+              mappedAddedType = ex.added_type;
+              break;
+            default:
+              mappedAddedType = null;
+          }
+        }
+
+        return {
+          exerciseId: ex.exercise_id,
+          sets: ex.sets,
+          reps: ex.reps ? ex.reps.map(rep => rep === null ? '' : rep) : Array(ex.sets).fill(''),
+          weights: ex.weights ? ex.weights.map(weight => weight === null ? '' : weight) : Array(ex.sets).fill(''),
+          completed: ex.completed || Array(ex.sets).fill(false),
+          notes: ex.notes || '',
+          bodyweight: ex.bodyweight || '',
+          // Preserve added exercise metadata with mapped values
+          isAdded: ex.is_added || false,
+          addedType: mappedAddedType,
+          originalIndex: ex.original_index || -1
+        };
+      }),
       isWorkoutFinished: log.is_finished || false,
       workoutLogId: log.id, // Add the missing workoutLogId
       lastSaved: log.updated_at || new Date().toISOString() // Add lastSaved timestamp
