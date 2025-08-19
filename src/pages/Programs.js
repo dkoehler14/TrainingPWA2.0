@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Alert, Collapse } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
-import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil, Broadcast, GraphUp } from 'react-bootstrap-icons';
+import { Trash, Star, Copy, FileText, Clock, Check, PlusCircle, Pencil, Broadcast, GraphUp, ChevronDown, ChevronUp } from 'react-bootstrap-icons';
 import '../styles/Programs.css';
 import { getUserPrograms, getProgramById, setCurrentProgram, deleteProgram, copyProgram, getProgramStatistics } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
@@ -30,6 +30,7 @@ function Programs({ userRole }) {
   const [forceUpdate, setForceUpdate] = useState(false);
   const chartContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
+  const [expandedDays, setExpandedDays] = useState({});
   
   // Error handling states
   const [error, setError] = useState(null);
@@ -1402,82 +1403,100 @@ function Programs({ userRole }) {
                     {selectedProgram.weeklyConfigs[currentWeekIndex].map((day, dayIndex) => {
                       const weekKey = `week${currentWeekIndex + 1}_day${dayIndex + 1}`;
                       const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+                      const dayKey = `overview_${currentWeekIndex}_${dayIndex}`;
+                      const isExpanded = expandedDays[dayKey] ?? false;
+
+                      const toggleDayExpanded = () => {
+                        setExpandedDays(prev => ({ ...prev, [dayKey]: !(prev[dayKey] ?? false) }));
+                        // ensure chart resizes when toggling
+                        setTimeout(() => handleChartResize(), 150);
+                      };
 
                       return (
                         <div key={dayIndex} className="col-md-6 mb-3">
                           <div className={`card h-100 ${isWorkoutFinished ? 'border-success' : ''}`}>
-                            <div className={`card-header d-flex justify-content-between align-items-center ${isWorkoutFinished ? 'bg-success text-white' : ''}`}>
+                            <button
+                              type="button"
+                              className={`card-header d-flex justify-content-between align-items-center w-100 text-start ${isWorkoutFinished ? 'bg-success text-white' : ''}`}
+                              onClick={toggleDayExpanded}
+                              aria-expanded={isExpanded}
+                              aria-controls={`overview-day-body-${dayKey}`}
+                              style={{ border: 'none', background: 'inherit' }}
+                            >
                               <h6 className="mb-0">Day {dayIndex + 1}</h6>
-                              {isWorkoutFinished ? (
-                                <span className="badge bg-white text-success">Completed</span>
-                              ) : (
-                                <span className="badge bg-secondary">Pending</span>
-                              )}
-                            </div>
-                            <div className="card-body">
-                              {day.exercises.map((ex, exIndex) => {
-                                const exerciseName = getExerciseName(ex.exerciseId);
-                                const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
-                                const exercise = exercises.find(e => e.id === ex.exerciseId);
-                                const exerciseType = exercise?.exercise_type || '';
+                              <div className="d-flex align-items-center gap-2">
+                                {isWorkoutFinished ? (
+                                  <span className="badge bg-white text-success">Completed</span>
+                                ) : (
+                                  <span className="badge bg-secondary">Pending</span>
+                                )}
+                                {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                              </div>
+                            </button>
+                            <Collapse in={isExpanded}>
+                              <div id={`overview-day-body-${dayKey}`} className="card-body">
+                                {day.exercises.map((ex, exIndex) => {
+                                  const exerciseName = getExerciseName(ex.exerciseId);
+                                  const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+                                  const exercise = exercises.find(e => e.id === ex.exerciseId);
+                                  const exerciseType = exercise?.exercise_type || '';
 
-                                return (
-                                  <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
-                                    <div className="d-flex justify-content-between align-items-center">
-                                      <div>
-                                        <strong>{exerciseName}</strong>
-                                        {exerciseType && (
-                                          <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                            {exerciseType}
-                                          </span>
-                                        )}
-                                        <div className="text-muted small">
-                                          Target: {ex.sets} sets × {ex.reps} reps
+                                  return (
+                                    <div key={exIndex} className="exercise-item p-2 mb-2 bg-light rounded">
+                                      <div className="d-flex justify-content-between align-items-center">
+                                        <div>
+                                          <strong>{exerciseName}</strong>
+                                          {exerciseType && (
+                                            <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                              {exerciseType}
+                                            </span>
+                                          )}
+                                          <div className="text-muted small">
+                                            Target: {ex.sets} sets × {ex.reps} reps
+                                          </div>
                                         </div>
                                       </div>
+
+                                      {exerciseLog && (
+                                        <div className="mt-2 exercise-log-details">
+                                          <div className="sets-completed">
+                                            {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => {
+                                              const weightValue = exerciseLog.weights?.[setIndex] || 0;
+                                              const repsValue = exerciseLog.reps?.[setIndex] || 0;
+                                              const bodyweightValue = exerciseLog.bodyweight ? parseFloat(exerciseLog.bodyweight) : 0;
+
+                                              let displayWeight = weightValue;
+                                              let weightLabel = 'Weight';
+
+                                              if (exerciseType === 'Bodyweight') {
+                                                displayWeight = bodyweightValue;
+                                                weightLabel = 'Bodyweight';
+                                              } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
+                                                displayWeight = bodyweightValue + weightValue;
+                                                weightLabel = 'Total Weight';
+                                              }
+
+                                              return (
+                                                <div key={setIndex} className="set-data d-flex justify-content-between p-1 border-bottom">
+                                                  <span>Set {setIndex + 1}:</span>
+                                                  <span>
+                                                    <strong>{repsValue || '-'}</strong> reps @
+                                                    <strong> {displayWeight || '-'}</strong> {selectedProgram.weight_unit}
+                                                    {exerciseLog.completed?.[setIndex] && (
+                                                      <Check className="text-success ms-1" size={14} />
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-
-                                    {/* Display logs if completed */}
-                                    {exerciseLog && (
-                                      <div className="mt-2 exercise-log-details">
-                                        <div className="sets-completed">
-                                          {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => {
-                                            const weightValue = exerciseLog.weights?.[setIndex] || 0;
-                                            const repsValue = exerciseLog.reps?.[setIndex] || 0;
-                                            const bodyweightValue = exerciseLog.bodyweight ? parseFloat(exerciseLog.bodyweight) : 0;
-
-                                            let displayWeight = weightValue;
-                                            let weightLabel = 'Weight';
-
-                                            // Calculate display weight based on exercise type
-                                            if (exerciseType === 'Bodyweight') {
-                                              displayWeight = bodyweightValue;
-                                              weightLabel = 'Bodyweight';
-                                            } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
-                                              displayWeight = bodyweightValue + weightValue;
-                                              weightLabel = 'Total Weight';
-                                            }
-
-                                            return (
-                                              <div key={setIndex} className="set-data d-flex justify-content-between p-1 border-bottom">
-                                                <span>Set {setIndex + 1}:</span>
-                                                <span>
-                                                  <strong>{repsValue || '-'}</strong> reps @
-                                                  <strong> {displayWeight || '-'}</strong> {selectedProgram.weight_unit}
-                                                  {exerciseLog.completed?.[setIndex] &&
-                                                    <Check className="text-success ms-1" size={14} />
-                                                  }
-                                                </span>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
+                            </Collapse>
                           </div>
                         </div>
                       );
@@ -1847,101 +1866,118 @@ function Programs({ userRole }) {
                         {week.map((day, dayIndex) => {
                           const weekKey = `week${weekIndex + 1}_day${dayIndex + 1}`;
                           const isWorkoutFinished = workoutLogs[weekKey]?.isWorkoutFinished;
+                          const dayKey = `logs_${weekIndex}_${dayIndex}`;
+                          const isExpanded = expandedDays[dayKey] ?? false;
+                          const toggleDayExpanded = () => {
+                            setExpandedDays(prev => ({ ...prev, [dayKey]: !(prev[dayKey] ?? false) }));
+                          };
 
                           return (
                             <div key={dayIndex} className="card mb-3">
-                              <div className={`card-header d-flex justify-content-between align-items-center ${isWorkoutFinished ? 'bg-success text-white' : ''}`}>
+                              <button
+                                type="button"
+                                className={`card-header d-flex justify-content-between align-items-center w-100 text-start ${isWorkoutFinished ? 'bg-success text-white' : ''}`}
+                                onClick={toggleDayExpanded}
+                                aria-expanded={isExpanded}
+                                aria-controls={`logs-day-body-${dayKey}`}
+                                style={{ border: 'none', background: 'inherit' }}
+                              >
                                 <h6 className="mb-0">Day {dayIndex + 1}</h6>
-                                {isWorkoutFinished ? (
-                                  <span className="badge bg-white text-success">Completed</span>
-                                ) : (
-                                  <span className="badge bg-secondary">Pending</span>
-                                )}
-                              </div>
-                              <div className="card-body">
-                                {day.exercises.map((ex, exIndex) => {
-                                  const exerciseName = getExerciseName(ex.exerciseId);
-                                  const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
-                                  const exercise = exercises.find(e => e.id === ex.exerciseId);
-                                  const exerciseType = exercise?.exercise_type || '';
+                                <div className="d-flex align-items-center gap-2">
+                                  {isWorkoutFinished ? (
+                                    <span className="badge bg-white text-success">Completed</span>
+                                  ) : (
+                                    <span className="badge bg-secondary">Pending</span>
+                                  )}
+                                  {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                                </div>
+                              </button>
+                              <Collapse in={isExpanded}>
+                                <div id={`logs-day-body-${dayKey}`} className="card-body">
+                                  {day.exercises.map((ex, exIndex) => {
+                                    const exerciseName = getExerciseName(ex.exerciseId);
+                                    const exerciseLog = workoutLogs[weekKey]?.exercises?.[ex.exerciseId];
+                                    const exercise = exercises.find(e => e.id === ex.exerciseId);
+                                    const exerciseType = exercise?.exercise_type || '';
 
-                                  const getWeightLabel = () => {
-                                    if (exerciseType === 'Bodyweight') return 'Bodyweight';
-                                    if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
-                                    return 'Weight';
-                                  };
+                                    const getWeightLabel = () => {
+                                      if (exerciseType === 'Bodyweight') return 'Bodyweight';
+                                      if (exerciseType === 'Bodyweight Loadable') return 'Total Weight';
+                                      return 'Weight';
+                                    };
 
-                                  return (
-                                    <div key={exIndex} className="exercise-log p-3 mb-3 bg-light rounded">
-                                      <div className="d-flex justify-content-between align-items-center mb-2">
-                                        <h6 className="mb-0">
-                                          {exerciseName}
-                                          {exerciseType && (
-                                            <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
-                                              {exerciseType}
+                                    return (
+                                      <div key={exIndex} className="exercise-log p-3 mb-3 bg-light rounded">
+                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                          <h6 className="mb-0">
+                                            {exerciseName}
+                                            {exerciseType && (
+                                              <span className="ms-2 badge bg-info text-dark" style={{ fontSize: '0.75em', padding: '0.25em 0.5em' }}>
+                                                {exerciseType}
+                                              </span>
+                                            )}
+                                          </h6>
+                                          <div>
+                                            <span className="badge bg-primary me-2">
+                                              Target: {ex.sets} × {ex.reps}
                                             </span>
-                                          )}
-                                        </h6>
-                                        <div>
-                                          <span className="badge bg-primary me-2">
-                                            Target: {ex.sets} × {ex.reps}
-                                          </span>
+                                          </div>
                                         </div>
+
+                                        {exerciseLog ? (
+                                          <div className="table-responsive">
+                                            <table className="table table-sm">
+                                              <thead>
+                                                <tr>
+                                                  <th style={{ width: '80px' }}>Set</th>
+                                                  <th>Reps</th>
+                                                  <th>{getWeightLabel()} ({selectedProgram.weight_unit})</th>
+                                                  <th style={{ width: '80px' }}>Status</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => {
+                                                  const weightValue = exerciseLog.weights?.[setIndex] || 0;
+                                                  const repsValue = exerciseLog.reps?.[setIndex] || 0;
+                                                  const bodyweightValue = exerciseLog.bodyweight ? parseFloat(exerciseLog.bodyweight) : 0;
+
+                                                  let displayWeight = weightValue;
+
+                                                  // Calculate display weight based on exercise type
+                                                  if (exerciseType === 'Bodyweight') {
+                                                    displayWeight = bodyweightValue;
+                                                  } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
+                                                    displayWeight = bodyweightValue + weightValue;
+                                                  }
+
+                                                  return (
+                                                    <tr key={setIndex}>
+                                                      <td>{setIndex + 1}</td>
+                                                      <td>{repsValue || '-'}</td>
+                                                      <td>{displayWeight || '-'}</td>
+                                                      <td>
+                                                        {exerciseLog.completed?.[setIndex] ? (
+                                                          <Check className="text-success" />
+                                                        ) : (
+                                                          <span className="text-muted">-</span>
+                                                        )}
+                                                      </td>
+                                                    </tr>
+                                                  );
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        ) : (
+                                          <div className="text-center py-2">
+                                            <p className="text-muted mb-0">No data recorded</p>
+                                          </div>
+                                        )}
                                       </div>
-
-                                      {exerciseLog ? (
-                                        <div className="table-responsive">
-                                          <table className="table table-sm">
-                                            <thead>
-                                              <tr>
-                                                <th style={{ width: '80px' }}>Set</th>
-                                                <th>Reps</th>
-                                                <th>{getWeightLabel()} ({selectedProgram.weight_unit})</th>
-                                                <th style={{ width: '80px' }}>Status</th>
-                                              </tr>
-                                            </thead>
-                                            <tbody>
-                                              {Array.from({ length: exerciseLog.sets || 0 }).map((_, setIndex) => {
-                                                const weightValue = exerciseLog.weights?.[setIndex] || 0;
-                                                const repsValue = exerciseLog.reps?.[setIndex] || 0;
-                                                const bodyweightValue = exerciseLog.bodyweight ? parseFloat(exerciseLog.bodyweight) : 0;
-
-                                                let displayWeight = weightValue;
-
-                                                // Calculate display weight based on exercise type
-                                                if (exerciseType === 'Bodyweight') {
-                                                  displayWeight = bodyweightValue;
-                                                } else if (exerciseType === 'Bodyweight Loadable' && bodyweightValue > 0) {
-                                                  displayWeight = bodyweightValue + weightValue;
-                                                }
-
-                                                return (
-                                                  <tr key={setIndex}>
-                                                    <td>{setIndex + 1}</td>
-                                                    <td>{repsValue || '-'}</td>
-                                                    <td>{displayWeight || '-'}</td>
-                                                    <td>
-                                                      {exerciseLog.completed?.[setIndex] ? (
-                                                        <Check className="text-success" />
-                                                      ) : (
-                                                        <span className="text-muted">-</span>
-                                                      )}
-                                                    </td>
-                                                  </tr>
-                                                );
-                                              })}
-                                            </tbody>
-                                          </table>
-                                        </div>
-                                      ) : (
-                                        <div className="text-center py-2">
-                                          <p className="text-muted mb-0">No data recorded</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                                    );
+                                  })}
+                                </div>
+                              </Collapse>
                             </div>
                           );
                         })}
