@@ -635,7 +635,7 @@ export const performSupabaseHealthCheck = async () => {
     return healthResults;
   }
 
-  const services = ['database', 'auth', 'realtime', 'storage'];
+  const services = ['database', 'auth', 'storage'];
   
   for (const service of services) {
     const isAvailable = await checkSupabaseServiceAvailability(service);
@@ -722,7 +722,7 @@ export const initializeDevelopmentErrorHandling = () => {
   // Periodic service health check
   if (shouldUseSupabase()) {
     setInterval(async () => {
-      const services = ['database', 'auth', 'realtime', 'storage'];
+      const services = ['database', 'auth', 'storage'];
       for (const service of services) {
         const isAvailable = await checkSupabaseServiceAvailability(service);
         updateServiceStatus(service, isAvailable);

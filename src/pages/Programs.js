@@ -924,7 +924,7 @@ function Programs({ userRole }) {
             <div className="flex-grow-1">
               <Card.Title className="d-flex align-items-center">
                 {program.name}
-                {program.hasError && (
+                {/* {program.hasError && (
                   <Badge bg="warning" className="ms-2" title={program.errorMessage}>
                     ⚠️ Issue
                   </Badge>
@@ -933,14 +933,14 @@ function Programs({ userRole }) {
                   <Badge bg="secondary" className="ms-2" title={program.warningMessage}>
                     ⚠️ Warning
                   </Badge>
-                )}
+                )} */}
               </Card.Title>
               <Card.Subtitle className="text-muted mb-2">
                 {program.duration} weeks | {program.days_per_week} days/week
               </Card.Subtitle>
               
               {/* Show error/warning messages */}
-              {program.hasError && (
+              {/* {program.hasError && (
                 <Alert variant="warning" className="mb-2 py-2">
                   <small>
                     <strong>Issue:</strong> {program.errorMessage}
@@ -949,15 +949,15 @@ function Programs({ userRole }) {
                     )}
                   </small>
                 </Alert>
-              )}
+              )} */}
               
-              {program.hasWarning && !program.hasError && (
+              {/* {program.hasWarning && !program.hasError && (
                 <Alert variant="info" className="mb-2 py-2">
                   <small>
                     <strong>Note:</strong> {program.warningMessage}
                   </small>
                 </Alert>
-              )}
+              )} */}
             </div>
             {program.is_current && !isTemplate && (
               <Star className="text-warning" size={24} />
@@ -2298,9 +2298,9 @@ function Programs({ userRole }) {
                     {userPrograms.length > 0 && (
                       <>
                         <div className="mb-3">
-                          <h2 className="soft-subtitle section-title mb-3">Your Programs</h2>
+                          {/* <h2 className="soft-subtitle section-title mb-3">Your Programs</h2> */}
                           {/* Show summary of program issues if any */}
-                          {(() => {
+                          {/* {(() => {
                             const programsWithErrors = userPrograms.filter(p => p.hasError);
                             const programsWithWarnings = userPrograms.filter(p => p.hasWarning && !p.hasError);
                             
@@ -2325,7 +2325,7 @@ function Programs({ userRole }) {
                               );
                             }
                             return null;
-                          })()}
+                          })()} */}
                         </div>
                         {userPrograms.map(program => renderProgramCard(program))}
                       </>

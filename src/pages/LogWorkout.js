@@ -2590,12 +2590,12 @@ function LogWorkout() {
           <div className="soft-card shadow border-0">
             <div className="d-flex justify-content-between align-items-center mb-3">
               <h1 className="soft-title mb-0">Log Workout</h1>
-              <WorkoutRealtimeIndicator
+              {/* <WorkoutRealtimeIndicator
                 realtimeHook={realtimeHook}
                 showProgress={true}
                 showPresence={true}
                 className="ms-auto"
-              />
+              /> */}
             </div>
 
             {/* Enhanced User Message Display */}
