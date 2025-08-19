@@ -92,7 +92,7 @@ const ExerciseGrid = ({
     const hasActiveFilters = searchTerm || typeFilter || muscleFilter || sourceFilter !== 'all';
 
     return (
-        <div className={className}>
+        <div className={`exercise-grid ${className || ''}`}>
             {/* Search Bar */}
             <Form.Control
                 type="text"

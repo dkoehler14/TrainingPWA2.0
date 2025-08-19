@@ -1,65 +1,65 @@
-.exercises-edit-button {
+.exercise-grid .exercises-edit-button {
     margin-bottom: 0px !important;
     padding: 0 .25rem !important;
     border: 0 !important;
 }
 
 /* Exercise card visual distinctions */
-.exercise-card {
+.exercise-grid .exercise-card {
     transition: all 0.3s ease;
     border-radius: 12px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.exercise-card:hover {
+.exercise-grid .exercise-card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transform: translateY(-2px);
 }
 
-.exercise-card-global {
+.exercise-grid .exercise-card-global {
     border-left: 4px solid var(--primary-color, #007bff) !important;
     background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
 }
 
-.exercise-card-custom {
+.exercise-grid .exercise-card-custom {
     border-left: 4px solid var(--success-color, #28a745) !important;
     background: linear-gradient(135deg, #f8f9fa 0%, #f0f8f0 100%);
 }
 
-.exercise-card-global:hover {
+.exercise-grid .exercise-card-global:hover {
     background: linear-gradient(135deg, #e9ecef 0%, #e1e5e9 100%);
     border-left-color: var(--primary-color, #007bff);
 }
 
-.exercise-card-custom:hover {
+.exercise-grid .exercise-card-custom:hover {
     background: linear-gradient(135deg, #e9ecef 0%, #e8f5e8 100%);
     border-left-color: var(--success-color, #28a745);
 }
 
 /* Source icon styling */
-.exercise-card .position-absolute:first-of-type {
+.exercise-grid .exercise-card .position-absolute:first-of-type {
     opacity: 0.8;
     transition: opacity 0.2s ease;
 }
 
-.exercise-card:hover .position-absolute:first-of-type {
+.exercise-grid .exercise-card:hover .position-absolute:first-of-type {
     opacity: 1;
 }
 
 /* Badge spacing adjustments */
-.exercise-card .badge {
+.exercise-grid .exercise-card .badge {
     font-size: 0.75rem;
     padding: 0.25rem 0.5rem;
     border-radius: 6px;
 }
 
 /* Read-only exercise card styling */
-.exercise-card-readonly {
+.exercise-grid .exercise-card-readonly {
     opacity: 0.85;
     position: relative;
 }
 
-.exercise-card-readonly::after {
+.exercise-grid .exercise-card-readonly::after {
     content: '';
     position: absolute;
     top: 0;
@@ -77,47 +77,47 @@
     border-radius: inherit;
 }
 
-.exercise-card-readonly:hover {
+.exercise-grid .exercise-card-readonly:hover {
     opacity: 0.9;
     transform: none;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Phase 2: Enhanced filtering styles */
-.btn-group .btn {
+.exercise-grid .btn-group .btn {
     flex: 1;
     border-radius: 8px !important;
     font-weight: 500;
     transition: all 0.2s ease;
 }
 
-.btn-group .btn:first-child {
+.exercise-grid .btn-group .btn:first-child {
     border-top-right-radius: 0 !important;
     border-bottom-right-radius: 0 !important;
 }
 
-.btn-group .btn:last-child {
+.exercise-grid .btn-group .btn:last-child {
     border-top-left-radius: 0 !important;
     border-bottom-left-radius: 0 !important;
 }
 
-.btn-group .btn:not(:first-child):not(:last-child) {
+.exercise-grid .btn-group .btn:not(:first-child):not(:last-child) {
     border-radius: 0 !important;
 }
 
-.btn-group .btn-primary {
+.exercise-grid .btn-group .btn-primary {
     background: linear-gradient(135deg, var(--primary-color, #007bff) 0%, #0056b3 100%);
     border-color: var(--primary-color, #007bff);
     box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
 }
 
-.btn-group .btn-outline-secondary {
+.exercise-grid .btn-group .btn-outline-secondary {
     background: #f8f9fa;
     border-color: #dee2e6;
     color: #6c757d;
 }
 
-.btn-group .btn-outline-secondary:hover {
+.exercise-grid .btn-group .btn-outline-secondary:hover {
     background: #e9ecef;
     border-color: #adb5bd;
     color: #495057;
@@ -125,97 +125,97 @@
 }
 
 /* Advanced filters toggle */
-.btn-link {
+.exercise-grid .btn-link {
     color: var(--primary-color, #007bff) !important;
     font-size: 0.875rem;
 }
 
-.btn-link:hover {
+.exercise-grid .btn-link:hover {
     color: #0056b3 !important;
     text-decoration: underline !important;
 }
 
 /* Results summary styling */
-.badge {
+.exercise-grid .badge {
     font-size: 0.75rem;
     padding: 0.35rem 0.65rem;
     border-radius: 12px;
     font-weight: 500;
 }
 
-.badge.bg-primary {
+.exercise-grid .badge.bg-primary {
     background: linear-gradient(135deg, var(--primary-color, #007bff) 0%, #0056b3 100%) !important;
 }
 
-.badge.bg-success {
+.exercise-grid .badge.bg-success {
     background: linear-gradient(135deg, var(--success-color, #28a745) 0%, #1e7e34 100%) !important;
 }
 
 /* Clear filters button */
-.btn-outline-secondary.btn-sm {
+.exercise-grid .btn-outline-secondary.btn-sm {
     border-radius: 6px;
     font-weight: 500;
     transition: all 0.2s ease;
 }
 
-.btn-outline-secondary.btn-sm:hover {
+.exercise-grid .btn-outline-secondary.btn-sm:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Filter section headers */
-small.text-muted.fw-bold {
+.exercise-grid small.text-muted.fw-bold {
     letter-spacing: 0.5px;
     font-size: 0.75rem;
 }
 
 /* Enhanced form controls */
-.soft-input:focus {
+.exercise-grid .soft-input:focus {
     border-color: var(--primary-color, #007bff);
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .exercise-card {
+    .exercise-grid .exercise-card {
         margin-bottom: 1rem;
     }
     
-    .exercise-card-global,
-    .exercise-card-custom {
+    .exercise-grid .exercise-card-global,
+    .exercise-grid .exercise-card-custom {
         border-left-width: 3px;
     }
     
-    .btn-group {
+    .exercise-grid .btn-group {
         flex-direction: column;
     }
     
-    .btn-group .btn {
+    .exercise-grid .btn-group .btn {
         border-radius: 8px !important;
         margin-bottom: 0.25rem;
     }
     
-    .btn-group .btn:last-child {
+    .exercise-grid .btn-group .btn:last-child {
         margin-bottom: 0;
     }
     
-    .d-flex.justify-content-between {
+    .exercise-grid .d-flex.justify-content-between {
         flex-direction: column;
         gap: 0.5rem;
     }
     
-    .d-flex.flex-wrap.gap-2 {
+    .exercise-grid .d-flex.flex-wrap.gap-2 {
         justify-content: center;
     }
 }
 
 @media (max-width: 576px) {
-    .btn-group .btn {
+    .exercise-grid .btn-group .btn {
         font-size: 0.875rem;
         padding: 0.5rem 0.75rem;
     }
     
-    .badge {
+    .exercise-grid .badge {
         font-size: 0.7rem;
         padding: 0.25rem 0.5rem;
     }
