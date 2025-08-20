@@ -194,19 +194,19 @@ class DataValidator {
     this.schemas = {
       users: {
         required: ['email'],
-        optional: ['name', 'experienceLevel', 'preferredUnits', 'age', 'weight', 'height', 'goals', 'availableEquipment', 'injuries', 'preferences', 'settings']
+        optional: ['name', 'experienceLevel', 'preferredUnits', 'age', 'weight', 'weightLbs', 'height', 'heightFeet', 'heightInches', 'goals', 'availableEquipment', 'injuries', 'preferences', 'settings']
       },
       exercises: {
         required: ['name', 'primaryMuscleGroup', 'exerciseType'],
         optional: ['instructions', 'isGlobal', 'createdBy']
       },
       programs: {
-        required: ['userId', 'name', 'duration', 'daysPerWeek'],
-        optional: ['description', 'weightUnit', 'difficulty', 'goals', 'equipment', 'isTemplate', 'isCurrent', 'isActive', 'startDate', 'completedWeeks', 'workouts']
+        required: ['createdAt','userId', 'name', 'duration', 'daysPerWeek', 'weeklyConfigs'],
+        optional: ['description', 'weightUnit', 'difficulty', 'goals', 'equipment', 'fromTemplate', 'isTemplate', 'isCurrent', 'isPredefined', 'isActive', 'startDate', 'completedWeeks', 'workouts']
       },
       workoutLogs: {
         required: ['userId', 'date'],
-        optional: ['programId', 'weekIndex', 'dayIndex', 'name', 'type', 'completedDate', 'isWorkoutFinished', 'isDraft', 'weightUnit', 'duration', 'notes', 'exercises']
+        optional: ['programId', 'weekIndex', 'dayIndex', 'name', 'type', 'completedDate', 'isWorkoutFinished', 'isDraft', 'weightUnit', 'duration', 'notes', 'exercises', 'lastModified']
       }
     };
   }

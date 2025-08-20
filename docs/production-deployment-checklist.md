@@ -54,4 +54,4 @@
 - [ ] Incident response procedures are in place
 - [ ] Communication plan is ready
 
-Generated on: 2025-07-28T16:26:39.016Z
+Generated on: 2025-08-20T15:38:53.702Z

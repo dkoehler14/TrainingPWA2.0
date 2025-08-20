@@ -28,15 +28,16 @@ const POSTGRES_SCHEMAS = {
   users: {
     tableName: 'users',
     columns: {
-      id: { type: 'UUID', primaryKey: true, default: 'gen_random_uuid()' },
-      auth_id: { type: 'UUID', unique: true, required: true },
+      id: { type: 'UUID', primaryKey: true },
       email: { type: 'VARCHAR(255)', unique: true, required: true },
       name: { type: 'VARCHAR(255)', required: true },
+      roles: { type: 'TEXT[]', default: "DEFAULT ARRAY['user']" },
       experience_level: { type: 'VARCHAR(50)', default: 'beginner' },
       preferred_units: { type: 'VARCHAR(10)', default: 'LB' },
       age: { type: 'INTEGER' },
-      weight: { type: 'DECIMAL(5,2)' },
-      height: { type: 'DECIMAL(5,2)' },
+      weightLbs: { type: 'DECIMAL(5,2)' },
+      heightFeet: { type: 'INTEGER' },
+      heightInches: { type: 'INTEGER' },
       goals: { type: 'TEXT[]' },
       available_equipment: { type: 'TEXT[]' },
       injuries: { type: 'TEXT[]' },
@@ -108,7 +109,8 @@ const POSTGRES_SCHEMAS = {
       rest_minutes: { type: 'INTEGER' },
       notes: { type: 'TEXT' },
       order_index: { type: 'INTEGER', required: true },
-      created_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
+      created_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' },
+      updated_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
     }
   },
 

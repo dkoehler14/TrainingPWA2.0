@@ -46,8 +46,8 @@ class ProductionValidator {
     const recommendedVars = [
       'REACT_APP_SUPABASE_SERVICE_ROLE_KEY',
       'SENDGRID_API_KEY',
-      'GOOGLE_CLIENT_ID',
-      'GOOGLE_CLIENT_SECRET'
+      'REACT_APP_GOOGLE_CLIENT_ID',
+      'REACT_APP_GOOGLE_CLIENT_SECRET'
     ];
     
     // Check required variables

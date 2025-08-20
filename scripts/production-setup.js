@@ -11,6 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+require('dotenv').config({ path: '.env.production.local' })
+
 // ANSI color codes for console output
 const colors = {
   reset: '\x1b[0m',
@@ -60,14 +62,9 @@ class ProductionSetup {
     ];
 
     const optionalEnvVars = [
-      'SENDGRID_API_KEY',
-      'GOOGLE_CLIENT_ID',
-      'GOOGLE_CLIENT_SECRET',
-      'HCAPTCHA_SECRET_KEY',
-      'S3_HOST',
-      'S3_REGION',
-      'S3_ACCESS_KEY',
-      'S3_SECRET_KEY'
+      'REACT_APP_GOOGLE_CLIENT_ID',
+      'REACT_APP_GOOGLE_CLIENT_SECRET',
+      'REACT_APP_HCAPTCHA_SECRET_KEY',
     ];
 
     // Check required variables
