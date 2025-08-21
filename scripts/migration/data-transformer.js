@@ -41,7 +41,7 @@ const POSTGRES_SCHEMAS = {
       goals: { type: 'TEXT[]' },
       available_equipment: { type: 'TEXT[]' },
       injuries: { type: 'TEXT[]' },
-      preferences: { type: 'JSONB' },
+      preferences: { type: 'JSONB', default: '{}' },
       settings: { type: 'JSONB', default: '{}' },
       created_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' },
       updated_at: { type: 'TIMESTAMP WITH TIME ZONE', default: 'NOW()' }
@@ -105,7 +105,7 @@ const POSTGRES_SCHEMAS = {
       workout_id: { type: 'UUID', required: true, references: 'program_workouts(id)', onDelete: 'CASCADE' },
       exercise_id: { type: 'UUID', required: true, references: 'exercises(id)' },
       sets: { type: 'INTEGER', required: true },
-      reps: { type: 'INTEGER' },
+      reps: { type: 'VARCHAR(50)' },
       rest_minutes: { type: 'INTEGER' },
       notes: { type: 'TEXT' },
       order_index: { type: 'INTEGER', required: true },
@@ -192,7 +192,12 @@ class DataTransformer {
       failedTransformations: 0,
       cleaningOperations: 0,
       validationErrors: 0,
-      relationshipsMapped: 0
+      relationshipsMapped: 0,
+      programsTransformed: 0,
+      workoutsTransformed: 0,
+      exercisesTransformed: 0,
+      workoutLogsTransformed: 0,
+      workoutLogExercisesTransformed: 0
     };
     
     this.idMappings = {
@@ -202,6 +207,7 @@ class DataTransformer {
       program_workouts: new Map()
     };
     
+    this.duplicateWorkoutTracker = new Map();
     this.errors = [];
     this.warnings = [];
   }
@@ -220,27 +226,98 @@ class DataTransformer {
       'users',
       'exercises', 
       'programs',
-      'program_workouts',
-      'program_exercises',
-      'workout_logs',
-      'workout_log_exercises',
+      'workoutLogs',
       'user_analytics'
     ];
     
-    const transformedData = {};
+    const transformedData = {
+      users: [],
+      exercises: [],
+      programs: [],
+      program_workouts: [],
+      program_exercises: [],
+      workout_logs: [],
+      workout_log_exercises: [],
+      user_analytics: []
+    };
     
     for (const collection of transformationOrder) {
       if (sourceData[collection] && sourceData[collection].length > 0) {
         console.log(`\n📋 Transforming ${collection}...`);
-        transformedData[collection] = await this.transformCollection(
+        const results = await this.transformCollection(
           collection, 
           sourceData[collection]
         );
+        
+        // Process complex objects and separate into appropriate tables
+        if (collection === 'programs') {
+          for (const result of results) {
+            if (result.program) {
+              // This is a complex program object
+              transformedData.programs.push(result.program);
+              this.stats.programsTransformed++;
+              
+              if (result.workouts) {
+                transformedData.program_workouts.push(...result.workouts);
+                this.stats.workoutsTransformed += result.workouts.length;
+              }
+              if (result.exercises) {
+                transformedData.program_exercises.push(...result.exercises);
+                this.stats.exercisesTransformed += result.exercises.length;
+              }
+            } else {
+              // This is a simple program object
+              transformedData.programs.push(result);
+              this.stats.programsTransformed++;
+            }
+          }
+        } else if (collection === 'workoutLogs') {
+          for (const result of results) {
+            if (result.workout_log) {
+              // This is a complex workout log object
+              transformedData.workout_logs.push(result.workout_log);
+              this.stats.workoutLogsTransformed++;
+              
+              if (result.exercises) {
+                transformedData.workout_log_exercises.push(...result.exercises);
+                this.stats.workoutLogExercisesTransformed += result.exercises.length;
+              }
+            } else {
+              // This is a simple workout log object
+              transformedData.workout_logs.push(result);
+              this.stats.workoutLogsTransformed++;
+            }
+          }
+        } else if (collection === 'exercises_metadata') {
+          // exercises_metadata returns an array of exercises
+          transformedData.exercises.push(...results);
+          this.stats.exercisesTransformed += results.length;
+        } else {
+          // Simple collections can be added directly
+          transformedData[collection].push(...results);
+        }
       }
     }
     
     // Save transformed data
     await this.saveTransformedData(transformedData);
+    
+    // Print transformation summary
+    console.log('\n📊 Final Transformation Summary:');
+    console.log(`Users: ${transformedData.users.length}`);
+    console.log(`Exercises: ${transformedData.exercises.length}`);
+    console.log(`Programs: ${transformedData.programs.length}`);
+    console.log(`Program Workouts: ${transformedData.program_workouts.length}`);
+    console.log(`Program Exercises: ${transformedData.program_exercises.length}`);
+    console.log(`Workout Logs: ${transformedData.workout_logs.length}`);
+    console.log(`Workout Log Exercises: ${transformedData.workout_log_exercises.length}`);
+    console.log(`User Analytics: ${transformedData.user_analytics.length}`);
+    
+    // Validate transformed data if enabled
+    if (this.options.validateOutput) {
+      await this.validateTransformedData(transformedData);
+      this.validateDataIntegrity(transformedData);
+    }
     
     // Generate transformation report
     await this.generateReport();
@@ -291,10 +368,20 @@ class DataTransformer {
       
       for (const doc of batch) {
         try {
+          // Validate document structure
+          if (!doc || typeof doc !== 'object') {
+            this.warnings.push(`Skipping malformed document in ${collectionName}: ${JSON.stringify(doc)}`);
+            continue;
+          }
+          
           const transformed = await this.transformDocument(collectionName, doc);
           if (transformed) {
             if (Array.isArray(transformed)) {
               batchResults.push(...transformed);
+            } else if (transformed.program || transformed.workout_log) {
+              // Handle complex objects that contain multiple table records
+              // These will be processed separately in the main transform method
+              batchResults.push(transformed);
             } else {
               batchResults.push(transformed);
             }
@@ -304,13 +391,13 @@ class DataTransformer {
           this.stats.failedTransformations++;
           this.errors.push({
             collection: collectionName,
-            documentId: doc.id,
+            documentId: doc && doc.id ? doc.id : 'unknown',
             error: error.message,
             timestamp: new Date().toISOString()
           });
           
           if (this.options.verbose) {
-            console.error(`   ❌ Failed to transform ${doc.id}: ${error.message}`);
+            console.error(`   ❌ Failed to transform ${doc && doc.id ? doc.id : 'unknown'}: ${error.message}`);
           }
         }
       }
@@ -349,13 +436,13 @@ class DataTransformer {
       id: user.id,
       email: this.cleanEmail(user.email),
       name: this.cleanString(user.name) || 'Unknown User',
-      roles: this.cleanArray(user.role),
+      roles: this.normalizeRoles(user.role),
       experience_level: this.mapExperienceLevel(user.experienceLevel),
       preferred_units: this.mapUnits(user.preferredUnits),
       age: this.cleanNumber(user.age),
-      weightLbs: this.cleanNumber(user.weightLbs),
-      heightFeet: this.cleanNumber(user.heightFeet),
-      heightInches: this.cleanNumber(user.heightInches),
+      weight_lbs: this.cleanNumber(user.weightLbs),
+      height_feet: this.cleanNumber(user.heightFeet),
+      height_inches: this.cleanNumber(user.heightInches),
       goals: this.cleanArray(user.goals),
       available_equipment: this.cleanArray(user.availableEquipment),
       injuries: this.cleanArray(user.injuries),
@@ -411,13 +498,21 @@ class DataTransformer {
   }
 
   transformProgram(program) {
+    // Validate required fields
+    if (!program.userId) {
+      throw new Error(`Program ${program.id} missing required userId`);
+    }
+    if (!program.name) {
+      throw new Error(`Program ${program.id} missing required name`);
+    }
+    
     const transformed = {
       id: this.generateUUID(),
       user_id: this.resolveUserReference(program.userId),
       name: this.cleanString(program.name),
       description: this.cleanString(program.description),
-      duration: this.cleanNumber(program.duration),
-      days_per_week: this.cleanNumber(program.daysPerWeek),
+      duration: this.cleanNumber(program.duration) || 4, // Default to 4 weeks if missing
+      days_per_week: this.cleanNumber(program.daysPerWeek) || 3, // Default to 3 days if missing
       weight_unit: this.mapUnits(program.weightUnit),
       difficulty: this.cleanString(program.difficulty),
       goals: this.cleanArray(program.goals),
@@ -434,23 +529,48 @@ class DataTransformer {
     // Store ID mapping
     this.idMappings.programs.set(program.id, transformed.id);
     
-    // Transform nested workouts if present
+    // Transform weeklyConfigs into workouts and exercises
     const workouts = [];
     const exercises = [];
     
-    if (program.workouts && Array.isArray(program.workouts)) {
-      for (const workout of program.workouts) {
+    if (program.weeklyConfigs && typeof program.weeklyConfigs === 'object') {
+      for (const [configKey, workoutConfig] of Object.entries(program.weeklyConfigs)) {
+        // Parse week and day from key like "week1_day1"
+        const match = configKey.match(/week(\d+)_day(\d+)/);
+        if (!match) {
+          this.warnings.push(`Invalid weeklyConfig key format: ${configKey} in program ${program.id}`);
+          continue;
+        }
+        
+        const weekNumber = parseInt(match[1], 10);
+        const dayNumber = parseInt(match[2], 10);
+        
+        // Create workout object
+        const workout = {
+          id: `${program.id}_${configKey}`, // Create a unique ID for mapping
+          name: workoutConfig.name || `Week ${weekNumber} Day ${dayNumber}`,
+          weekNumber,
+          dayNumber,
+          exercises: workoutConfig.exercises || [],
+          createdAt: program.createdAt
+        };
+        
         const transformedWorkout = this.transformProgramWorkout(workout, transformed.id);
         workouts.push(transformedWorkout);
         
         // Transform workout exercises
         if (workout.exercises && Array.isArray(workout.exercises)) {
-          for (const exercise of workout.exercises) {
-            const transformedExercise = this.transformProgramExercise(exercise, transformedWorkout.id);
+          for (let i = 0; i < workout.exercises.length; i++) {
+            const exercise = workout.exercises[i];
+            const transformedExercise = this.transformProgramExercise(exercise, transformedWorkout.id, i);
             exercises.push(transformedExercise);
           }
         }
       }
+    }
+    
+    if (this.options.verbose) {
+      console.log(`   Program ${transformed.id}: ${workouts.length} workouts, ${exercises.length} exercises`);
     }
     
     // Return program with related data
@@ -462,6 +582,11 @@ class DataTransformer {
   }
 
   transformProgramWorkout(workout, programId) {
+    // Validate required fields
+    if (!workout.name) {
+      throw new Error(`Program workout missing required name`);
+    }
+    
     const transformed = {
       id: this.generateUUID(),
       program_id: programId,
@@ -471,27 +596,56 @@ class DataTransformer {
       created_at: this.convertTimestamp(workout.createdAt)
     };
     
+    // Check for duplicate workouts based on unique constraint
+    const existingKey = `${programId}-${transformed.week_number}-${transformed.day_number}`;
+    if (this.duplicateWorkoutTracker.has(existingKey)) {
+      // Increment day_number to avoid constraint violation
+      const nextDayNumber = this.duplicateWorkoutTracker.get(existingKey) + 1;
+      transformed.day_number = nextDayNumber;
+      this.duplicateWorkoutTracker.set(existingKey, nextDayNumber);
+      this.warnings.push(`Duplicate workout detected for program ${programId}, week ${transformed.week_number}, day ${workout.dayNumber}. Adjusted to day ${transformed.day_number}`);
+    } else {
+      this.duplicateWorkoutTracker.set(existingKey, transformed.day_number);
+    }
+    
     // Store ID mapping
     this.idMappings.program_workouts.set(workout.id, transformed.id);
     
     return transformed;
   }
 
-  transformProgramExercise(exercise, workoutId) {
+  transformProgramExercise(exercise, workoutId, orderIndex = 0) {
+    // Validate required fields
+    if (!exercise.exerciseId) {
+      throw new Error(`Program exercise missing required exerciseId`);
+    }
+    if (!exercise.sets) {
+      throw new Error(`Program exercise missing required sets`);
+    }
+    
     return {
       id: this.generateUUID(),
       workout_id: workoutId,
       exercise_id: this.resolveExerciseReference(exercise.exerciseId),
       sets: this.cleanNumber(exercise.sets) || 1,
-      reps: this.cleanNumber(exercise.reps),
+      reps: this.cleanString(exercise.reps), // Changed to VARCHAR(50) to match schema
       rest_minutes: this.cleanNumber(exercise.restMinutes),
       notes: this.cleanString(exercise.notes),
-      order_index: this.cleanNumber(exercise.orderIndex) || 0,
-      created_at: this.convertTimestamp(exercise.createdAt)
+      order_index: this.cleanNumber(exercise.orderIndex) || orderIndex,
+      created_at: this.convertTimestamp(exercise.createdAt),
+      updated_at: this.convertTimestamp(exercise.updatedAt)
     };
   }
 
   transformWorkoutLog(log) {
+    // Validate required fields
+    if (!log.userId) {
+      throw new Error(`Workout log ${log.id} missing required userId`);
+    }
+    if (!log.date) {
+      throw new Error(`Workout log ${log.id} missing required date`);
+    }
+    
     const transformed = {
       id: this.generateUUID(),
       user_id: this.resolveUserReference(log.userId),
@@ -500,7 +654,7 @@ class DataTransformer {
       day_index: this.cleanNumber(log.dayIndex),
       name: this.cleanString(log.name),
       type: this.cleanString(log.type) || 'program_workout',
-      date: this.convertDate(log.date),
+      date: this.convertDate(log.date) || this.convertDate(new Date()), // Default to today if missing
       completed_date: this.convertTimestamp(log.completedDate),
       is_finished: Boolean(log.isWorkoutFinished || log.isFinished),
       is_draft: Boolean(log.isDraft),
@@ -521,6 +675,10 @@ class DataTransformer {
       }
     }
     
+    if (this.options.verbose) {
+      console.log(`   Workout log ${transformed.id}: ${exercises.length} exercises`);
+    }
+    
     return {
       workout_log: transformed,
       exercises
@@ -528,12 +686,20 @@ class DataTransformer {
   }
 
   transformWorkoutLogExercise(exercise, workoutLogId, orderIndex) {
+    // Validate required fields
+    if (!exercise.exerciseId) {
+      throw new Error(`Workout log exercise missing required exerciseId`);
+    }
+    if (!exercise.sets) {
+      throw new Error(`Workout log exercise missing required sets`);
+    }
+    
     return {
       id: this.generateUUID(),
       workout_log_id: workoutLogId,
       exercise_id: this.resolveExerciseReference(exercise.exerciseId),
       sets: this.cleanNumber(exercise.sets) || 1,
-      reps: this.cleanNumberArray(exercise.reps),
+      reps: this.cleanNumberArray(exercise.reps), // Changed to INTEGER[]
       weights: this.cleanDecimalArray(exercise.weights),
       completed: this.cleanBooleanArray(exercise.completed),
       bodyweight: this.cleanDecimal(exercise.bodyweight),
@@ -625,6 +791,39 @@ class DataTransformer {
     } catch {
       return null;
     }
+  }
+
+  // Enhanced data cleaning for workout-specific data
+  cleanWorkoutData(workout) {
+    if (!workout || typeof workout !== 'object') return null;
+    
+    // Ensure exercises array exists and is valid
+    if (!Array.isArray(workout.exercises)) {
+      workout.exercises = [];
+    }
+    
+    // Clean exercise data
+    workout.exercises = workout.exercises.filter(exercise => {
+      return exercise && exercise.exerciseId && exercise.sets;
+    });
+    
+    return workout;
+  }
+
+  normalizeRoles(value) {
+    // Accepts string or array; always returns a non-empty array; defaults to ['user']
+    if (Array.isArray(value)) {
+      const cleaned = value
+        .filter(v => typeof v === 'string')
+        .map(v => v.trim())
+        .filter(v => v.length > 0);
+      return cleaned.length > 0 ? cleaned : ['user'];
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed ? [trimmed] : ['user'];
+    }
+    return ['user'];
   }
 
   // Data mapping methods
@@ -778,6 +977,13 @@ class DataTransformer {
     console.log(`Validation Errors: ${this.stats.validationErrors}`);
     console.log(`Warnings: ${this.warnings.length}`);
     
+    console.log('\n📊 Table Transformation Summary:');
+    console.log(`Programs: ${this.stats.programsTransformed}`);
+    console.log(`Program Workouts: ${this.stats.workoutsTransformed}`);
+    console.log(`Program Exercises: ${this.stats.exercisesTransformed}`);
+    console.log(`Workout Logs: ${this.stats.workoutLogsTransformed}`);
+    console.log(`Workout Log Exercises: ${this.stats.workoutLogExercisesTransformed}`);
+    
     if (this.errors.length > 0) {
       console.log(`\n❌ Errors (${this.errors.length}):`);
       this.errors.slice(0, 5).forEach(error => {
@@ -787,6 +993,178 @@ class DataTransformer {
       if (this.errors.length > 5) {
         console.log(`   ... and ${this.errors.length - 5} more errors`);
       }
+    }
+  }
+
+  async validateTransformedData(transformedData) {
+    console.log('\n🔍 Validating transformed data...');
+    
+    for (const [collection, data] of Object.entries(transformedData)) {
+      if (!POSTGRES_SCHEMAS[collection]) {
+        console.log(`   ⚠️ No schema defined for ${collection}, skipping validation`);
+        continue;
+      }
+      
+      const schema = POSTGRES_SCHEMAS[collection];
+      let validationErrors = 0;
+      
+      for (const record of data) {
+        const recordErrors = this.validateRecord(record, schema);
+        if (recordErrors.length > 0) {
+          validationErrors += recordErrors.length;
+
+          // Capture in report errors array
+          const documentId = record && (record.id || record.workout_log_id || record.workout_id || record.program_id || record.exercise_id) || 'unknown';
+          for (const err of recordErrors) {
+            this.errors.push({
+              collection,
+              documentId,
+              error: `Validation: ${err}`,
+              timestamp: new Date().toISOString(),
+              type: 'validation'
+            });
+          }
+
+          if (this.options.verbose) {
+            console.log(`   ❌ Validation errors in ${collection} (record ${documentId}):`, recordErrors);
+          }
+        }
+      }
+      
+      if (validationErrors > 0) {
+        console.log(`   ❌ ${validationErrors} validation errors in ${collection}`);
+        this.stats.validationErrors += validationErrors;
+      } else {
+        console.log(`   ✅ ${collection} validation passed`);
+      }
+    }
+  }
+
+  validateRecord(record, schema) {
+    const errors = [];
+    
+    for (const [columnName, columnDef] of Object.entries(schema.columns)) {
+      if (columnDef.required && record[columnName] === undefined) {
+        errors.push(`Missing required column: ${columnName}`);
+        continue;
+      }
+      
+      if (record[columnName] !== undefined && record[columnName] !== null) {
+        const value = record[columnName];
+        const expectedType = columnDef.type;
+        
+        // Basic type validation
+        if (expectedType.includes('UUID') && typeof value !== 'string') {
+          errors.push(`Column ${columnName} should be UUID string, got ${typeof value}`);
+        } else if (expectedType.includes('VARCHAR') && typeof value !== 'string') {
+          errors.push(`Column ${columnName} should be string, got ${typeof value}`);
+        // } else if (expectedType.includes('INTEGER') && typeof value !== 'number') {
+        //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
+        // } else if (expectedType.includes('DECIMAL') && typeof value !== 'number') {
+        //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
+        // } else if (expectedType.includes('BOOLEAN') && typeof value !== 'boolean') {
+        //   errors.push(`Column ${columnName} should be boolean, got ${typeof value}`);
+        } else if (expectedType.includes('TIMESTAMP') && typeof value !== 'string') {
+          errors.push(`Column ${columnName} should be ISO string, got ${typeof value}`);
+        } else if (expectedType.includes('DATE') && typeof value !== 'string') {
+          errors.push(`Column ${columnName} should be date string, got ${typeof value}`);
+        } else if (expectedType.includes('[]') && !Array.isArray(value)) {
+          errors.push(`Column ${columnName} should be array, got ${typeof value}`);
+        } else if (expectedType.includes('JSONB') && typeof value !== 'object') {
+          errors.push(`Column ${columnName} should be object, got ${typeof value}`);
+        }
+      }
+    }
+    
+    return errors;
+  }
+
+  // Validate data integrity after transformation
+  validateDataIntegrity(transformedData) {
+    console.log('\n🔍 Validating data integrity...');
+    
+    let integrityErrors = 0;
+    
+    // Check that all foreign key references exist
+    for (const workout of transformedData.program_workouts) {
+      if (!transformedData.programs.find(p => p.id === workout.program_id)) {
+        this.errors.push({
+          collection: 'program_workouts',
+          documentId: workout.id,
+          error: `Invalid program_id reference: ${workout.program_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+    }
+    
+    for (const exercise of transformedData.program_exercises) {
+      if (!transformedData.program_workouts.find(w => w.id === exercise.workout_id)) {
+        this.errors.push({
+          collection: 'program_exercises',
+          documentId: exercise.id,
+          error: `Invalid workout_id reference: ${exercise.workout_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+      
+      if (!transformedData.exercises.find(e => e.id === exercise.exercise_id)) {
+        this.errors.push({
+          collection: 'program_exercises',
+          documentId: exercise.id,
+          error: `Invalid exercise_id reference: ${exercise.exercise_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+    }
+    
+    for (const workoutLog of transformedData.workout_logs) {
+      if (workoutLog.program_id && !transformedData.programs.find(p => p.id === workoutLog.program_id)) {
+        this.errors.push({
+          collection: 'workout_logs',
+          documentId: workoutLog.id,
+          error: `Invalid program_id reference: ${workoutLog.program_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+    }
+    
+    for (const exercise of transformedData.workout_log_exercises) {
+      if (!transformedData.workout_logs.find(w => w.id === exercise.workout_log_id)) {
+        this.errors.push({
+          collection: 'workout_log_exercises',
+          documentId: exercise.id,
+          error: `Invalid workout_log_id reference: ${exercise.workout_log_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+      
+      if (!transformedData.exercises.find(e => e.id === exercise.exercise_id)) {
+        this.errors.push({
+          collection: 'workout_log_exercises',
+          documentId: exercise.id,
+          error: `Invalid exercise_id reference: ${exercise.exercise_id}`,
+          timestamp: new Date().toISOString(),
+          type: 'integrity'
+        });
+        integrityErrors++;
+      }
+    }
+    
+    if (integrityErrors > 0) {
+      console.log(`   ❌ ${integrityErrors} data integrity errors found`);
+      this.stats.validationErrors += integrityErrors;
+    } else {
+      console.log('   ✅ Data integrity validation passed');
     }
   }
 }
