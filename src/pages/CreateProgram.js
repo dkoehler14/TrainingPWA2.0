@@ -620,7 +620,19 @@ function CreateProgram({ mode = 'create' }) {
               .map(ex => ({
                 exercise_id: ex.exerciseId,
                 sets: isNaN(Number(ex.sets)) ? 3 : Number(ex.sets),
-                reps: isNaN(Number(ex.reps)) ? 8 : Number(ex.reps),
+                // Preserve rep ranges (e.g., "8-10", "5/3/1"). If reps contains non-digits, store as string; otherwise store numeric as string for consistency
+                reps: (() => {
+                  const raw = ex.reps;
+                  if (raw === undefined || raw === null) return '8';
+                  const str = String(raw).trim();
+                  if (str === '') return '8';
+                  // If contains any non-digit characters (beyond whitespace), treat as a range string
+                  if (/[^\d\s]/.test(str)) {
+                    return str;
+                  }
+                  // Pure digits: normalize to string form for storage
+                  return String(Number(str));
+                })(),
                 notes: ex.notes || '',
               }))
           };

@@ -35,9 +35,9 @@ const POSTGRES_SCHEMAS = {
       experience_level: { type: 'VARCHAR(50)', default: 'beginner' },
       preferred_units: { type: 'VARCHAR(10)', default: 'LB' },
       age: { type: 'INTEGER' },
-      weightLbs: { type: 'DECIMAL(5,2)' },
-      heightFeet: { type: 'INTEGER' },
-      heightInches: { type: 'INTEGER' },
+      weight_lbs: { type: 'DECIMAL(5,2)' },
+      height_feet: { type: 'INTEGER' },
+      height_inches: { type: 'INTEGER' },
       goals: { type: 'TEXT[]' },
       available_equipment: { type: 'TEXT[]' },
       injuries: { type: 'TEXT[]' },
@@ -346,15 +346,16 @@ class DataTransformer {
 
   transformUser(user) {
     const transformed = {
-      id: this.generateUUID(),
-      auth_id: user.id, // Original Firestore ID becomes auth_id
+      id: user.id,
       email: this.cleanEmail(user.email),
       name: this.cleanString(user.name) || 'Unknown User',
+      roles: this.cleanArray(user.role),
       experience_level: this.mapExperienceLevel(user.experienceLevel),
       preferred_units: this.mapUnits(user.preferredUnits),
       age: this.cleanNumber(user.age),
-      weight: this.cleanDecimal(user.weight),
-      height: this.cleanDecimal(user.height),
+      weightLbs: this.cleanNumber(user.weightLbs),
+      heightFeet: this.cleanNumber(user.heightFeet),
+      heightInches: this.cleanNumber(user.heightInches),
       goals: this.cleanArray(user.goals),
       available_equipment: this.cleanArray(user.availableEquipment),
       injuries: this.cleanArray(user.injuries),

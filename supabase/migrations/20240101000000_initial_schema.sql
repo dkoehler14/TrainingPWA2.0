@@ -13,9 +13,9 @@ CREATE TABLE users (
     experience_level VARCHAR(50) DEFAULT 'beginner',
     preferred_units VARCHAR(10) DEFAULT 'LB',
     age INTEGER,
-    weightLbs DECIMAL(5,2),
-    heightFeet INTEGER,
-    heightInches INTEGER,
+    weight_lbs DECIMAL(5,2),
+    height_feet INTEGER,
+    height_inches INTEGER,
     goals TEXT[],
     available_equipment TEXT[],
     injuries TEXT[],
@@ -76,7 +76,7 @@ CREATE TABLE program_exercises (
     workout_id UUID NOT NULL REFERENCES program_workouts(id) ON DELETE CASCADE,
     exercise_id UUID NOT NULL REFERENCES exercises(id),
     sets INTEGER NOT NULL,
-    reps INTEGER, -- NULL for time-based exercises
+    reps VARCHAR(50), -- NULL for time-based exercises
     rest_minutes INTEGER,
     notes TEXT,
     order_index INTEGER NOT NULL,

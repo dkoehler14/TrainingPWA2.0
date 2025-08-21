@@ -110,10 +110,20 @@ export const transformSupabaseProgramToWeeklyConfigs = (program) => {
         exercises = validExercises
           .sort((a, b) => (a.order_index || 0) - (b.order_index || 0)) // Sort by order_index
           .map((ex, exIndex) => {
+            // Preserve rep ranges that are stored as strings (e.g., "8-10", "5/3/1")
+            let normalizedReps;
+            if (typeof ex.reps === 'number') {
+              normalizedReps = ex.reps;
+            } else if (typeof ex.reps === 'string' && ex.reps.trim() !== '') {
+              normalizedReps = ex.reps.trim();
+            } else {
+              normalizedReps = 8;
+            }
+
             const transformedExercise = {
               exerciseId: ex.exercise_id || '',
               sets: typeof ex.sets === 'number' ? ex.sets : 3,
-              reps: typeof ex.reps === 'number' ? ex.reps : 8,
+              reps: normalizedReps,
               notes: ex.notes || ''
             };
             

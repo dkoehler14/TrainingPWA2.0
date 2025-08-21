@@ -25,7 +25,7 @@ ADD CONSTRAINT check_day_number_valid CHECK (day_number >= 1 AND day_number <= 7
 -- Add check constraints for program_exercises table
 ALTER TABLE program_exercises
 ADD CONSTRAINT check_sets_positive CHECK (sets > 0),
-ADD CONSTRAINT check_reps_positive CHECK (reps IS NULL OR reps > 0),
+-- ADD CONSTRAINT check_reps_positive CHECK (reps IS NULL OR reps > 0),
 ADD CONSTRAINT check_rest_minutes_non_negative CHECK (rest_minutes IS NULL OR rest_minutes >= 0),
 ADD CONSTRAINT check_order_index_non_negative CHECK (order_index >= 0);
 

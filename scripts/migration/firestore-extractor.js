@@ -29,12 +29,14 @@ const CONFIG = {
   outputDir: './migration-data',
   batchSize: 100,
   collections: [
-    'users',
-    'exercises',
-    'exercises_metadata', 
-    'programs',
-    'workoutLogs',
-    'userAnalytics'
+    // 'users',
+    // 'exercises',
+    // 'exercises_metadata', 
+    // 'programs',
+    // 'workoutLogs',
+    //'userAnalytics',
+    'exerciseAnalytics',
+    'monthlyAnalytics'
   ],
   validate: false,
   dryRun: false,
@@ -287,18 +289,19 @@ class FirestoreExtractor {
       if (!admin.apps.length) {
         // Try to use service account key if available
         const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
-          './functions/sample-firebase-ai-app-d056c-firebase-adminsdk-fbsvc-047d03194a.json';
+          path.join(__dirname, '../../functions/sample-firebase-ai-app-d056c-firebase-adminsdk-fbsvc-f79a9e3560.json');
         
         try {
-          const serviceAccount = require(path.resolve(serviceAccountPath));
+          //const serviceAccount = require(path.resolve(serviceAccountPath));
           admin.initializeApp({
-            credential: admin.credential.cert(serviceAccount)
+            credential: admin.credential.cert(require(serviceAccountPath))
           });
           this.progress.log('✅ Firebase Admin initialized with service account');
         } catch (error) {
+          this.progress.log(error);
           // Fallback to default credentials
-          admin.initializeApp();
-          this.progress.log('✅ Firebase Admin initialized with default credentials');
+          //admin.initializeApp();
+          //this.progress.log('✅ Firebase Admin initialized with default credentials');
         }
       }
 
@@ -353,12 +356,21 @@ class FirestoreExtractor {
     
     try {
       // Get collection reference
-      let query = this.db.collection(collectionName);
+      let query; //= this.db.collection(collectionName);  
       
-      // Apply user filter if specified
-      if (this.config.userId && this.hasUserIdField(collectionName)) {
-        query = query.where('userId', '==', this.config.userId);
+      if (collectionName == 'userAnalytics') {
+        query = query.doc('PVi8RmDGc5gFshk9F2NTNXIqo5h1').collection('exerciseAnalytics');
       }
+      else if (collectionName == ('exerciseAnalytics' || 'monthlyAnalytics')) {
+        query = this.db.collectionGroup(collectionName);
+      }
+      else {
+        this.db.collection(collectionName);
+      }
+      // Apply user filter if specified
+      // if (this.config.userId && this.hasUserIdField(collectionName)) {
+      //   query = query.where('userId', '==', this.config.userId);
+      // }
 
       // Get total count for progress tracking
       const countSnapshot = await query.count().get();
@@ -531,7 +543,7 @@ class FirestoreExtractor {
   }
 
   hasSubcollections(collectionName) {
-    return ['programs'].includes(collectionName);
+    return ['programs', 'userAnalytics'].includes(collectionName);
   }
 
   async saveCollectionData(collectionName, data) {

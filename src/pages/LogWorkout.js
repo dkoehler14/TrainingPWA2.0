@@ -799,6 +799,15 @@ function LogWorkout() {
 
   // Helper function to detect if a value is a rep range
   const isRepRange = (value) => {
+    
+    try {
+      console.log(typeof value);
+      console.log(value);
+    }
+    catch {
+      console.log("couldn't log value");
+    }
+    
     if (!value || typeof value !== 'string') return false;
     // Check for patterns like "8-10", "5/3/1", "8-12", etc.
     return /[^\d\s]/.test(value.toString()) && value.toString().trim() !== '';

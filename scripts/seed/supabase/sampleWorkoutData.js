@@ -67,10 +67,10 @@ export const beginnerProgram = {
       day_number: 1,
       name: 'Upper Body Foundation',
       exercises: [
-        { exercise_id: EXERCISE_IDS.PUSH_UPS, sets: 2, reps: 8, rest_minutes: 2, notes: 'Modify on knees if needed' },
-        { exercise_id: EXERCISE_IDS.BENT_OVER_ROW, sets: 2, reps: 10, rest_minutes: 2, notes: 'Use light dumbbells' },
+        { exercise_id: EXERCISE_IDS.PUSH_UPS, sets: 2, reps: '8-10', rest_minutes: 2, notes: 'Modify on knees if needed' },
+        { exercise_id: EXERCISE_IDS.BENT_OVER_ROW, sets: 2, reps: '10-12', rest_minutes: 2, notes: 'Use light dumbbells' },
         { exercise_id: EXERCISE_IDS.OVERHEAD_PRESS, sets: 2, reps: 8, rest_minutes: 2, notes: 'Start with light weight' },
-        { exercise_id: EXERCISE_IDS.BICEP_CURLS, sets: 2, reps: 12, rest_minutes: 1, notes: 'Focus on form' },
+        { exercise_id: EXERCISE_IDS.BICEP_CURLS, sets: 2, reps: '12+', rest_minutes: 1, notes: 'Focus on form' },
         { exercise_id: EXERCISE_IDS.PLANK, sets: 2, reps: 30, rest_minutes: 1, notes: 'Hold for 30 seconds' }
       ]
     },
@@ -80,7 +80,7 @@ export const beginnerProgram = {
       name: 'Lower Body Foundation',
       exercises: [
         { exercise_id: EXERCISE_IDS.SQUAT, sets: 2, reps: 10, rest_minutes: 2, notes: 'Bodyweight or light weight' },
-        { exercise_id: EXERCISE_IDS.LUNGES, sets: 2, reps: 8, rest_minutes: 2, notes: '8 per leg' },
+        { exercise_id: EXERCISE_IDS.LUNGES, sets: 2, reps: '8-10', rest_minutes: 2, notes: '8 per leg' },
         { exercise_id: EXERCISE_IDS.LEG_CURL, sets: 2, reps: 12, rest_minutes: 2, notes: 'Use resistance band' },
         { exercise_id: EXERCISE_IDS.CRUNCHES, sets: 2, reps: 15, rest_minutes: 1, notes: 'Slow and controlled' },
         { exercise_id: EXERCISE_IDS.MOUNTAIN_CLIMBERS, sets: 2, reps: 20, rest_minutes: 1, notes: '10 per leg' }
@@ -240,11 +240,11 @@ export const intermediateProgram = {
       day_number: 1,
       name: 'Upper Body Power',
       exercises: [
-        { exercise_id: EXERCISE_IDS.BENCH_PRESS, sets: 4, reps: 6, rest_minutes: 3, notes: 'Heavy compound movement' },
+        { exercise_id: EXERCISE_IDS.BENCH_PRESS, sets: 4, reps: '6-8', rest_minutes: 3, notes: 'Heavy compound movement' },
         { exercise_id: EXERCISE_IDS.BENT_OVER_ROW, sets: 4, reps: 6, rest_minutes: 3, notes: 'Match bench press strength' },
-        { exercise_id: EXERCISE_IDS.OVERHEAD_PRESS, sets: 3, reps: 8, rest_minutes: 2, notes: 'Strict form' },
+        { exercise_id: EXERCISE_IDS.OVERHEAD_PRESS, sets: 3, reps: '8-12', rest_minutes: 2, notes: 'Strict form' },
         { exercise_id: EXERCISE_IDS.PULL_UPS, sets: 3, reps: 8, rest_minutes: 2, notes: 'Assisted if needed' },
-        { exercise_id: EXERCISE_IDS.BICEP_CURLS, sets: 3, reps: 12, rest_minutes: 1, notes: 'Isolation work' },
+        { exercise_id: EXERCISE_IDS.BICEP_CURLS, sets: 3, reps: '12+', rest_minutes: 1, notes: 'Isolation work' },
         { exercise_id: EXERCISE_IDS.TRICEP_EXTENSIONS, sets: 3, reps: 12, rest_minutes: 1, notes: 'Full range' }
       ]
     },
@@ -253,8 +253,8 @@ export const intermediateProgram = {
       day_number: 2,
       name: 'Lower Body Power',
       exercises: [
-        { exercise_id: EXERCISE_IDS.SQUAT, sets: 4, reps: 6, rest_minutes: 3, notes: 'Heavy squats' },
-        { exercise_id: EXERCISE_IDS.DEADLIFT, sets: 3, reps: 5, rest_minutes: 3, notes: 'Perfect form essential' },
+        { exercise_id: EXERCISE_IDS.SQUAT, sets: 4, reps: '6-8', rest_minutes: 3, notes: 'Heavy squats' },
+        { exercise_id: EXERCISE_IDS.DEADLIFT, sets: 3, reps: '5-7', rest_minutes: 3, notes: 'Perfect form essential' },
         { exercise_id: EXERCISE_IDS.LEG_PRESS, sets: 3, reps: 12, rest_minutes: 2, notes: 'High volume' },
         { exercise_id: EXERCISE_IDS.LEG_CURL, sets: 3, reps: 12, rest_minutes: 2, notes: 'Hamstring focus' },
         { exercise_id: EXERCISE_IDS.LUNGES, sets: 3, reps: 10, rest_minutes: 2, notes: '10 per leg' },
@@ -281,7 +281,7 @@ export const intermediateProgram = {
       exercises: [
         { exercise_id: EXERCISE_IDS.LEG_PRESS, sets: 4, reps: 15, rest_minutes: 2, notes: 'High rep volume' },
         { exercise_id: EXERCISE_IDS.LUNGES, sets: 4, reps: 12, rest_minutes: 2, notes: '12 per leg with weight' },
-        { exercise_id: EXERCISE_IDS.LEG_CURL, sets: 4, reps: 15, rest_minutes: 2, notes: 'Hamstring pump' },
+        { exercise_id: EXERCISE_IDS.LEG_CURL, sets: 4, reps: '15-20', rest_minutes: 2, notes: 'Hamstring pump' },
         { exercise_id: EXERCISE_IDS.SQUAT, sets: 3, reps: 20, rest_minutes: 2, notes: 'Light weight, high reps' },
         { exercise_id: EXERCISE_IDS.CRUNCHES, sets: 4, reps: 25, rest_minutes: 1, notes: 'Core finisher' },
         { exercise_id: EXERCISE_IDS.RUSSIAN_TWISTS, sets: 3, reps: 50, rest_minutes: 1, notes: '25 per side' }
