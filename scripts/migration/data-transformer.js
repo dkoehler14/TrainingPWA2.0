@@ -535,23 +535,37 @@ class DataTransformer {
     
     if (program.weeklyConfigs && typeof program.weeklyConfigs === 'object') {
       for (const [configKey, workoutConfig] of Object.entries(program.weeklyConfigs)) {
-        // Parse week and day from key like "week1_day1"
-        const match = configKey.match(/week(\d+)_day(\d+)/);
-        if (!match) {
-          this.warnings.push(`Invalid weeklyConfig key format: ${configKey} in program ${program.id}`);
-          continue;
-        }
+        let weekNumber, dayNumber, workoutName, workoutExercises;
         
-        const weekNumber = parseInt(match[1], 10);
-        const dayNumber = parseInt(match[2], 10);
+        // Handle new format: "week1_day1": { "name": "...", "exercises": [...] }
+        const newFormatMatch = configKey.match(/^week(\d+)_day(\d+)$/);
+        if (newFormatMatch) {
+          weekNumber = parseInt(newFormatMatch[1], 10);
+          dayNumber = parseInt(newFormatMatch[2], 10);
+          workoutName = workoutConfig.name || `Week ${weekNumber} Day ${dayNumber}`;
+          workoutExercises = workoutConfig.exercises || [];
+        }
+        // Handle legacy format: "week4_day4_exercises": [...]
+        else {
+          const legacyFormatMatch = configKey.match(/^week(\d+)_day(\d+)_exercises$/);
+          if (legacyFormatMatch) {
+            weekNumber = parseInt(legacyFormatMatch[1], 10);
+            dayNumber = parseInt(legacyFormatMatch[2], 10);
+            workoutName = `Week ${weekNumber} Day ${dayNumber}`;
+            workoutExercises = Array.isArray(workoutConfig) ? workoutConfig : [];
+          } else {
+            this.warnings.push(`Invalid weeklyConfig key format: ${configKey} in program ${program.id}`);
+            continue;
+          }
+        }
         
         // Create workout object
         const workout = {
           id: `${program.id}_${configKey}`, // Create a unique ID for mapping
-          name: workoutConfig.name || `Week ${weekNumber} Day ${dayNumber}`,
+          name: workoutName,
           weekNumber,
           dayNumber,
-          exercises: workoutConfig.exercises || [],
+          exercises: workoutExercises,
           createdAt: program.createdAt
         };
         
