@@ -110,6 +110,7 @@ function ExerciseHistoryModal({
 
                 historyData.push({
                   date: logDate,
+                  workoutLogId: log.id,
                   week: log.week_index !== null && log.week_index !== undefined ? log.week_index + 1 : null,
                   day: log.day_index !== null && log.day_index !== undefined ? log.day_index + 1 : null,
                   workoutName: log.name || (log.week_index !== null && log.day_index !== null ?
@@ -121,7 +122,9 @@ function ExerciseHistoryModal({
                   reps: repsValue,
                   completed: true,
                   bodyweight: bodyweightValue,
-                  exerciseType: exerciseType
+                  exerciseType: exerciseType,
+                  workoutNotes: log.notes || null,
+                  exerciseNotes: exerciseInLog.notes || null
                 });
               }
             }
@@ -167,13 +170,20 @@ function ExerciseHistoryModal({
             {historyData.map((session, sessionIndex) => (
               <div key={sessionIndex} className="session-card">
                 <div className="session-header">
-                  <div className="prominent-date-header">
-                    {session.date.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
+                  <div className="session-date-info">
+                    <div className="prominent-date-header">
+                      {session.date.toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </div>
+                    {session.showWorkoutName && session.workoutName && (
+                      <div className="workout-name-badge">
+                        {session.workoutName}
+                      </div>
+                    )}
                   </div>
                   <div className="session-summary">
                     {formatSessionSummary(session, weightUnit)}
@@ -189,6 +199,24 @@ function ExerciseHistoryModal({
                     </div>
                   ))}
                 </div>
+                {(session.workoutNotes || session.exerciseNotes) && (
+                  <div className="session-notes">
+                    {session.workoutNotes && (
+                      <div className="workout-note">
+                        <span className="note-icon">💬</span>
+                        <span className="note-label">Workout:</span>
+                        <span className="note-text">{session.workoutNotes}</span>
+                      </div>
+                    )}
+                    {session.exerciseNotes && (
+                      <div className="exercise-note">
+                        <span className="note-icon">📝</span>
+                        <span className="note-label">Exercise:</span>
+                        <span className="note-text">{session.exerciseNotes}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
 

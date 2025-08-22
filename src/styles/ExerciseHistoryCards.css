@@ -5,7 +5,7 @@
   padding-right: var(--spacing-xs);
 }
 
-.exercise-session-card {
+.session-card {
   background: var(--card-background);
   border: 1px solid var(--border-color);
   border-radius: var(--card-border-radius);
@@ -14,22 +14,29 @@
   transition: all 0.2s ease;
 }
 
-.exercise-session-card:hover {
+.session-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.exercise-session-card:last-child {
+.session-card:last-child {
   margin-bottom: 0;
 }
 
 .session-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--spacing-sm);
   flex-wrap: wrap;
   gap: var(--spacing-xs);
+}
+
+.session-date-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  flex: 1;
 }
 
 .prominent-date-header {
@@ -67,6 +74,18 @@
   flex-wrap: wrap;
 }
 
+.workout-name-badge {
+  background: var(--input-background);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--card-border-radius-sm);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+  max-width: fit-content;
+}
+
 .session-workout-badge {
   background: var(--input-background);
   color: var(--text-primary);
@@ -87,7 +106,7 @@
   white-space: nowrap;
 }
 
-.session-sets-container {
+.sets-container {
   display: flex;
   flex-wrap: wrap;
   gap: var(--spacing-xs);
@@ -215,20 +234,29 @@
     max-height: 350px;
   }
 
-  .exercise-session-card {
+  .session-card {
     padding: var(--spacing-sm);
     margin-bottom: var(--spacing-sm);
   }
 
   .session-header {
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+  }
+  
+  .session-date-info {
     gap: var(--spacing-xs);
   }
   
   .prominent-date-header {
     font-size: var(--font-size-md);
     flex-shrink: 0;
+  }
+  
+  .workout-name-badge {
+    font-size: var(--font-size-xs);
+    padding: 2px var(--spacing-xs);
   }
   
   .session-summary {
@@ -240,7 +268,7 @@
     justify-content: space-between;
   }
   
-  .session-sets-container {
+  .sets-container {
     gap: var(--spacing-xs);
   }
   
@@ -274,14 +302,14 @@
     max-height: 380px;
   }
 
-  .session-sets-container {
+  .sets-container {
     gap: var(--spacing-sm);
   }
 }
 
 /* High contrast mode support */
 @media (prefers-contrast: high) {
-  .exercise-session-card {
+  .session-card {
     border-width: 2px;
   }
 
@@ -297,19 +325,19 @@
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-  .exercise-session-card,
+  .session-card,
   .set-performance-chip {
     transition: none;
   }
 
-  .exercise-session-card:hover,
+  .session-card:hover,
   .set-performance-chip:hover {
     transform: none;
   }
 }
 
 /* Focus styles for keyboard navigation */
-.exercise-session-card:focus-within {
+.session-card:focus-within {
   outline: 2px solid #0056D2;
   outline-offset: 2px;
 }
@@ -326,13 +354,13 @@
     overflow: visible;
   }
 
-  .exercise-session-card {
+  .session-card {
     break-inside: avoid;
     box-shadow: none;
     border: 1px solid #000;
   }
 
-  .exercise-session-card:hover {
+  .session-card:hover {
     transform: none;
     box-shadow: none;
   }
@@ -448,5 +476,89 @@
   
   .stat-value {
     font-size: var(--font-size-lg);
+  }
+}/* Sessio
+n Notes */
+.session-notes {
+  margin-top: var(--spacing-md);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.workout-note,
+.exercise-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border-radius: var(--card-border-radius-sm);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.workout-note {
+  background: rgba(0, 123, 255, 0.05);
+  border-left: 3px solid #007bff;
+}
+
+.exercise-note {
+  background: rgba(40, 167, 69, 0.05);
+  border-left: 3px solid #28a745;
+}
+
+.note-icon {
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.note-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  margin-right: var(--spacing-xs);
+}
+
+.note-text {
+  color: var(--text-secondary);
+  flex: 1;
+  word-break: break-word;
+}
+
+/* Mobile responsive for notes */
+@media (max-width: 767px) {
+  .session-notes {
+    margin-top: var(--spacing-sm);
+    padding-top: var(--spacing-sm);
+  }
+  
+  .workout-note,
+  .exercise-note {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+  }
+  
+  .note-icon {
+    font-size: var(--font-size-xs);
+  }
+  
+  .note-label {
+    font-size: var(--font-size-xs);
+  }
+}
+
+/* High contrast mode for notes */
+@media (prefers-contrast: high) {
+  .workout-note {
+    border-left-width: 4px;
+    background: rgba(0, 123, 255, 0.1);
+  }
+  
+  .exercise-note {
+    border-left-width: 4px;
+    background: rgba(40, 167, 69, 0.1);
   }
 }

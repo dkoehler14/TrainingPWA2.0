@@ -15,18 +15,32 @@ export const groupExerciseHistoryBySessions = (historyData) => {
   const sessions = {};
   
   historyData.forEach(entry => {
-    // Group by date only, combining all workouts from the same date
-    const dateKey = entry.date.toDateString();
+    // Group by both date and workout to separate multiple workouts on the same day
+    // Use workoutLogId if available, otherwise fall back to workoutName + date
+    const workoutId = entry.workoutLogId || entry.workoutName || 'unknown';
+    const sessionKey = `${entry.date.toDateString()}_${workoutId}`;
     
-    if (!sessions[dateKey]) {
-      sessions[dateKey] = {
+    if (!sessions[sessionKey]) {
+      sessions[sessionKey] = {
         date: entry.date,
+        workoutName: entry.workoutName,
+        workoutLogId: entry.workoutLogId,
         sets: [],
-        exerciseType: entry.exerciseType
+        exerciseType: entry.exerciseType,
+        workoutNotes: entry.workoutNotes,
+        exerciseNotes: entry.exerciseNotes
       };
     }
     
-    sessions[dateKey].sets.push({
+    // Preserve notes from the first entry (they should be the same for the same workout)
+    if (!sessions[sessionKey].workoutNotes && entry.workoutNotes) {
+      sessions[sessionKey].workoutNotes = entry.workoutNotes;
+    }
+    if (!sessions[sessionKey].exerciseNotes && entry.exerciseNotes) {
+      sessions[sessionKey].exerciseNotes = entry.exerciseNotes;
+    }
+    
+    sessions[sessionKey].sets.push({
       setNumber: entry.set,
       weight: entry.weight,
       reps: entry.reps,
@@ -40,16 +54,36 @@ export const groupExerciseHistoryBySessions = (historyData) => {
   // Convert to array and sort by date (most recent first)
   const sessionArray = Object.values(sessions);
   
+  // Group sessions by date to detect multiple workouts on same day
+  const sessionsByDate = {};
+  sessionArray.forEach(session => {
+    const dateKey = session.date.toDateString();
+    if (!sessionsByDate[dateKey]) {
+      sessionsByDate[dateKey] = [];
+    }
+    sessionsByDate[dateKey].push(session);
+  });
+  
   // Sort sets within each session by set number and calculate summary
   sessionArray.forEach(session => {
     session.sets.sort((a, b) => a.setNumber - b.setNumber);
     
-    // Calculate session summary for all sets from this date
+    // Calculate session summary for all sets from this workout session
     session.summary = calculateSessionSummary(session.sets, session.exerciseType);
+    
+    // Mark if this session needs to show workout name (multiple workouts on same day)
+    const dateKey = session.date.toDateString();
+    session.showWorkoutName = sessionsByDate[dateKey].length > 1;
   });
   
-  // Sort sessions by date (most recent first)
-  return sessionArray.sort((a, b) => b.date - a.date);
+  // Sort sessions by date (most recent first), then by workout name for same-day workouts
+  return sessionArray.sort((a, b) => {
+    const dateCompare = b.date - a.date;
+    if (dateCompare !== 0) return dateCompare;
+    
+    // For same date, sort by workout name to maintain consistent order
+    return (a.workoutName || '').localeCompare(b.workoutName || '');
+  });
 };
 
 /**
