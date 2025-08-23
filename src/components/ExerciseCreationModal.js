@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Alert } from 'react-bootstrap';
-import { 
-    createExercise, 
-    updateExercise, 
+import {
+    createExercise,
+    updateExercise,
     checkExerciseNameExists,
     canUserPerformExerciseOperation
 } from '../services/exerciseService';
@@ -34,7 +34,7 @@ function ExerciseCreationModal({
             // Reset permission denied state
             setPermissionDenied(false);
             setValidationError('');
-            
+
             if (isEditMode && initialData) {
                 setFormData({
                     name: initialData.name || '',
@@ -47,7 +47,7 @@ function ExerciseCreationModal({
                 } else {
                     setAdminVisibility('main');
                 }
-                
+
                 // Check permissions for editing this exercise
                 if (!canUserPerformExerciseOperation(initialData, userRole, user?.id, 'edit')) {
                     setPermissionDenied(true);
@@ -201,9 +201,9 @@ function ExerciseCreationModal({
             onHide();
         } catch (error) {
             console.error("Error adding/updating exercise: ", error);
-            
+
             // Handle permission-specific errors with user-friendly messages
-            if (error.message?.includes('permission') || 
+            if (error.message?.includes('permission') ||
                 error.message?.includes('insufficient privileges') ||
                 error.message?.includes('administrators')) {
                 setValidationError(error.message);
@@ -227,9 +227,9 @@ function ExerciseCreationModal({
             </Modal.Header>
             <Modal.Body>
                 {validationError && (
-                    <Alert 
-                        variant={permissionDenied ? "warning" : "danger"} 
-                        onClose={() => setValidationError('')} 
+                    <Alert
+                        variant={permissionDenied ? "warning" : "danger"}
+                        onClose={() => setValidationError('')}
                         dismissible={!permissionDenied}
                     >
                         {validationError}

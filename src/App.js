@@ -27,7 +27,7 @@ import {
   serviceStatusLogger
 } from './utils/developmentDebugger';
 import DevelopmentDebugPanel from './components/DevelopmentDebugPanel';
-import { useAuth } from './hooks/useAuth';
+import { useAuth, useRoles } from './hooks/useAuth';
 
 function App() {
   return (
@@ -42,10 +42,11 @@ function App() {
 function AppContent() {
   const [cacheInitialized, setCacheInitialized] = useState(false);
   // eslint-disable-next-line no-unused-vars
-  const {} = useTheme();
-  
+  const { } = useTheme();
+
   // Use auth hook instead of Firebase auth
-  const { user, userRole, loading, isReady } = useAuth();
+  const { user, userProfile, loading, isReady } = useAuth();
+  const { userRole } = useRoles();
 
   // Initialize app cache and development debugging on startup
   useEffect(() => {
@@ -142,7 +143,7 @@ function AppContent() {
 
   return (
     <Router>
-      <NavBar user={user} userRole={userRole} />
+      <NavBar user={user} userRole={userRole} isReady={isReady} />
       <Routes>
         <Route path="/" element={user ? <Home user={user} /> : <Navigate to="/auth" />} />
         <Route path="/exercises" element={user ? <Exercises user={user} userRole={userRole} /> : <Navigate to="/auth" />} />
@@ -159,9 +160,62 @@ function AppContent() {
         <Route path="/progress-tracker-3" element={user ? <ProgressTracker3 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
-        <Route path="/admin" element={user && userRole === 'admin' ? <Admin /> : <Navigate to="/" />} />
-        <Route path="/cache-demo" element={user && (userRole === 'admin' || process.env.NODE_ENV === 'development') ?
-          <CacheDemo /> : <Navigate to="/" />} />
+        <Route path="/admin" element={(() => {
+          // If not authenticated, redirect to auth
+          if (!user) {
+            return <Navigate to="/auth" />;
+          }
+
+          // If authenticated but profile not loaded yet, show loading
+          if (!userProfile) {
+            return (
+              <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
+                <div className="text-center">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="mt-2">Loading user profile...</p>
+                </div>
+              </div>
+            );
+          }
+
+          // Now we can safely check the role since profile is loaded
+          if (userRole !== 'admin') {
+            return <Navigate to="/" />;
+          }
+
+          // All checks passed, show admin page
+          return <Admin />;
+        })()} />
+        <Route path="/cache-demo" element={(() => {
+          // If not authenticated, redirect to auth
+          if (!user) {
+            return <Navigate to="/auth" />;
+          }
+
+          // If authenticated but not ready, show loading
+          if (!isReady) {
+            return (
+              <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
+                <div className="text-center">
+                  <div className="spinner-border text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <p className="mt-2">Loading user permissions...</p>
+                </div>
+              </div>
+            );
+          }
+
+          // Check if user has access (admin or development mode)
+          if (userRole !== 'admin' && process.env.NODE_ENV !== 'development') {
+            return <Navigate to="/" />;
+          }
+
+          // All checks passed, show cache demo
+          return <CacheDemo />;
+        })()} />
       </Routes>
       <DevelopmentDebugPanel />
     </Router>

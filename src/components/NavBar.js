@@ -1,15 +1,21 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../context/ThemeContext';
 import '../styles/NavBar.css';
 
-function NavBar({ user, userRole }) {
+function NavBar({ user, userRole, isReady }) {
   const { darkMode, toggleDarkMode } = useTheme();
   const { signOut } = useAuth();
+  const [expanded, setExpanded] = useState(false);
+  const navbarToggleRef = useRef(null);
 
   const handleLogout = async () => {
     try {
+      // Close navbar on mobile devices before logging out
+      if (expanded) {
+        setExpanded(false);
+      }
       await signOut();
     } catch (error) {
       console.error('Error signing out:', error);
@@ -17,10 +23,21 @@ function NavBar({ user, userRole }) {
   };
 
   return (
-    <Navbar bg={darkMode ? 'dark' : 'light'} variant={darkMode ? 'dark' : 'light'} expand="lg" className="navbar mb-4">
+    <Navbar
+      bg={darkMode ? 'dark' : 'light'}
+      variant={darkMode ? 'dark' : 'light'}
+      expand="lg"
+      className="navbar mb-4"
+      expanded={expanded}
+      onToggle={setExpanded}
+    >
       <Container fluid className="soft-container">
         <Navbar.Brand href="/" className="navbar-brand">Workout Tracker</Navbar.Brand>
-        <Navbar.Toggle aria-controls="basic-navbar-nav" className="navbar-toggler" />
+        <Navbar.Toggle
+          aria-controls="basic-navbar-nav"
+          className="navbar-toggler"
+          ref={navbarToggleRef}
+        />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
             <Nav.Link href="/" className="nav-link">Home</Nav.Link>
@@ -34,7 +51,7 @@ function NavBar({ user, userRole }) {
             <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
             <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
-            {userRole === 'admin' && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
+            {isReady && userRole === 'admin' && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
           </Nav>
           <Nav className="d-flex align-items-center">
             <Button
@@ -46,9 +63,9 @@ function NavBar({ user, userRole }) {
               {darkMode ? '☀️' : '🌙'}
             </Button>
             {user ? (
-              <Button 
-                variant="outline-danger" 
-                onClick={handleLogout} 
+              <Button
+                variant="outline-danger"
+                onClick={handleLogout}
                 className="soft-button soft-logout-button"
               >
                 Logout

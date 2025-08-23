@@ -29,12 +29,12 @@ const CONFIG = {
   outputDir: './migration-data',
   batchSize: 100,
   collections: [
-    // 'users',
-    // 'exercises',
-    // 'exercises_metadata', 
-    // 'programs',
-    // 'workoutLogs',
-    //'userAnalytics',
+    'users',
+    'exercises',
+    'exercises_metadata', 
+    'programs',
+    'workoutLogs',
+    'userAnalytics',
     'exerciseAnalytics',
     'monthlyAnalytics'
   ],
@@ -289,8 +289,9 @@ class FirestoreExtractor {
       if (!admin.apps.length) {
         // Try to use service account key if available
         const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || 
-          path.join(__dirname, '../../functions/sample-firebase-ai-app-d056c-firebase-adminsdk-fbsvc-f79a9e3560.json');
-        
+          //path.join(__dirname, '../../functions/sample-firebase-ai-app-d056c-firebase-adminsdk-fbsvc-f79a9e3560.json');
+          path.join(__dirname, '../../functions/sample-firebase-ai-app-d056c-firebase-adminsdk-fbsvc-047d03194a.json');
+
         try {
           //const serviceAccount = require(path.resolve(serviceAccountPath));
           admin.initializeApp({
@@ -356,17 +357,17 @@ class FirestoreExtractor {
     
     try {
       // Get collection reference
-      let query; //= this.db.collection(collectionName);  
+      let query = this.db.collection(collectionName);  
       
-      if (collectionName == 'userAnalytics') {
-        query = query.doc('PVi8RmDGc5gFshk9F2NTNXIqo5h1').collection('exerciseAnalytics');
-      }
-      else if (collectionName == ('exerciseAnalytics' || 'monthlyAnalytics')) {
-        query = this.db.collectionGroup(collectionName);
-      }
-      else {
-        this.db.collection(collectionName);
-      }
+      // if (collectionName == 'userAnalytics') {
+      //   query = query.doc('PVi8RmDGc5gFshk9F2NTNXIqo5h1').collection('exerciseAnalytics');
+      // }
+      // else if (collectionName == ('exerciseAnalytics' || 'monthlyAnalytics')) {
+      //   query = this.db.collectionGroup(collectionName);
+      // }
+      // else {
+      //   this.db.collection(collectionName);
+      // }
       // Apply user filter if specified
       // if (this.config.userId && this.hasUserIdField(collectionName)) {
       //   query = query.where('userId', '==', this.config.userId);

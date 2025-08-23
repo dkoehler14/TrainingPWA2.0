@@ -179,13 +179,14 @@ class DataTransformer {
     this.options = {
       inputDir: options.inputDir || './migration-data',
       outputDir: options.outputDir || './transformed-data',
+      userMappingFile: options.userMappingFile || path.join(options.inputDir || './migration-data', 'user_mapping.json'),
       batchSize: options.batchSize || 100,
       validateOutput: options.validateOutput || true,
       cleanData: options.cleanData || true,
       verbose: options.verbose || false,
       ...options
     };
-    
+
     this.stats = {
       totalDocuments: 0,
       transformedDocuments: 0,
@@ -193,20 +194,24 @@ class DataTransformer {
       cleaningOperations: 0,
       validationErrors: 0,
       relationshipsMapped: 0,
+      userMappingsLoaded: 0,
       programsTransformed: 0,
       workoutsTransformed: 0,
       exercisesTransformed: 0,
       workoutLogsTransformed: 0,
       workoutLogExercisesTransformed: 0
     };
-    
+
     this.idMappings = {
       users: new Map(),
       exercises: new Map(),
       programs: new Map(),
       program_workouts: new Map()
     };
-    
+
+    // User mapping from Firestore IDs to Supabase auth UUIDs
+    this.userIdMapping = new Map();
+
     this.duplicateWorkoutTracker = new Map();
     this.errors = [];
     this.warnings = [];
@@ -214,22 +219,25 @@ class DataTransformer {
 
   async transform() {
     console.log('🔄 Starting data transformation...');
-    
+
     // Create output directory
     await fs.mkdir(this.options.outputDir, { recursive: true });
-    
+
+    // Load user ID mapping
+    await this.loadUserMapping();
+
     // Load source data
     const sourceData = await this.loadSourceData();
-    
+
     // Transform in order (respecting dependencies)
     const transformationOrder = [
       'users',
-      'exercises', 
+      'exercises',
       'programs',
       'workoutLogs',
       'user_analytics'
     ];
-    
+
     const transformedData = {
       users: [],
       exercises: [],
@@ -240,15 +248,15 @@ class DataTransformer {
       workout_log_exercises: [],
       user_analytics: []
     };
-    
+
     for (const collection of transformationOrder) {
       if (sourceData[collection] && sourceData[collection].length > 0) {
         console.log(`\n📋 Transforming ${collection}...`);
         const results = await this.transformCollection(
-          collection, 
+          collection,
           sourceData[collection]
         );
-        
+
         // Process complex objects and separate into appropriate tables
         if (collection === 'programs') {
           for (const result of results) {
@@ -256,7 +264,7 @@ class DataTransformer {
               // This is a complex program object
               transformedData.programs.push(result.program);
               this.stats.programsTransformed++;
-              
+
               if (result.workouts) {
                 transformedData.program_workouts.push(...result.workouts);
                 this.stats.workoutsTransformed += result.workouts.length;
@@ -277,7 +285,7 @@ class DataTransformer {
               // This is a complex workout log object
               transformedData.workout_logs.push(result.workout_log);
               this.stats.workoutLogsTransformed++;
-              
+
               if (result.exercises) {
                 transformedData.workout_log_exercises.push(...result.exercises);
                 this.stats.workoutLogExercisesTransformed += result.exercises.length;
@@ -298,10 +306,10 @@ class DataTransformer {
         }
       }
     }
-    
+
     // Save transformed data
     await this.saveTransformedData(transformedData);
-    
+
     // Print transformation summary
     console.log('\n📊 Final Transformation Summary:');
     console.log(`Users: ${transformedData.users.length}`);
@@ -312,31 +320,57 @@ class DataTransformer {
     console.log(`Workout Logs: ${transformedData.workout_logs.length}`);
     console.log(`Workout Log Exercises: ${transformedData.workout_log_exercises.length}`);
     console.log(`User Analytics: ${transformedData.user_analytics.length}`);
-    
+
     // Validate transformed data if enabled
     if (this.options.validateOutput) {
       await this.validateTransformedData(transformedData);
       this.validateDataIntegrity(transformedData);
     }
-    
+
     // Generate transformation report
     await this.generateReport();
-    
+
     console.log('\n✅ Data transformation completed!');
     this.printSummary();
-    
+
     return transformedData;
+  }
+
+  async loadUserMapping() {
+    console.log('🔗 Loading user ID mapping...');
+
+    try {
+      const mappingContent = await fs.readFile(this.options.userMappingFile, 'utf8');
+      const mappingData = JSON.parse(mappingContent);
+
+      if (mappingData.users && typeof mappingData.users === 'object') {
+        for (const [firestoreId, supabaseId] of Object.entries(mappingData.users)) {
+          this.userIdMapping.set(firestoreId, supabaseId);
+          this.stats.userMappingsLoaded++;
+        }
+        console.log(`   Loaded ${this.stats.userMappingsLoaded} user ID mappings`);
+      } else {
+        throw new Error('Invalid user mapping format - expected { "users": { "firestoreId": "supabaseId" } }');
+      }
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.log(`   ⚠️ User mapping file not found at ${this.options.userMappingFile}`);
+        console.log('   Proceeding without user ID mapping - original Firestore IDs will be used');
+      } else {
+        throw new Error(`Failed to load user mapping: ${error.message}`);
+      }
+    }
   }
 
   async loadSourceData() {
     console.log('📂 Loading source data...');
-    
+
     const sourceData = {};
     const collections = ['users', 'exercises', 'exercises_metadata', 'programs', 'workoutLogs', 'userAnalytics'];
-    
+
     for (const collection of collections) {
       const filePath = path.join(this.options.inputDir, `${collection}.json`);
-      
+
       try {
         const fileContent = await fs.readFile(filePath, 'utf8');
         sourceData[collection] = JSON.parse(fileContent);
@@ -351,7 +385,7 @@ class DataTransformer {
         }
       }
     }
-    
+
     return sourceData;
   }
 
@@ -360,12 +394,12 @@ class DataTransformer {
       batchSize: this.options.batchSize,
       verbose: this.options.verbose
     });
-    
+
     const transformedDocuments = [];
-    
+
     const processorFn = async (batch) => {
       const batchResults = [];
-      
+
       for (const doc of batch) {
         try {
           // Validate document structure
@@ -373,7 +407,7 @@ class DataTransformer {
             this.warnings.push(`Skipping malformed document in ${collectionName}: ${JSON.stringify(doc)}`);
             continue;
           }
-          
+
           const transformed = await this.transformDocument(collectionName, doc);
           if (transformed) {
             if (Array.isArray(transformed)) {
@@ -395,19 +429,19 @@ class DataTransformer {
             error: error.message,
             timestamp: new Date().toISOString()
           });
-          
+
           if (this.options.verbose) {
             console.error(`   ❌ Failed to transform ${doc && doc.id ? doc.id : 'unknown'}: ${error.message}`);
           }
         }
       }
-      
+
       transformedDocuments.push(...batchResults);
       return batchResults;
     };
-    
+
     await processor.processInBatches(documents, processorFn);
-    
+
     console.log(`   Transformed ${transformedDocuments.length} documents`);
     return transformedDocuments;
   }
@@ -432,8 +466,16 @@ class DataTransformer {
   }
 
   transformUser(user) {
+    // Map Firestore user ID to Supabase auth UUID
+    const mappedUserId = this.userIdMapping.get(user.id);
+    if (!mappedUserId) {
+      this.warnings.push(`No Supabase auth UUID mapping found for Firestore user ID: ${user.id}`);
+      // Skip this user if no mapping exists
+      return null;
+    }
+
     const transformed = {
-      id: user.id,
+      id: mappedUserId, // Use the mapped Supabase auth UUID
       email: this.cleanEmail(user.email),
       name: this.cleanString(user.name) || 'Unknown User',
       roles: this.normalizeRoles(user.role),
@@ -451,10 +493,10 @@ class DataTransformer {
       created_at: this.convertTimestamp(user.createdAt),
       updated_at: this.convertTimestamp(user.updatedAt)
     };
-    
-    // Store ID mapping for foreign key resolution
+
+    // Store ID mapping for foreign key resolution (Firestore ID -> Supabase UUID)
     this.idMappings.users.set(user.id, transformed.id);
-    
+
     return transformed;
   }
 
@@ -470,10 +512,10 @@ class DataTransformer {
       created_at: this.convertTimestamp(exercise.createdAt),
       updated_at: this.convertTimestamp(exercise.updatedAt)
     };
-    
+
     // Store ID mapping
     this.idMappings.exercises.set(exercise.id, transformed.id);
-    
+
     return transformed;
   }
 
@@ -481,19 +523,19 @@ class DataTransformer {
     // exercises_metadata contains a map of exercises
     // We need to extract individual exercises and transform them
     const exercises = [];
-    
+
     if (metadata.exercises && typeof metadata.exercises === 'object') {
       for (const [exerciseId, exerciseData] of Object.entries(metadata.exercises)) {
         const exercise = {
           id: exerciseId,
           ...exerciseData
         };
-        
+
         const transformed = this.transformExercise(exercise);
         exercises.push(transformed);
       }
     }
-    
+
     return exercises;
   }
 
@@ -505,7 +547,7 @@ class DataTransformer {
     if (!program.name) {
       throw new Error(`Program ${program.id} missing required name`);
     }
-    
+
     const transformed = {
       id: this.generateUUID(),
       user_id: this.resolveUserReference(program.userId),
@@ -525,18 +567,18 @@ class DataTransformer {
       created_at: this.convertTimestamp(program.createdAt),
       updated_at: this.convertTimestamp(program.updatedAt)
     };
-    
+
     // Store ID mapping
     this.idMappings.programs.set(program.id, transformed.id);
-    
+
     // Transform weeklyConfigs into workouts and exercises
     const workouts = [];
     const exercises = [];
-    
+
     if (program.weeklyConfigs && typeof program.weeklyConfigs === 'object') {
       for (const [configKey, workoutConfig] of Object.entries(program.weeklyConfigs)) {
         let weekNumber, dayNumber, workoutName, workoutExercises;
-        
+
         // Handle new format: "week1_day1": { "name": "...", "exercises": [...] }
         const newFormatMatch = configKey.match(/^week(\d+)_day(\d+)$/);
         if (newFormatMatch) {
@@ -558,7 +600,7 @@ class DataTransformer {
             continue;
           }
         }
-        
+
         // Create workout object
         const workout = {
           id: `${program.id}_${configKey}`, // Create a unique ID for mapping
@@ -568,10 +610,10 @@ class DataTransformer {
           exercises: workoutExercises,
           createdAt: program.createdAt
         };
-        
+
         const transformedWorkout = this.transformProgramWorkout(workout, transformed.id);
         workouts.push(transformedWorkout);
-        
+
         // Transform workout exercises
         if (workout.exercises && Array.isArray(workout.exercises)) {
           for (let i = 0; i < workout.exercises.length; i++) {
@@ -582,11 +624,11 @@ class DataTransformer {
         }
       }
     }
-    
+
     if (this.options.verbose) {
       console.log(`   Program ${transformed.id}: ${workouts.length} workouts, ${exercises.length} exercises`);
     }
-    
+
     // Return program with related data
     return {
       program: transformed,
@@ -600,7 +642,7 @@ class DataTransformer {
     if (!workout.name) {
       throw new Error(`Program workout missing required name`);
     }
-    
+
     const transformed = {
       id: this.generateUUID(),
       program_id: programId,
@@ -609,7 +651,7 @@ class DataTransformer {
       name: this.cleanString(workout.name) || 'Workout',
       created_at: this.convertTimestamp(workout.createdAt)
     };
-    
+
     // Check for duplicate workouts based on unique constraint
     const existingKey = `${programId}-${transformed.week_number}-${transformed.day_number}`;
     if (this.duplicateWorkoutTracker.has(existingKey)) {
@@ -621,10 +663,10 @@ class DataTransformer {
     } else {
       this.duplicateWorkoutTracker.set(existingKey, transformed.day_number);
     }
-    
+
     // Store ID mapping
     this.idMappings.program_workouts.set(workout.id, transformed.id);
-    
+
     return transformed;
   }
 
@@ -636,7 +678,7 @@ class DataTransformer {
     if (!exercise.sets) {
       throw new Error(`Program exercise missing required sets`);
     }
-    
+
     return {
       id: this.generateUUID(),
       workout_id: workoutId,
@@ -659,7 +701,7 @@ class DataTransformer {
     if (!log.date) {
       throw new Error(`Workout log ${log.id} missing required date`);
     }
-    
+
     const transformed = {
       id: this.generateUUID(),
       user_id: this.resolveUserReference(log.userId),
@@ -678,7 +720,7 @@ class DataTransformer {
       created_at: this.convertTimestamp(log.createdAt),
       updated_at: this.convertTimestamp(log.updatedAt)
     };
-    
+
     // Transform exercises
     const exercises = [];
     if (log.exercises && Array.isArray(log.exercises)) {
@@ -688,11 +730,11 @@ class DataTransformer {
         exercises.push(transformedExercise);
       }
     }
-    
+
     if (this.options.verbose) {
       console.log(`   Workout log ${transformed.id}: ${exercises.length} exercises`);
     }
-    
+
     return {
       workout_log: transformed,
       exercises
@@ -707,7 +749,7 @@ class DataTransformer {
     if (!exercise.sets) {
       throw new Error(`Workout log exercise missing required sets`);
     }
-    
+
     return {
       id: this.generateUUID(),
       workout_log_id: workoutLogId,
@@ -810,17 +852,17 @@ class DataTransformer {
   // Enhanced data cleaning for workout-specific data
   cleanWorkoutData(workout) {
     if (!workout || typeof workout !== 'object') return null;
-    
+
     // Ensure exercises array exists and is valid
     if (!Array.isArray(workout.exercises)) {
       workout.exercises = [];
     }
-    
+
     // Clean exercise data
     workout.exercises = workout.exercises.filter(exercise => {
       return exercise && exercise.exerciseId && exercise.sets;
     });
-    
+
     return workout;
   }
 
@@ -844,7 +886,7 @@ class DataTransformer {
   mapExperienceLevel(level) {
     const mapping = {
       'beginner': 'beginner',
-      'intermediate': 'intermediate', 
+      'intermediate': 'intermediate',
       'advanced': 'advanced',
       'Beginner': 'beginner',
       'Intermediate': 'intermediate',
@@ -868,13 +910,23 @@ class DataTransformer {
   // Reference resolution methods
   resolveUserReference(userId) {
     if (!userId) return null;
+
+    // First try to get the mapped ID from our internal mapping (Firestore -> Supabase)
     const mappedId = this.idMappings.users.get(userId);
-    if (!mappedId) {
-      this.warnings.push(`User reference not found: ${userId}`);
-      return null;
+    if (mappedId) {
+      this.stats.relationshipsMapped++;
+      return mappedId;
     }
-    this.stats.relationshipsMapped++;
-    return mappedId;
+
+    // If not found in internal mapping, try direct lookup in user mapping
+    const directMappedId = this.userIdMapping.get(userId);
+    if (directMappedId) {
+      this.stats.relationshipsMapped++;
+      return directMappedId;
+    }
+
+    this.warnings.push(`User reference not found in mappings: ${userId}`);
+    return null;
   }
 
   resolveExerciseReference(exerciseId) {
@@ -902,32 +954,32 @@ class DataTransformer {
   // Timestamp conversion methods
   convertTimestamp(timestamp) {
     if (!timestamp) return null;
-    
+
     // Handle Firestore Timestamp objects
     if (timestamp && typeof timestamp === 'object' && timestamp.seconds) {
       return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000).toISOString();
     }
-    
+
     // Handle Date objects
     if (timestamp instanceof Date) {
       return timestamp.toISOString();
     }
-    
+
     // Handle ISO strings
     if (typeof timestamp === 'string') {
       const date = new Date(timestamp);
       return isNaN(date.getTime()) ? null : date.toISOString();
     }
-    
+
     return null;
   }
 
   convertDate(date) {
     if (!date) return null;
-    
+
     const timestamp = this.convertTimestamp(date);
     if (!timestamp) return null;
-    
+
     // Return just the date part (YYYY-MM-DD)
     return timestamp.split('T')[0];
   }
@@ -937,9 +989,9 @@ class DataTransformer {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
-    
+
     // Fallback UUID generation
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
@@ -948,12 +1000,12 @@ class DataTransformer {
 
   async saveTransformedData(transformedData) {
     console.log('\n💾 Saving transformed data...');
-    
+
     for (const [collection, data] of Object.entries(transformedData)) {
       if (data && data.length > 0) {
         const filePath = path.join(this.options.outputDir, `${collection}.json`);
         const jsonData = JSON.stringify(data, null, 2);
-        
+
         await fs.writeFile(filePath, jsonData, 'utf8');
         console.log(`   Saved ${data.length} records to ${collection}.json`);
       }
@@ -973,10 +1025,10 @@ class DataTransformer {
       },
       timestamp: new Date().toISOString()
     };
-    
+
     const reportPath = path.join(this.options.outputDir, 'transformation-report.json');
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
-    
+
     console.log(`📄 Transformation report saved to: ${reportPath}`);
   }
 
@@ -986,24 +1038,25 @@ class DataTransformer {
     console.log(`Total Documents: ${this.stats.totalDocuments}`);
     console.log(`Transformed Documents: ${this.stats.transformedDocuments}`);
     console.log(`Failed Transformations: ${this.stats.failedTransformations}`);
+    console.log(`User Mappings Loaded: ${this.stats.userMappingsLoaded}`);
     console.log(`Relationships Mapped: ${this.stats.relationshipsMapped}`);
     console.log(`Cleaning Operations: ${this.stats.cleaningOperations}`);
     console.log(`Validation Errors: ${this.stats.validationErrors}`);
     console.log(`Warnings: ${this.warnings.length}`);
-    
+
     console.log('\n📊 Table Transformation Summary:');
     console.log(`Programs: ${this.stats.programsTransformed}`);
     console.log(`Program Workouts: ${this.stats.workoutsTransformed}`);
     console.log(`Program Exercises: ${this.stats.exercisesTransformed}`);
     console.log(`Workout Logs: ${this.stats.workoutLogsTransformed}`);
     console.log(`Workout Log Exercises: ${this.stats.workoutLogExercisesTransformed}`);
-    
+
     if (this.errors.length > 0) {
       console.log(`\n❌ Errors (${this.errors.length}):`);
       this.errors.slice(0, 5).forEach(error => {
         console.log(`   ${error.collection}/${error.documentId}: ${error.error}`);
       });
-      
+
       if (this.errors.length > 5) {
         console.log(`   ... and ${this.errors.length - 5} more errors`);
       }
@@ -1012,16 +1065,16 @@ class DataTransformer {
 
   async validateTransformedData(transformedData) {
     console.log('\n🔍 Validating transformed data...');
-    
+
     for (const [collection, data] of Object.entries(transformedData)) {
       if (!POSTGRES_SCHEMAS[collection]) {
         console.log(`   ⚠️ No schema defined for ${collection}, skipping validation`);
         continue;
       }
-      
+
       const schema = POSTGRES_SCHEMAS[collection];
       let validationErrors = 0;
-      
+
       for (const record of data) {
         const recordErrors = this.validateRecord(record, schema);
         if (recordErrors.length > 0) {
@@ -1044,7 +1097,7 @@ class DataTransformer {
           }
         }
       }
-      
+
       if (validationErrors > 0) {
         console.log(`   ❌ ${validationErrors} validation errors in ${collection}`);
         this.stats.validationErrors += validationErrors;
@@ -1056,28 +1109,28 @@ class DataTransformer {
 
   validateRecord(record, schema) {
     const errors = [];
-    
+
     for (const [columnName, columnDef] of Object.entries(schema.columns)) {
       if (columnDef.required && record[columnName] === undefined) {
         errors.push(`Missing required column: ${columnName}`);
         continue;
       }
-      
+
       if (record[columnName] !== undefined && record[columnName] !== null) {
         const value = record[columnName];
         const expectedType = columnDef.type;
-        
+
         // Basic type validation
         if (expectedType.includes('UUID') && typeof value !== 'string') {
           errors.push(`Column ${columnName} should be UUID string, got ${typeof value}`);
         } else if (expectedType.includes('VARCHAR') && typeof value !== 'string') {
           errors.push(`Column ${columnName} should be string, got ${typeof value}`);
-        // } else if (expectedType.includes('INTEGER') && typeof value !== 'number') {
-        //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
-        // } else if (expectedType.includes('DECIMAL') && typeof value !== 'number') {
-        //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
-        // } else if (expectedType.includes('BOOLEAN') && typeof value !== 'boolean') {
-        //   errors.push(`Column ${columnName} should be boolean, got ${typeof value}`);
+          // } else if (expectedType.includes('INTEGER') && typeof value !== 'number') {
+          //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
+          // } else if (expectedType.includes('DECIMAL') && typeof value !== 'number') {
+          //   errors.push(`Column ${columnName} should be number, got ${typeof value}`);
+          // } else if (expectedType.includes('BOOLEAN') && typeof value !== 'boolean') {
+          //   errors.push(`Column ${columnName} should be boolean, got ${typeof value}`);
         } else if (expectedType.includes('TIMESTAMP') && typeof value !== 'string') {
           errors.push(`Column ${columnName} should be ISO string, got ${typeof value}`);
         } else if (expectedType.includes('DATE') && typeof value !== 'string') {
@@ -1089,16 +1142,16 @@ class DataTransformer {
         }
       }
     }
-    
+
     return errors;
   }
 
   // Validate data integrity after transformation
   validateDataIntegrity(transformedData) {
     console.log('\n🔍 Validating data integrity...');
-    
+
     let integrityErrors = 0;
-    
+
     // Check that all foreign key references exist
     for (const workout of transformedData.program_workouts) {
       if (!transformedData.programs.find(p => p.id === workout.program_id)) {
@@ -1112,7 +1165,7 @@ class DataTransformer {
         integrityErrors++;
       }
     }
-    
+
     for (const exercise of transformedData.program_exercises) {
       if (!transformedData.program_workouts.find(w => w.id === exercise.workout_id)) {
         this.errors.push({
@@ -1124,7 +1177,7 @@ class DataTransformer {
         });
         integrityErrors++;
       }
-      
+
       if (!transformedData.exercises.find(e => e.id === exercise.exercise_id)) {
         this.errors.push({
           collection: 'program_exercises',
@@ -1136,7 +1189,7 @@ class DataTransformer {
         integrityErrors++;
       }
     }
-    
+
     for (const workoutLog of transformedData.workout_logs) {
       if (workoutLog.program_id && !transformedData.programs.find(p => p.id === workoutLog.program_id)) {
         this.errors.push({
@@ -1149,7 +1202,7 @@ class DataTransformer {
         integrityErrors++;
       }
     }
-    
+
     for (const exercise of transformedData.workout_log_exercises) {
       if (!transformedData.workout_logs.find(w => w.id === exercise.workout_log_id)) {
         this.errors.push({
@@ -1161,7 +1214,7 @@ class DataTransformer {
         });
         integrityErrors++;
       }
-      
+
       if (!transformedData.exercises.find(e => e.id === exercise.exercise_id)) {
         this.errors.push({
           collection: 'workout_log_exercises',
@@ -1173,7 +1226,7 @@ class DataTransformer {
         integrityErrors++;
       }
     }
-    
+
     if (integrityErrors > 0) {
       console.log(`   ❌ ${integrityErrors} data integrity errors found`);
       this.stats.validationErrors += integrityErrors;
@@ -1187,7 +1240,7 @@ class DataTransformer {
 async function main() {
   const args = process.argv.slice(2);
   const options = {};
-  
+
   // Parse command line arguments
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -1209,6 +1262,9 @@ async function main() {
       case '--no-cleaning':
         options.cleanData = false;
         break;
+      case '--user-mapping':
+        options.userMappingFile = args[++i];
+        break;
       case '--help':
         console.log(`
 Data Transformation Tool
@@ -1218,6 +1274,7 @@ Usage: node data-transformer.js [options]
 Options:
   --input-dir <path>     Input directory with extracted Firestore data
   --output-dir <path>    Output directory for transformed data
+  --user-mapping <path>  Path to user mapping JSON file (default: <input-dir>/user_mapping.json)
   --batch-size <number>  Batch size for processing
   --verbose              Enable verbose logging
   --no-validation        Skip output validation
@@ -1228,16 +1285,16 @@ Options:
         break;
     }
   }
-  
+
   try {
     const transformer = new DataTransformer(options);
     await transformer.transform();
-    
+
     if (transformer.errors.length > 0) {
       console.log('\n⚠️ Transformation completed with errors. Check transformation-report.json for details.');
       process.exit(1);
     }
-    
+
   } catch (error) {
     console.error('💥 Transformation failed:', error.message);
     process.exit(1);

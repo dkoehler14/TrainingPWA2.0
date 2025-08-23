@@ -264,13 +264,13 @@ function LogWorkout() {
   } = useSaveErrorHandler({
     maxRetries: 3,
     retryDelay: 1500,
-    onSaveSuccess: (result) => {
-      showUserMessage('Workout saved successfully', 'success');
-    },
-    onSaveError: (error) => {
-      // Error display is handled by the error components
-      console.error('Save operation failed:', error);
-    }
+    // onSaveSuccess: (result) => {
+    //   showUserMessage('Workout saved successfully', 'success');
+    // },
+    // onSaveError: (error) => {
+    //   // Error display is handled by the error components
+    //   console.error('Save operation failed:', error);
+    // }
   });
 
   const { user, isAuthenticated, userRole } = useAuth();
@@ -799,7 +799,7 @@ function LogWorkout() {
 
   // Helper function to detect if a value is a rep range
   const isRepRange = (value) => {
-    
+
     try {
       console.log(typeof value);
       console.log(value);
@@ -807,7 +807,7 @@ function LogWorkout() {
     catch {
       console.log("couldn't log value");
     }
-    
+
     if (!value || typeof value !== 'string') return false;
     // Check for patterns like "8-10", "5/3/1", "8-12", etc.
     return /[^\d\s]/.test(value.toString()) && value.toString().trim() !== '';
@@ -834,7 +834,7 @@ function LogWorkout() {
 
       // Create unique lock key for this workout session
       const lockKey = `${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
-      
+
       // Check if a save is already in progress for this session
       if (saveLockRef.current === lockKey) {
         console.log('🔄 SAVE LOCKED: Another save already in progress for this session, skipping', {
@@ -990,7 +990,7 @@ function LogWorkout() {
 
     // Create unique lock key for this workout session
     const lockKey = `${userData.id}_${programData.id}_${weekIndex}_${dayIndex}`;
-    
+
     // Check if a save is already in progress for this session
     if (saveLockRef.current === lockKey) {
       console.log('🔄 IMMEDIATE SAVE LOCKED: Another save already in progress for this session, skipping', {
@@ -2185,7 +2185,7 @@ function LogWorkout() {
             });
           }
         }
-        showUserMessage('Workout saved successfully!', 'success');
+        // showUserMessage('Workout saved successfully!', 'success');
       }, 'saving workout log');
     } catch (error) {
       handleError(error, 'saving workout log', 'Error saving workout. Please try again.');
@@ -2638,8 +2638,9 @@ function LogWorkout() {
               </div>
             )}
 
+            {/* 8/23/25 Removing this for now! */}
             {/* Enhanced Save Status Indicator */}
-            {selectedProgram && logData.length > 0 && (
+            {/* {selectedProgram && logData.length > 0 && (
               <div className="d-flex align-items-center justify-content-between mb-3 p-2 bg-light rounded">
                 <SaveStatusIndicator
                   saveStatus={saveStatus}
@@ -2658,7 +2659,7 @@ function LogWorkout() {
                   </Button>
                 )}
               </div>
-            )}
+            )} */}
 
             {isLoading ? (
               <div className="text-center py-4">

@@ -6,6 +6,7 @@ import { useRealtimeWorkoutHistory } from '../hooks/useRealtimeWorkouts';
 import workoutLogService from '../services/workoutLogService';
 import { getUserPrograms } from '../services/programService';
 import ErrorMessage from '../components/ErrorMessage';
+
 import { supabase } from '../config/supabase';
 import '../styles/Home.css';
 
@@ -227,7 +228,7 @@ function Home() {
                     <Card.Title className="widget-title">Current Program</Card.Title>
                     <p className="program-name">{dashboardData.currentProgram.name}</p>
                     {/* <p className="soft-text-secondary">Next: {dashboardData.currentProgram.nextWorkout}</p> */}
-                    <Button as={Link} to={`/programs/${dashboardData.currentProgram.id}`} className="soft-button-secondary mt-2">View Program</Button>
+                    <Button as={Link} to={`/programs?programId=${dashboardData.currentProgram.id}`} className="soft-button-secondary mt-2">View Program</Button>
                   </Card.Body>
                 </Card>
               )}
