@@ -2992,6 +2992,9 @@ function LogWorkout() {
                                       style={{ width: '50px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                       ref={repsInputRef} // Attach ref for double-click
                                       disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
+                                      min="0"
+                                      max="9999"
+                                      maxLength="4"
                                     />
                                   </td>
                                   <td className="text-center">
@@ -3014,6 +3017,10 @@ function LogWorkout() {
                                           className="soft-input center-input"
                                           style={{ width: '80px', display: 'inline-block' }}
                                           placeholder="Additional Weight"
+                                          min="0"
+                                          max="9999"
+                                          maxLength="4"
+                                          step="0.5"
                                         />
                                         {ex.bodyweight && ex.weights[setIndex] && (
                                           <small className="ms-2">
@@ -3031,6 +3038,10 @@ function LogWorkout() {
                                         style={{ width: '80px', display: 'inline-block', backgroundColor: ex.completed[setIndex] ? '#f8f9fa' : '' }}
                                         ref={weightInputRef} // Attach ref for double-click
                                         disabled={ex.completed[setIndex] || isWorkoutFinished} // Disable when set is complete or workout is finished
+                                        min="0"
+                                        max="9999"
+                                        maxLength="4"
+                                        step="0.5"
                                       />
                                     )}
                                   </td>
@@ -3162,6 +3173,10 @@ function LogWorkout() {
                             onChange={(e) => setBodyweightInput(e.target.value)}
                             placeholder="Enter your bodyweight"
                             className="soft-input"
+                            min="0"
+                            max="9999"
+                            maxLength="4"
+                            step="0.5"
                           />
                         </Form.Group>
                       </Modal.Body>

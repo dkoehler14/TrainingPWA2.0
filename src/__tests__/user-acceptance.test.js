@@ -310,7 +310,7 @@ describe('User Acceptance Testing - Firestore to Supabase Migration', () => {
         }),
         dbUtils.createTestExercise({
           name: 'Squat',
-          primary_muscle_group: 'Legs',
+          primary_muscle_group: 'Quads',
           exercise_type: 'Barbell',
           is_global: true
         }),
@@ -408,7 +408,7 @@ describe('User Acceptance Testing - Firestore to Supabase Migration', () => {
         }),
         dbUtils.createTestExercise({
           name: 'Squat',
-          primary_muscle_group: 'Legs',
+          primary_muscle_group: 'Quads',
           exercise_type: 'Barbell'
         }),
         dbUtils.createTestExercise({
@@ -662,7 +662,7 @@ describe('User Acceptance Testing - Firestore to Supabase Migration', () => {
         }),
         dbUtils.createTestExercise({
           name: 'Squats',
-          primary_muscle_group: 'Legs',
+          primary_muscle_group: 'Quads',
           exercise_type: 'Bodyweight'
         })
       ])
@@ -808,7 +808,7 @@ describe('User Acceptance Testing - Firestore to Supabase Migration', () => {
       // Create PR data
       const exercises = await Promise.all([
         dbUtils.createTestExercise({ name: 'Bench Press', primary_muscle_group: 'Chest' }),
-        dbUtils.createTestExercise({ name: 'Squat', primary_muscle_group: 'Legs' }),
+        dbUtils.createTestExercise({ name: 'Squat', primary_muscle_group: 'Quads' }),
         dbUtils.createTestExercise({ name: 'Deadlift', primary_muscle_group: 'Back' })
       ])
 

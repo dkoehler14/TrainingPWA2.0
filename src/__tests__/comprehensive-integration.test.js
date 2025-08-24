@@ -290,7 +290,7 @@ describe('Comprehensive Integration Tests - Firestore to Supabase Migration', ()
         }),
         dbUtils.createTestExercise({
           name: 'Squat',
-          primary_muscle_group: 'Legs',
+          primary_muscle_group: 'Quads',
           exercise_type: 'Barbell'
         }),
         dbUtils.createTestExercise({
@@ -340,7 +340,7 @@ describe('Comprehensive Integration Tests - Firestore to Supabase Migration', ()
         }),
         dbUtils.createTestExercise({
           name: 'Squat',
-          primary_muscle_group: 'Legs',
+          primary_muscle_group: 'Quads',
           exercise_type: 'Barbell'
         })
       ])
@@ -633,7 +633,7 @@ describe('Comprehensive Integration Tests - Firestore to Supabase Migration', ()
       // Create comprehensive test data
       const exercises = await Promise.all([
         dbUtils.createTestExercise({ name: 'Bench Press', primary_muscle_group: 'Chest' }),
-        dbUtils.createTestExercise({ name: 'Squat', primary_muscle_group: 'Legs' }),
+        dbUtils.createTestExercise({ name: 'Squat', primary_muscle_group: 'Quads' }),
         dbUtils.createTestExercise({ name: 'Pull-ups', primary_muscle_group: 'Back', exercise_type: 'Bodyweight' })
       ])
 

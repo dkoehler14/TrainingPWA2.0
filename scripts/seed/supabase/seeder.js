@@ -139,10 +139,10 @@ async function seedSupabaseAll(options = {}) {
       { id: '550e8400-e29b-41d4-a716-446655440008', name: 'Trap Bar Deadlift', primary_muscle_group: 'Back', exercise_type: 'Trap Bar', instructions: 'Lift weight from ground by extending hips and knees', is_global: true },
 
       // Legs exercises
-      { id: '550e8400-e29b-41d4-a716-446655440009', name: 'SSB Squat', primary_muscle_group: 'Legs', exercise_type: 'Safety Squat Bar', instructions: 'Lower body by bending knees and hips, return to standing', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000a', name: 'Leg Press', primary_muscle_group: 'Legs', exercise_type: 'Machine', instructions: 'Push weight away using legs while seated', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000b', name: 'DB Lunges', primary_muscle_group: 'Legs', exercise_type: 'Dumbbell', instructions: 'Step forward, lower back knee toward ground', is_global: true },
-      { id: '550e8400-e29b-41d4-a716-44665544000c', name: '2 Leg Seated Leg Curl', primary_muscle_group: 'Legs', exercise_type: 'Machine', instructions: 'Curl heels toward glutes against resistance', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-446655440009', name: 'SSB Squat', primary_muscle_group: 'Quads', exercise_type: 'Safety Squat Bar', instructions: 'Lower body by bending knees and hips, return to standing', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000a', name: 'Leg Press', primary_muscle_group: 'Quads', exercise_type: 'Machine', instructions: 'Push weight away using legs while seated', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000b', name: 'DB Lunges', primary_muscle_group: 'Quads', exercise_type: 'Dumbbell', instructions: 'Step forward, lower back knee toward ground', is_global: true },
+      { id: '550e8400-e29b-41d4-a716-44665544000c', name: '2 Leg Seated Leg Curl', primary_muscle_group: 'Hamstrings', exercise_type: 'Machine', instructions: 'Curl heels toward glutes against resistance', is_global: true },
 
       // Shoulders exercises
       { id: '550e8400-e29b-41d4-a716-44665544000d', name: 'Overhead Press', primary_muscle_group: 'Shoulders', exercise_type: 'Barbell', instructions: 'Press weight overhead from shoulder level', is_global: true },

@@ -694,6 +694,8 @@ function QuickWorkout() {
                                                                 ref={setIndex === 0 ? repsInputRef : null}
                                                                 type="number"
                                                                 min="0"
+                                                                max="9999"
+                                                                maxLength="4"
                                                                 value={exercise.reps[setIndex] || ''}
                                                                 onChange={(e) => updateExerciseData(exerciseIndex, 'reps', setIndex, e.target.value)}
                                                                 onFocus={handleFocus}
@@ -706,6 +708,8 @@ function QuickWorkout() {
                                                                 ref={setIndex === 0 ? weightInputRef : null}
                                                                 type="number"
                                                                 min="0"
+                                                                max="9999"
+                                                                maxLength="4"
                                                                 step="0.5"
                                                                 value={exercise.weights[setIndex] || ''}
                                                                 onChange={(e) => updateExerciseData(exerciseIndex, 'weights', setIndex, e.target.value)}
@@ -848,6 +852,8 @@ function QuickWorkout() {
                         <Form.Control
                             type="number"
                             min="0"
+                            max="9999"
+                            maxLength="4"
                             step="0.5"
                             value={bodyweightInput}
                             onChange={(e) => setBodyweightInput(e.target.value)}
