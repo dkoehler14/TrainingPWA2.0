@@ -33,7 +33,7 @@ CREATE POLICY "Service role can access all users" ON users
 -- Create a security definer function to safely check user roles
 -- This function runs with elevated privileges to avoid RLS permission issues
 CREATE OR REPLACE FUNCTION public.check_user_role(user_id UUID, role_name TEXT)
-RETURNS BOOLEAN AS $
+RETURNS BOOLEAN AS $$
 DECLARE
     has_role BOOLEAN := false;
 BEGIN
@@ -44,7 +44,7 @@ BEGIN
     
     RETURN COALESCE(has_role, false);
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Update the exercise policy to use the security definer function
 -- This should resolve the "permission denied for table users" error
@@ -86,7 +86,7 @@ RETURNS TABLE(
     table_name TEXT,
     rls_enabled BOOLEAN,
     policy_count INTEGER
-) AS $
+) AS $$
 BEGIN
     RETURN QUERY
     SELECT 
@@ -100,7 +100,7 @@ BEGIN
     GROUP BY t.tablename, t.rowsecurity
     ORDER BY t.tablename;
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Add comment for the validation function
 COMMENT ON FUNCTION public.validate_rls_setup IS 

@@ -184,6 +184,16 @@ class DataTransformer {
       validateOutput: options.validateOutput || true,
       cleanData: options.cleanData || true,
       verbose: options.verbose || false,
+      // Validation configuration options
+      enableValidation: options.enableValidation !== false, // Default to true
+      validationLevel: options.validationLevel || 'strict', // 'strict', 'moderate', 'lenient'
+      validateExerciseReferences: options.validateExerciseReferences !== false,
+      validateUserReferences: options.validateUserReferences !== false,
+      validateDataTypes: options.validateDataTypes !== false,
+      validateRequiredFields: options.validateRequiredFields !== false,
+      validateArrayBounds: options.validateArrayBounds !== false,
+      maxValidationErrors: options.maxValidationErrors || 100,
+      stopOnValidationFailure: options.stopOnValidationFailure || false,
       ...options
     };
 
@@ -199,7 +209,25 @@ class DataTransformer {
       workoutsTransformed: 0,
       exercisesTransformed: 0,
       workoutLogsTransformed: 0,
-      workoutLogExercisesTransformed: 0
+      workoutLogExercisesTransformed: 0,
+      // Validation statistics
+      validationChecksPerformed: 0,
+      validationIssuesFound: 0,
+      validationIssuesResolved: 0,
+      exerciseReferenceValidations: 0,
+      userReferenceValidations: 0,
+      dataTypeValidations: 0,
+      requiredFieldValidations: 0,
+      arrayBoundsValidations: 0,
+      validationWarnings: 0,
+      validationErrorsByType: {
+        exerciseReference: 0,
+        userReference: 0,
+        dataType: 0,
+        requiredField: 0,
+        arrayBounds: 0,
+        other: 0
+      }
     };
 
     this.idMappings = {
@@ -215,6 +243,50 @@ class DataTransformer {
     this.duplicateWorkoutTracker = new Map();
     this.errors = [];
     this.warnings = [];
+    
+    // Validation-specific properties
+    this.validationIssues = [];
+    this.validationContext = {
+      currentCollection: null,
+      currentDocument: null,
+      currentField: null
+    };
+    this.validationRules = this.initializeValidationRules();
+    this.validationCache = {
+      exerciseIds: new Set(),
+      userIds: new Set(),
+      programIds: new Set()
+    };
+  }
+
+  initializeValidationRules() {
+    return {
+      exerciseReference: {
+        enabled: this.options.validateExerciseReferences,
+        severity: 'error',
+        message: 'Invalid exercise reference'
+      },
+      userReference: {
+        enabled: this.options.validateUserReferences,
+        severity: 'error',
+        message: 'Invalid user reference'
+      },
+      dataType: {
+        enabled: this.options.validateDataTypes,
+        severity: 'warning',
+        message: 'Data type validation failed'
+      },
+      requiredField: {
+        enabled: this.options.validateRequiredFields,
+        severity: 'error',
+        message: 'Required field missing or invalid'
+      },
+      arrayBounds: {
+        enabled: this.options.validateArrayBounds,
+        severity: 'warning',
+        message: 'Array bounds validation failed'
+      }
+    };
   }
 
   async transform() {

@@ -15,6 +15,13 @@
  * - Data validation before import
  * - Resume from checkpoint support
  * 
+ * Key Updates (2024-08-24):
+ * - Updated to handle flat data structure from data-transformer.js
+ * - Builds foreign key mappings from loaded data before import
+ * - Improved foreign key resolution for complex relationships
+ * - Enhanced validation for required foreign key constraints
+ * - Better handling of program_workouts, program_exercises, and workout_log_exercises
+ * 
  * Usage:
  *   node scripts/migration/postgres-importer.js [options]
  */
@@ -52,7 +59,7 @@ class PostgresImporter {
       dryRun: options.dryRun || false,
       ...options
     };
-    
+
     this.supabase = null;
     this.stats = {
       totalRecords: 0,
@@ -65,7 +72,7 @@ class PostgresImporter {
       foreignKeyResolutions: 0,
       validationErrors: 0
     };
-    
+
     this.errors = [];
     this.warnings = [];
     this.checkpoint = {
@@ -73,18 +80,18 @@ class PostgresImporter {
       lastProcessedIndex: -1,
       timestamp: null
     };
-    
+
     // Track foreign key mappings for relationship resolution
     this.foreignKeyMappings = new Map();
   }
 
   async initialize() {
     console.log('🔧 Initializing PostgreSQL importer...');
-    
+
     if (!this.options.supabaseUrl || !this.options.supabaseKey) {
       throw new Error('Supabase URL and service role key are required');
     }
-    
+
     // Initialize Supabase client
     this.supabase = createClient(this.options.supabaseUrl, this.options.supabaseKey, {
       auth: {
@@ -92,57 +99,60 @@ class PostgresImporter {
         persistSession: false
       }
     });
-    
+
     // Test connection
     const { data, error } = await this.supabase.from('users').select('count').limit(1);
     if (error && !error.message.includes('relation "users" does not exist')) {
       throw new Error(`Failed to connect to Supabase: ${error.message}`);
     }
-    
+
     console.log('✅ Connected to Supabase successfully');
-    
+
     // Load checkpoint if exists
     await this.loadCheckpoint();
   }
 
   async importData() {
     console.log('📥 Starting PostgreSQL data import...');
-    
+
     if (this.options.dryRun) {
       console.log('🔍 DRY RUN MODE - No data will be imported');
     }
-    
+
     try {
       // Load transformed data
       const transformedData = await this.loadTransformedData();
-      
+
+      // Build foreign key mappings from loaded data
+      await this.buildForeignKeyMappingsFromData(transformedData);
+
       // Import in dependency order
       for (const tableName of IMPORT_ORDER) {
         if (transformedData[tableName] && transformedData[tableName].length > 0) {
-          
+
           // Skip if already completed (checkpoint resume)
-          if (this.checkpoint.lastCompletedTable && 
-              IMPORT_ORDER.indexOf(tableName) <= IMPORT_ORDER.indexOf(this.checkpoint.lastCompletedTable)) {
+          if (this.checkpoint.lastCompletedTable &&
+            IMPORT_ORDER.indexOf(tableName) <= IMPORT_ORDER.indexOf(this.checkpoint.lastCompletedTable)) {
             console.log(`⏭️ Skipping ${tableName} (already completed)`);
             continue;
           }
-          
+
           console.log(`\n📋 Importing ${tableName} (${transformedData[tableName].length} records)...`);
           await this.importTable(tableName, transformedData[tableName]);
-          
+
           // Update checkpoint
           this.checkpoint.lastCompletedTable = tableName;
           this.checkpoint.timestamp = new Date().toISOString();
           await this.saveCheckpoint();
         }
       }
-      
+
       // Clear checkpoint on successful completion
       await this.clearCheckpoint();
-      
+
       console.log('\n✅ Data import completed successfully!');
       this.printSummary();
-      
+
     } catch (error) {
       console.error('\n❌ Data import failed:', error.message);
       await this.saveCheckpoint();
@@ -152,33 +162,22 @@ class PostgresImporter {
 
   async loadTransformedData() {
     console.log('📂 Loading transformed data...');
-    
+
     const transformedData = {};
-    
+
     for (const tableName of IMPORT_ORDER) {
       const filePath = path.join(this.options.inputDir, `${tableName}.json`);
-      
+
       try {
         const fileContent = await fs.readFile(filePath, 'utf8');
         const data = JSON.parse(fileContent);
-        
-        // Handle nested data structures from transformation
-        if (tableName === 'programs' && data.length > 0 && data[0].program) {
-          // Programs data includes nested workouts and exercises
-          transformedData.programs = data.map(item => item.program);
-          transformedData.program_workouts = data.flatMap(item => item.workouts || []);
-          transformedData.program_exercises = data.flatMap(item => item.exercises || []);
-        } else if (tableName === 'workout_logs' && data.length > 0 && data[0].workout_log) {
-          // Workout logs include nested exercises
-          transformedData.workout_logs = data.map(item => item.workout_log);
-          transformedData.workout_log_exercises = data.flatMap(item => item.exercises || []);
-        } else {
-          transformedData[tableName] = data;
-        }
-        
+
+        // All data is now flat - no nested structures from data-transformer
+        transformedData[tableName] = data;
+
         console.log(`   Loaded ${data.length} records from ${tableName}.json`);
         this.stats.totalRecords += data.length;
-        
+
       } catch (error) {
         if (error.code === 'ENOENT') {
           console.log(`   File ${tableName}.json not found, skipping...`);
@@ -188,8 +187,40 @@ class PostgresImporter {
         }
       }
     }
-    
+
     return transformedData;
+  }
+
+  async buildForeignKeyMappingsFromData(transformedData) {
+    console.log('🔗 Building initial foreign key mappings from loaded data...');
+
+    let mappingsBuilt = 0;
+
+    // Build mappings for all tables that can be referenced by foreign keys
+    // Note: These are preliminary mappings - they will be validated during import
+    for (const tableName of IMPORT_ORDER) {
+      if (transformedData[tableName] && transformedData[tableName].length > 0) {
+        for (const record of transformedData[tableName]) {
+          if (record.id) {
+            const mappingKey = `${tableName}:${record.id}`;
+            this.foreignKeyMappings.set(mappingKey, record.id);
+            mappingsBuilt++;
+          }
+        }
+      }
+    }
+
+    console.log(`   Built ${mappingsBuilt} preliminary foreign key mappings from loaded data`);
+
+    if (this.options.verbose) {
+      console.log('   Mapping summary:');
+      for (const tableName of IMPORT_ORDER) {
+        const count = transformedData[tableName] ? transformedData[tableName].length : 0;
+        if (count > 0) {
+          console.log(`     ${tableName}: ${count} records`);
+        }
+      }
+    }
   }
 
   async importTable(tableName, records) {
@@ -198,18 +229,24 @@ class PostgresImporter {
       this.stats.importedRecords += records.length;
       return;
     }
-    
+
+    // Pre-validate foreign key references for tables with required foreign keys
+    const tablesWithRequiredForeignKeys = ['program_workouts', 'program_exercises', 'workout_logs', 'workout_log_exercises', 'user_analytics'];
+    if (tablesWithRequiredForeignKeys.includes(tableName)) {
+      await this.validateForeignKeyReferences(tableName, records);
+    }
+
     const processor = new BatchProcessor({
       batchSize: this.options.batchSize,
       maxRetries: this.options.maxRetries,
       verbose: this.options.verbose,
       checkpointFile: `${this.options.checkpointFile}.${tableName}`
     });
-    
+
     const processorFn = async (batch, batchIndex, globalIndex) => {
       return await this.importBatch(tableName, batch, batchIndex, globalIndex);
     };
-    
+
     await processor.processInBatches(records, processorFn);
   }
 
@@ -225,7 +262,7 @@ class PostgresImporter {
     // Note: Supabase doesn't support explicit transactions in the client
     // We'll use batch operations with error handling instead
     const results = [];
-    
+
     try {
       // Validate batch before import
       if (this.options.validateBeforeImport) {
@@ -234,32 +271,55 @@ class PostgresImporter {
           throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
         }
       }
-      
+
       // Resolve foreign key references
       const resolvedBatch = await this.resolveForeignKeys(tableName, batch);
-      
+
+      // Filter out records with unresolvable required foreign keys
+      const validRecords = resolvedBatch.filter(record => {
+        if (!this.hasValidRequiredForeignKeys(tableName, record)) {
+          this.stats.skippedRecords++;
+          this.warnings.push({
+            table: tableName,
+            recordId: record.id,
+            warning: 'Skipped due to unresolvable required foreign key references'
+          });
+          return false;
+        }
+        return true;
+      });
+
+      if (validRecords.length === 0) {
+        console.log(`   ⚠️ All records in batch ${batchIndex + 1} skipped due to foreign key issues`);
+        return batch.map(() => ({ success: true, skipped: true, reason: 'unresolvable_foreign_keys' }));
+      }
+
       // Import batch
       const { data, error } = await this.supabase
         .from(tableName)
-        .insert(resolvedBatch)
+        .insert(validRecords)
         .select();
-      
+
       if (error) {
         // Handle conflicts
         if (error.code === '23505' && this.options.conflictResolution !== 'error') {
-          return await this.handleConflicts(tableName, resolvedBatch, batchIndex);
+          return await this.handleConflicts(tableName, validRecords, batchIndex);
+        } else if (error.code === '23503') {
+          // Foreign key constraint violation - fall back to individual record processing
+          console.log(`   ⚠️ Batch ${batchIndex + 1} has foreign key constraint violations, processing individually...`);
+          return await this.importBatchIndividually(tableName, batch, batchIndex);
         }
         throw error;
       }
-      
+
       // Store foreign key mappings for future reference
       this.storeForeignKeyMappings(tableName, data);
-      
+
       this.stats.importedRecords += data.length;
       this.stats.transactionsCommitted++;
-      
+
       return data.map(record => ({ success: true, record }));
-      
+
     } catch (error) {
       this.stats.transactionsRolledBack++;
       this.errors.push({
@@ -268,7 +328,7 @@ class PostgresImporter {
         error: error.message,
         timestamp: new Date().toISOString()
       });
-      
+
       // Try individual record import for better error isolation
       return await this.importBatchIndividually(tableName, batch, batchIndex);
     }
@@ -276,10 +336,10 @@ class PostgresImporter {
 
   async importBatchDirect(tableName, batch, batchIndex) {
     const results = [];
-    
+
     for (let i = 0; i < batch.length; i++) {
       const record = batch[i];
-      
+
       try {
         // Validate record
         if (this.options.validateBeforeImport) {
@@ -288,21 +348,49 @@ class PostgresImporter {
             throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
           }
         }
-        
+
         // Resolve foreign keys
         const resolvedRecord = await this.resolveForeignKeysForRecord(tableName, record);
-        
+
+        // Check if required foreign keys are still unresolved
+        if (!this.hasValidRequiredForeignKeys(tableName, resolvedRecord)) {
+          this.stats.skippedRecords++;
+          this.warnings.push({
+            table: tableName,
+            recordId: record.id,
+            warning: 'Skipped due to unresolvable required foreign key references'
+          });
+          results.push({ success: true, skipped: true, reason: 'unresolvable_foreign_keys' });
+          continue;
+        }
+
+
+
         // Import record
         const { data, error } = await this.supabase
           .from(tableName)
           .insert(resolvedRecord)
           .select()
           .single();
-        
+
         if (error) {
-          if (error.code === '23505' && this.options.conflictResolution !== 'error') {
-            const result = await this.handleConflict(tableName, resolvedRecord);
-            results.push(result);
+          if (error.code === '23505') {
+            // Unique constraint violation - handle based on conflict resolution setting
+            if (this.options.conflictResolution !== 'error') {
+              const result = await this.handleConflict(tableName, resolvedRecord);
+              results.push(result);
+            } else {
+              throw error;
+            }
+          } else if (error.code === '23503') {
+            // Foreign key constraint violation - skip this record
+            this.stats.skippedRecords++;
+            this.warnings.push({
+              table: tableName,
+              recordId: record.id,
+              warning: `Skipped due to foreign key constraint violation: ${error.message}`
+            });
+            results.push({ success: true, skipped: true, reason: 'foreign_key_constraint' });
           } else {
             throw error;
           }
@@ -311,7 +399,7 @@ class PostgresImporter {
           this.stats.importedRecords++;
           results.push({ success: true, record: data });
         }
-        
+
       } catch (error) {
         this.stats.failedRecords++;
         this.errors.push({
@@ -322,11 +410,11 @@ class PostgresImporter {
           error: error.message,
           timestamp: new Date().toISOString()
         });
-        
+
         results.push({ success: false, error: error.message });
       }
     }
-    
+
     return results;
   }
 
@@ -337,12 +425,12 @@ class PostgresImporter {
 
   async handleConflicts(tableName, batch, batchIndex) {
     const results = [];
-    
+
     for (const record of batch) {
       const result = await this.handleConflict(tableName, record);
       results.push(result);
     }
-    
+
     return results;
   }
 
@@ -351,37 +439,56 @@ class PostgresImporter {
       case 'skip':
         this.stats.skippedRecords++;
         return { success: true, skipped: true, record };
-        
+
       case 'update':
         try {
           // Find existing record by unique constraint
           const uniqueFields = this.getUniqueFields(tableName);
           const whereClause = {};
-          
-          for (const field of uniqueFields) {
-            if (record[field] !== undefined) {
-              whereClause[field] = record[field];
-              break; // Use first available unique field
+
+          // Handle composite unique constraints
+          if (tableName === 'program_workouts') {
+            // Use composite key: program_id + week_number + day_number
+            whereClause.program_id = record.program_id;
+            whereClause.week_number = record.week_number;
+            whereClause.day_number = record.day_number;
+          } else if (tableName === 'workout_logs') {
+            // Use composite key: user_id + program_id + week_index + day_index
+            whereClause.user_id = record.user_id;
+            whereClause.program_id = record.program_id;
+            whereClause.week_index = record.week_index;
+            whereClause.day_index = record.day_index;
+          } else if (tableName === 'user_analytics') {
+            // Use composite key: user_id + exercise_id
+            whereClause.user_id = record.user_id;
+            whereClause.exercise_id = record.exercise_id;
+          } else {
+            // Use first available unique field (usually 'id')
+            for (const field of uniqueFields) {
+              if (record[field] !== undefined) {
+                whereClause[field] = record[field];
+                break;
+              }
             }
           }
-          
+
           const { data, error } = await this.supabase
             .from(tableName)
             .update(record)
             .match(whereClause)
             .select()
             .single();
-          
+
           if (error) throw error;
-          
+
           this.stats.updatedRecords++;
           return { success: true, updated: true, record: data };
-          
+
         } catch (error) {
           this.stats.failedRecords++;
           return { success: false, error: error.message };
         }
-        
+
       default:
         this.stats.failedRecords++;
         return { success: false, error: 'Conflict resolution failed' };
@@ -390,16 +497,16 @@ class PostgresImporter {
 
   getUniqueFields(tableName) {
     const uniqueFields = {
-      users: ['auth_id', 'email'],
+      users: ['id', 'email'],
       exercises: ['id'],
       programs: ['id'],
-      program_workouts: ['id'],
+      program_workouts: ['id', 'program_id', 'week_number', 'day_number'], // Composite unique constraint
       program_exercises: ['id'],
-      workout_logs: ['id'],
+      workout_logs: ['id', 'user_id', 'program_id', 'week_index', 'day_index'], // Composite unique constraint
       workout_log_exercises: ['id'],
-      user_analytics: ['user_id', 'exercise_id']
+      user_analytics: ['id', 'user_id', 'exercise_id'] // Composite unique constraint
     };
-    
+
     return uniqueFields[tableName] || ['id'];
   }
 
@@ -410,27 +517,30 @@ class PostgresImporter {
   async resolveForeignKeysForRecord(tableName, record) {
     const resolvedRecord = { ...record };
     const foreignKeys = this.getForeignKeyFields(tableName);
-    
+
     for (const fkField of foreignKeys) {
       if (resolvedRecord[fkField]) {
-        const resolvedId = await this.resolveForeignKeyReference(fkField, resolvedRecord[fkField]);
-        if (resolvedId) {
+        const originalValue = resolvedRecord[fkField];
+        const resolvedId = await this.resolveForeignKeyReference(fkField, originalValue);
+
+        if (resolvedId && resolvedId !== originalValue) {
           resolvedRecord[fkField] = resolvedId;
           this.stats.foreignKeyResolutions++;
-        } else {
+        } else if (resolvedId === null) {
+          // Set to null for optional foreign keys
           this.warnings.push({
             table: tableName,
             recordId: record.id,
             field: fkField,
-            value: resolvedRecord[fkField],
-            warning: 'Foreign key reference could not be resolved'
+            value: originalValue,
+            warning: 'Optional foreign key reference could not be resolved, set to null'
           });
-          // Set to null if reference cannot be resolved
           resolvedRecord[fkField] = null;
         }
+        // If resolvedId === originalValue, keep the original value (let database handle validation)
       }
     }
-    
+
     return resolvedRecord;
   }
 
@@ -444,9 +554,32 @@ class PostgresImporter {
       workout_log_exercises: ['workout_log_id', 'exercise_id'],
       user_analytics: ['user_id', 'exercise_id']
     };
-    
+
     return foreignKeys[tableName] || [];
   }
+
+  hasValidRequiredForeignKeys(tableName, record) {
+    const requiredForeignKeys = {
+      programs: ['user_id'],
+      program_workouts: ['program_id'],
+      program_exercises: ['workout_id', 'exercise_id'],
+      workout_logs: ['user_id'],
+      workout_log_exercises: ['workout_log_id', 'exercise_id'],
+      user_analytics: ['user_id', 'exercise_id']
+    };
+
+    const required = requiredForeignKeys[tableName] || [];
+
+    for (const fkField of required) {
+      if (!record[fkField]) {
+        return false; // Required foreign key is null or undefined
+      }
+    }
+
+    return true;
+  }
+
+
 
   async resolveForeignKeyReference(fieldName, originalId) {
     // Map field names to their target tables
@@ -458,32 +591,50 @@ class PostgresImporter {
       exercise_id: 'exercises',
       workout_log_id: 'workout_logs'
     };
-    
+
     const targetTable = fieldToTable[fieldName];
     if (!targetTable) return originalId;
-    
-    // Check if we have a mapping from transformation
-    const mappingKey = `${targetTable}:${originalId}`;
-    if (this.foreignKeyMappings.has(mappingKey)) {
-      return this.foreignKeyMappings.get(mappingKey);
-    }
-    
-    // Try to find the record in the database
-    try {
-      const { data, error } = await this.supabase
-        .from(targetTable)
-        .select('id')
-        .eq('id', originalId)
-        .single();
-      
-      if (!error && data) {
-        return data.id;
+
+    // Always check the database for foreign key references to ensure they exist
+    if (!this.options.dryRun) {
+      try {
+        const { data, error } = await this.supabase
+          .from(targetTable)
+          .select('id')
+          .eq('id', originalId)
+          .single();
+
+        if (!error && data) {
+          // Store the mapping for future use
+          const mappingKey = `${targetTable}:${originalId}`;
+          this.foreignKeyMappings.set(mappingKey, data.id);
+          return data.id;
+        }
+      } catch (error) {
+        // Record not found
       }
-    } catch (error) {
-      // Record not found
+    } else {
+      // In dry run mode, check our preliminary mappings
+      const mappingKey = `${targetTable}:${originalId}`;
+      if (this.foreignKeyMappings.has(mappingKey)) {
+        const resolvedId = this.foreignKeyMappings.get(mappingKey);
+        return resolvedId;
+      }
     }
-    
-    return null;
+
+    // Foreign key reference not found
+    if (this.options.verbose) {
+      console.warn(`⚠️ Foreign key ${fieldName} with value ${originalId} not found in ${targetTable}`);
+    }
+
+    // For required foreign keys, keep the original ID and let the database handle the constraint
+    // For optional foreign keys, set to null
+    const requiredForeignKeys = ['workout_log_id', 'user_id', 'exercise_id'];
+    if (requiredForeignKeys.includes(fieldName)) {
+      return originalId; // Let database handle constraint violation if needed
+    }
+
+    return null; // Optional foreign key, safe to set to null
   }
 
   storeForeignKeyMappings(tableName, records) {
@@ -493,56 +644,127 @@ class PostgresImporter {
   }
 
   storeForeignKeyMapping(tableName, record) {
-    const mappingKey = `${tableName}:${record.id}`;
-    this.foreignKeyMappings.set(mappingKey, record.id);
+    if (record && record.id) {
+      const mappingKey = `${tableName}:${record.id}`;
+      this.foreignKeyMappings.set(mappingKey, record.id);
+    }
+  }
+
+  async validateForeignKeyReferences(tableName, records) {
+    console.log(`   🔍 Validating foreign key references for ${tableName}...`);
+
+    const foreignKeys = this.getForeignKeyFields(tableName);
+    const requiredForeignKeys = ['workout_log_id', 'user_id', 'exercise_id'];
+
+    const missingReferences = new Set();
+    let validatedCount = 0;
+
+    for (const record of records) {
+      for (const fkField of foreignKeys) {
+        if (record[fkField] && requiredForeignKeys.includes(fkField)) {
+          const fieldToTable = {
+            user_id: 'users',
+            created_by: 'users',
+            program_id: 'programs',
+            workout_id: 'program_workouts',
+            exercise_id: 'exercises',
+            workout_log_id: 'workout_logs'
+          };
+
+          const targetTable = fieldToTable[fkField];
+          if (targetTable) {
+            const mappingKey = `${targetTable}:${record[fkField]}`;
+
+            // Check if we have the mapping
+            if (!this.foreignKeyMappings.has(mappingKey)) {
+              // Try to find in database
+              try {
+                const { data, error } = await this.supabase
+                  .from(targetTable)
+                  .select('id')
+                  .eq('id', record[fkField])
+                  .single();
+
+                if (error || !data) {
+                  missingReferences.add(`${fkField}:${record[fkField]} -> ${targetTable}`);
+                } else {
+                  // Store the mapping for future use
+                  this.foreignKeyMappings.set(mappingKey, data.id);
+                  validatedCount++;
+                }
+              } catch (error) {
+                missingReferences.add(`${fkField}:${record[fkField]} -> ${targetTable}`);
+              }
+            } else {
+              validatedCount++;
+            }
+          }
+        }
+      }
+    }
+
+    if (missingReferences.size > 0) {
+      console.log(`   ⚠️ Found ${missingReferences.size} missing foreign key references:`);
+      Array.from(missingReferences).slice(0, 10).forEach(ref => {
+        console.log(`     - ${ref}`);
+      });
+
+      if (missingReferences.size > 10) {
+        console.log(`     ... and ${missingReferences.size - 10} more`);
+      }
+
+      console.log(`   Continuing with import - records with missing references will be handled during import`);
+    } else {
+      console.log(`   ✅ All ${validatedCount} foreign key references validated successfully`);
+    }
   }
 
   validateBatch(tableName, batch) {
     const errors = [];
-    
+
     for (const record of batch) {
       const recordErrors = this.validateRecord(tableName, record);
       errors.push(...recordErrors);
     }
-    
+
     return errors;
   }
 
   validateRecord(tableName, record) {
     const errors = [];
-    
+
     // Basic validation
     if (!record.id) {
       errors.push('Missing required field: id');
     }
-    
+
     // Table-specific validation
     switch (tableName) {
       case 'users':
         if (!record.email) errors.push('Missing required field: email');
-        if (!record.auth_id) errors.push('Missing required field: auth_id');
+        if (!record.id) errors.push('Missing required field: id');
         break;
-        
+
       case 'exercises':
         if (!record.name) errors.push('Missing required field: name');
         if (!record.primary_muscle_group) errors.push('Missing required field: primary_muscle_group');
         break;
-        
+
       case 'programs':
         if (!record.user_id) errors.push('Missing required field: user_id');
         if (!record.name) errors.push('Missing required field: name');
         break;
-        
+
       case 'workout_logs':
         if (!record.user_id) errors.push('Missing required field: user_id');
         if (!record.date) errors.push('Missing required field: date');
         break;
     }
-    
+
     if (errors.length > 0) {
       this.stats.validationErrors += errors.length;
     }
-    
+
     return errors;
   }
 
@@ -564,7 +786,7 @@ class PostgresImporter {
   async saveCheckpoint() {
     this.checkpoint.timestamp = new Date().toISOString();
     const checkpointData = JSON.stringify(this.checkpoint, null, 2);
-    
+
     try {
       await fs.writeFile(this.options.checkpointFile, checkpointData, 'utf8');
       if (this.options.verbose) {
@@ -598,24 +820,24 @@ class PostgresImporter {
     console.log(`Transactions Rolled Back: ${this.stats.transactionsRolledBack}`);
     console.log(`Foreign Key Resolutions: ${this.stats.foreignKeyResolutions}`);
     console.log(`Validation Errors: ${this.stats.validationErrors}`);
-    
+
     if (this.errors.length > 0) {
       console.log(`\n❌ Errors (${this.errors.length}):`);
       this.errors.slice(0, 5).forEach(error => {
         console.log(`   ${error.table}: ${error.error}`);
       });
-      
+
       if (this.errors.length > 5) {
         console.log(`   ... and ${this.errors.length - 5} more errors`);
       }
     }
-    
+
     if (this.warnings.length > 0) {
       console.log(`\n⚠️ Warnings (${this.warnings.length}):`);
       this.warnings.slice(0, 5).forEach(warning => {
         console.log(`   ${warning.table}/${warning.field}: ${warning.warning}`);
       });
-      
+
       if (this.warnings.length > 5) {
         console.log(`   ... and ${this.warnings.length - 5} more warnings`);
       }
@@ -630,10 +852,10 @@ class PostgresImporter {
       timestamp: new Date().toISOString(),
       options: this.options
     };
-    
+
     const reportPath = path.join(this.options.inputDir, 'import-report.json');
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
-    
+
     console.log(`📄 Import report saved to: ${reportPath}`);
     return report;
   }
@@ -643,7 +865,7 @@ class PostgresImporter {
 async function main() {
   const args = process.argv.slice(2);
   const options = {};
-  
+
   // Parse command line arguments
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -710,18 +932,18 @@ Examples:
         break;
     }
   }
-  
+
   try {
     const importer = new PostgresImporter(options);
     await importer.initialize();
     await importer.importData();
     await importer.generateReport();
-    
+
     if (importer.stats.failedRecords > 0) {
       console.log('\n⚠️ Import completed with errors. Check import-report.json for details.');
       process.exit(1);
     }
-    
+
   } catch (error) {
     console.error('💥 Import failed:', error.message);
     process.exit(1);
