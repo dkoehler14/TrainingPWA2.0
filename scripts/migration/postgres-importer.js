@@ -33,11 +33,11 @@ const { BatchProcessor } = require('./batch-processor');
 
 // Import order based on foreign key dependencies
 const IMPORT_ORDER = [
-  'users',
-  'exercises',
-  'programs',
-  'program_workouts',
-  'program_exercises',
+  // 'users',
+  // 'exercises',
+  // 'programs',
+  // 'program_workouts',
+  // 'program_exercises',
   'workout_logs',
   'workout_log_exercises',
   'user_analytics'
@@ -122,6 +122,11 @@ class PostgresImporter {
     try {
       // Load transformed data
       const transformedData = await this.loadTransformedData();
+
+      // Analyze workout_logs data for potential issues
+      if (transformedData.workout_logs && transformedData.workout_logs.length > 0) {
+        await this.analyzeWorkoutLogsData(transformedData.workout_logs);
+      }
 
       // Build foreign key mappings from loaded data
       await this.buildForeignKeyMappingsFromData(transformedData);
@@ -224,15 +229,29 @@ class PostgresImporter {
   }
 
   async importTable(tableName, records) {
+    console.log(`\n🔍 Starting import for ${tableName} with ${records.length} records`);
+    
     if (this.options.dryRun) {
       console.log(`   DRY RUN: Would import ${records.length} records to ${tableName}`);
       this.stats.importedRecords += records.length;
       return;
     }
 
+    // Track table-specific stats
+    const tableStats = {
+      total: records.length,
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+      foreignKeyIssues: 0,
+      validationErrors: 0,
+      uniqueConstraintViolations: 0
+    };
+
     // Pre-validate foreign key references for tables with required foreign keys
     const tablesWithRequiredForeignKeys = ['program_workouts', 'program_exercises', 'workout_logs', 'workout_log_exercises', 'user_analytics'];
     if (tablesWithRequiredForeignKeys.includes(tableName)) {
+      console.log(`   🔗 Pre-validating foreign key references for ${tableName}...`);
       await this.validateForeignKeyReferences(tableName, records);
     }
 
@@ -244,10 +263,50 @@ class PostgresImporter {
     });
 
     const processorFn = async (batch, batchIndex, globalIndex) => {
-      return await this.importBatch(tableName, batch, batchIndex, globalIndex);
+      const results = await this.importBatch(tableName, batch, batchIndex, globalIndex);
+      
+      // Track results for this batch
+      for (const result of results) {
+        if (result.success) {
+          if (result.skipped) {
+            tableStats.skipped++;
+            if (result.reason === 'unresolvable_foreign_keys') {
+              tableStats.foreignKeyIssues++;
+            }
+          } else if (result.updated) {
+            tableStats.imported++; // Count updates as imports
+          } else {
+            tableStats.imported++;
+          }
+        } else {
+          tableStats.failed++;
+          if (result.error && result.error.includes('23505')) {
+            tableStats.uniqueConstraintViolations++;
+          }
+        }
+      }
+      
+      return results;
     };
 
     await processor.processInBatches(records, processorFn);
+    
+    // Print table-specific summary
+    console.log(`\n📊 ${tableName} Import Results:`);
+    console.log(`   Total: ${tableStats.total}`);
+    console.log(`   Imported: ${tableStats.imported}`);
+    console.log(`   Skipped: ${tableStats.skipped}`);
+    console.log(`   Failed: ${tableStats.failed}`);
+    if (tableStats.foreignKeyIssues > 0) {
+      console.log(`   Foreign Key Issues: ${tableStats.foreignKeyIssues}`);
+    }
+    if (tableStats.uniqueConstraintViolations > 0) {
+      console.log(`   Unique Constraint Violations: ${tableStats.uniqueConstraintViolations}`);
+    }
+    
+    // Store table stats for final report
+    this.tableStats = this.tableStats || {};
+    this.tableStats[tableName] = tableStats;
   }
 
   async importBatch(tableName, batch, batchIndex, globalIndex) {
@@ -279,6 +338,20 @@ class PostgresImporter {
       const validRecords = resolvedBatch.filter(record => {
         if (!this.hasValidRequiredForeignKeys(tableName, record)) {
           this.stats.skippedRecords++;
+          
+          // Log detailed foreign key issues for workout_logs
+          if (tableName === 'workout_logs') {
+            console.log(`   ⚠️ Skipping workout_log ${record.id}: Missing required foreign keys`);
+            const requiredFKs = ['user_id', 'program_id'];
+            for (const fk of requiredFKs) {
+              if (!record[fk]) {
+                console.log(`     - Missing ${fk}: ${record[fk]}`);
+              } else {
+                console.log(`     - ${fk}: ${record[fk]} (checking if exists...)`);
+              }
+            }
+          }
+          
           this.warnings.push({
             table: tableName,
             recordId: record.id,
@@ -301,6 +374,8 @@ class PostgresImporter {
         .select();
 
       if (error) {
+        console.log(error);
+
         // Handle conflicts
         if (error.code === '23505' && this.options.conflictResolution !== 'error') {
           return await this.handleConflicts(tableName, validRecords, batchIndex);
@@ -355,6 +430,18 @@ class PostgresImporter {
         // Check if required foreign keys are still unresolved
         if (!this.hasValidRequiredForeignKeys(tableName, resolvedRecord)) {
           this.stats.skippedRecords++;
+          
+          // Log detailed foreign key issues for workout_logs
+          if (tableName === 'workout_logs') {
+            console.log(`   ⚠️ Skipping workout_log ${record.id}: Missing required foreign keys after resolution`);
+            const requiredFKs = ['user_id', 'program_id'];
+            for (const fk of requiredFKs) {
+              if (!resolvedRecord[fk]) {
+                console.log(`     - Missing ${fk}: ${resolvedRecord[fk]} (original: ${record[fk]})`);
+              }
+            }
+          }
+          
           this.warnings.push({
             table: tableName,
             recordId: record.id,
@@ -376,6 +463,7 @@ class PostgresImporter {
         if (error) {
           if (error.code === '23505') {
             // Unique constraint violation - handle based on conflict resolution setting
+            console.log(`   🔄 Unique constraint violation for ${tableName} record ${record.id}: ${error.message}`);
             if (this.options.conflictResolution !== 'error') {
               const result = await this.handleConflict(tableName, resolvedRecord);
               results.push(result);
@@ -384,6 +472,7 @@ class PostgresImporter {
             }
           } else if (error.code === '23503') {
             // Foreign key constraint violation - skip this record
+            console.log(`   ❌ Foreign key constraint violation for ${tableName} record ${record.id}: ${error.message}`);
             this.stats.skippedRecords++;
             this.warnings.push({
               table: tableName,
@@ -392,6 +481,7 @@ class PostgresImporter {
             });
             results.push({ success: true, skipped: true, reason: 'foreign_key_constraint' });
           } else {
+            console.log(`   ❌ Unexpected error for ${tableName} record ${record.id}: ${error.message}`);
             throw error;
           }
         } else {
@@ -438,6 +528,7 @@ class PostgresImporter {
     switch (this.options.conflictResolution) {
       case 'skip':
         this.stats.skippedRecords++;
+        console.log(`   ⏭️ Skipping duplicate ${tableName} record ${record.id}`);
         return { success: true, skipped: true, record };
 
       case 'update':
@@ -458,6 +549,8 @@ class PostgresImporter {
             whereClause.program_id = record.program_id;
             whereClause.week_index = record.week_index;
             whereClause.day_index = record.day_index;
+            
+            console.log(`   🔄 Updating existing workout_log for user ${record.user_id}, program ${record.program_id}, week ${record.week_index}, day ${record.day_index}`);
           } else if (tableName === 'user_analytics') {
             // Use composite key: user_id + exercise_id
             whereClause.user_id = record.user_id;
@@ -482,10 +575,12 @@ class PostgresImporter {
           if (error) throw error;
 
           this.stats.updatedRecords++;
+          console.log(`   ✅ Updated existing ${tableName} record`);
           return { success: true, updated: true, record: data };
 
         } catch (error) {
           this.stats.failedRecords++;
+          console.log(`   ❌ Failed to update ${tableName} record: ${error.message}`);
           return { success: false, error: error.message };
         }
 
@@ -563,7 +658,7 @@ class PostgresImporter {
       programs: ['user_id'],
       program_workouts: ['program_id'],
       program_exercises: ['workout_id', 'exercise_id'],
-      workout_logs: ['user_id'],
+      workout_logs: ['user_id'], // Note: program_id might be optional for quick workouts
       workout_log_exercises: ['workout_log_id', 'exercise_id'],
       user_analytics: ['user_id', 'exercise_id']
     };
@@ -572,6 +667,9 @@ class PostgresImporter {
 
     for (const fkField of required) {
       if (!record[fkField]) {
+        if (this.options.verbose && tableName === 'workout_logs') {
+          console.log(`     Missing required FK ${fkField} for record ${record.id}`);
+        }
         return false; // Required foreign key is null or undefined
       }
     }
@@ -844,9 +942,79 @@ class PostgresImporter {
     }
   }
 
+  async analyzeWorkoutLogsData(workoutLogs) {
+    console.log('\n🔍 Analyzing workout_logs data for potential issues...');
+    
+    const analysis = {
+      total: workoutLogs.length,
+      nullProgramId: 0,
+      nullUserId: 0,
+      duplicates: new Map(),
+      missingForeignKeys: {
+        users: new Set(),
+        programs: new Set()
+      }
+    };
+
+    // Analyze each record
+    for (const log of workoutLogs) {
+      // Check for null foreign keys
+      if (!log.user_id) analysis.nullUserId++;
+      if (!log.program_id) analysis.nullProgramId++;
+
+      // Track potential duplicates based on unique constraint
+      if (log.user_id && log.program_id !== null) {
+        const key = `${log.user_id}:${log.program_id}:${log.week_index}:${log.day_index}`;
+        if (analysis.duplicates.has(key)) {
+          analysis.duplicates.set(key, analysis.duplicates.get(key) + 1);
+        } else {
+          analysis.duplicates.set(key, 1);
+        }
+      }
+
+      // Track foreign key references to check later
+      if (log.user_id) analysis.missingForeignKeys.users.add(log.user_id);
+      if (log.program_id) analysis.missingForeignKeys.programs.add(log.program_id);
+    }
+
+    // Count actual duplicates
+    const duplicateCount = Array.from(analysis.duplicates.values()).filter(count => count > 1).length;
+    
+    console.log(`   📊 Analysis Results:`);
+    console.log(`     Total records: ${analysis.total}`);
+    console.log(`     Records with null user_id: ${analysis.nullUserId}`);
+    console.log(`     Records with null program_id: ${analysis.nullProgramId}`);
+    console.log(`     Potential duplicates (unique constraint violations): ${duplicateCount}`);
+    console.log(`     Unique users referenced: ${analysis.missingForeignKeys.users.size}`);
+    console.log(`     Unique programs referenced: ${analysis.missingForeignKeys.programs.size}`);
+
+    if (duplicateCount > 0) {
+      console.log(`\n   ⚠️ Found ${duplicateCount} sets of duplicate records that will cause unique constraint violations:`);
+      let shown = 0;
+      for (const [key, count] of analysis.duplicates.entries()) {
+        if (count > 1 && shown < 5) {
+          console.log(`     - ${key}: ${count} duplicates`);
+          shown++;
+        }
+      }
+      if (duplicateCount > 5) {
+        console.log(`     ... and ${duplicateCount - 5} more duplicate sets`);
+      }
+      
+      if (this.options.conflictResolution === 'skip') {
+        console.log(`   📝 Conflict resolution is set to 'skip' - duplicates will be skipped`);
+      } else if (this.options.conflictResolution === 'update') {
+        console.log(`   📝 Conflict resolution is set to 'update' - duplicates will update existing records`);
+      }
+    }
+
+    return analysis;
+  }
+
   async generateReport() {
     const report = {
       summary: this.stats,
+      tableStats: this.tableStats || {},
       errors: this.errors,
       warnings: this.warnings,
       timestamp: new Date().toISOString(),
