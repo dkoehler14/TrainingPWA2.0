@@ -11,8 +11,9 @@ function UserProfile() {
     age: '',
     experience_level: 'beginner',
     preferred_units: 'LB',
-    height: '',
-    weight: '',
+    heightFeet: '',
+    heightInches: '',
+    weightLbs: '',
     goals: [],
     available_equipment: [],
     injuries: []
@@ -47,8 +48,9 @@ function UserProfile() {
         age: userProfile.age || '',
         experience_level: userProfile.experience_level || 'beginner',
         preferred_units: userProfile.preferred_units || 'LB',
-        height: userProfile.height || '',
-        weight: userProfile.weight || '',
+        heightFeet: userProfile.heightFeet || '',
+        heightInches: userProfile.heightInches || '',
+        weightLbs: userProfile.weightLbs || '',
         goals: userProfile.goals || [],
         available_equipment: userProfile.available_equipment || [],
         injuries: userProfile.injuries || []
@@ -245,7 +247,7 @@ function UserProfile() {
                         />
                       </Form.Group>
                     </Col>
-                    <Col md={4}>
+                    {/* <Col md={4}>
                       <Form.Group controlId="formExperienceLevel" className="profile-form-group">
                         <Form.Label className="soft-label profile-label">Experience Level *</Form.Label>
                         <Form.Select
@@ -261,7 +263,7 @@ function UserProfile() {
                           <option value="advanced">Advanced</option>
                         </Form.Select>
                       </Form.Group>
-                    </Col>
+                    </Col> */}
                     <Col md={4}>
                       <Form.Group controlId="formPreferredUnits" className="profile-form-group">
                         <Form.Label className="soft-label profile-label">Preferred Units</Form.Label>

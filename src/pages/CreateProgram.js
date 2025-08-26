@@ -7,7 +7,7 @@ import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
-import { createProgram, createCompleteProgram, getProgramById, updateProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
+import { createProgram, createCompleteProgram, getProgramById, updateProgram, updateCompleteProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
@@ -641,16 +641,8 @@ function CreateProgram({ mode = 'create' }) {
       });
 
       if (mode === 'edit') {
-        // For edit mode, we'll use the simpler updateProgram function
-        // Note: This might need to be enhanced to handle the full workout structure
-        const updateData = {
-          name: programName,
-          weight_unit: weightUnit,
-          duration: weeks.length,
-          days_per_week: weeks[0].days.length,
-          is_template: userRole === 'admin' && isTemplate
-        };
-        await updateProgram(programId, updateData);
+        // For edit mode, use updateCompleteProgram to handle the full workout structure
+        await updateCompleteProgram(programId, programData, workoutsData);
         invalidateProgramCache(user.id);
         alert('Program updated successfully!');
         navigate('/programs');
@@ -672,7 +664,19 @@ function CreateProgram({ mode = 'create' }) {
       }
     } catch (error) {
       console.error("Error saving program:", error);
-      alert(mode === 'edit' ? 'Failed to update program' : 'Failed to create program');
+      
+      // Handle different error types from updateCompleteProgram
+      if (mode === 'edit') {
+        // Check if it's a user-friendly error message from updateCompleteProgram
+        const errorMessage = error.message || 'Failed to update program';
+        if (errorMessage.includes('validation') || errorMessage.includes('backup') || errorMessage.includes('rollback')) {
+          alert(`Update failed: ${errorMessage}`);
+        } else {
+          alert('Failed to update program. Please try again.');
+        }
+      } else {
+        alert('Failed to create program');
+      }
     } finally {
       setIsSubmitting(false);
     }

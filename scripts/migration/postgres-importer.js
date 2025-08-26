@@ -33,11 +33,11 @@ const { BatchProcessor } = require('./batch-processor');
 
 // Import order based on foreign key dependencies
 const IMPORT_ORDER = [
-  // 'users',
-  // 'exercises',
-  // 'programs',
-  // 'program_workouts',
-  // 'program_exercises',
+  'users',
+  'exercises',
+  'programs',
+  'program_workouts',
+  'program_exercises',
   'workout_logs',
   'workout_log_exercises',
   'user_analytics'

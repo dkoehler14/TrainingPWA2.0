@@ -59,7 +59,7 @@ export const AUTH_CONFIG = {
 export const AUTH_FLOWS = {
   // Sign up flow
   SIGNUP: {
-    REDIRECT_URL: `${window.location.origin}/welcome`,
+    REDIRECT_URL: `${window.location.origin}`,
     EMAIL_REDIRECT_URL: `${window.location.origin}/verify-email`,
     SUCCESS_REDIRECT: '/dashboard',
     ERROR_REDIRECT: '/auth?error=signup'
@@ -67,7 +67,7 @@ export const AUTH_FLOWS = {
 
   // Sign in flow
   SIGNIN: {
-    REDIRECT_URL: `${window.location.origin}/dashboard`,
+    REDIRECT_URL: `${window.location.origin}`,
     SUCCESS_REDIRECT: '/dashboard',
     ERROR_REDIRECT: '/auth?error=signin'
   },
@@ -89,8 +89,8 @@ export const AUTH_FLOWS = {
   // OAuth flows
   OAUTH: {
     GOOGLE: {
-      REDIRECT_URL: `${window.location.origin}/auth/callback`,
-      SUCCESS_REDIRECT: '/dashboard',
+      REDIRECT_URL: `${window.location.origin}`,
+      SUCCESS_REDIRECT: '/',
       ERROR_REDIRECT: '/auth?error=oauth'
     }
   }

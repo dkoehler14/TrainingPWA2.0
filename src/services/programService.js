@@ -26,7 +26,7 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
     // Remove template filter if present in additional filters
     const filters = { ...additionalFilters };
     delete filters.isTemplate;
-    
+
     // Create cache key for unified cache approach
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
     const cacheKey = `user_programs_all_${userId}${filterKey ? '_' + filterKey : ''}`
@@ -37,7 +37,7 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
       cacheKey,
       async () => {
 
- 
+
         let query = supabase
           .from('programs')
           .select(`
@@ -87,7 +87,7 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
           // Sort workouts by week and day before transformation
           if (program.program_workouts) {
             const originalOrder = program.program_workouts.map(w => ({ week: w.week_number, day: w.day_number }));
-            
+
             program.program_workouts.sort((a, b) => {
               if (a.week_number !== b.week_number) {
                 return a.week_number - b.week_number
@@ -99,9 +99,9 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
             program.program_workouts.forEach((workout, workoutIndex) => {
               if (workout.program_exercises) {
                 const originalExerciseOrder = workout.program_exercises.map(e => ({ id: e.exercise_id, order: e.order_index }));
-                
+
                 workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
-                
+
               }
             })
           }
@@ -171,10 +171,10 @@ export const getUserPrograms = async (userId, filters = {}) => {
     const allProgramsCacheKey = `user_programs_all_${userId}${allProgramsFilterKey ? '_' + allProgramsFilterKey : ''}`;
 
     const cachedAllPrograms = supabaseCache.get(allProgramsCacheKey);
-    
+
     if (cachedAllPrograms) {
       // Filter from cached data
-      const filteredPrograms = cachedAllPrograms.filter(program => 
+      const filteredPrograms = cachedAllPrograms.filter(program =>
         program.is_template === filters.isTemplate
       );
 
@@ -182,9 +182,9 @@ export const getUserPrograms = async (userId, filters = {}) => {
     }
 
     const allPrograms = await getAllUserPrograms(userId, nonTemplateFilters);
-    
+
     // Filter by template status
-    const filteredPrograms = allPrograms.filter(program => 
+    const filteredPrograms = allPrograms.filter(program =>
       program.is_template === filters.isTemplate
     );
 
@@ -339,7 +339,7 @@ export const createProgram = async (programData) => {
       .single()
 
     if (error) throw error
-    
+
     invalidateProgramCache(programData.user_id)
 
     return data
@@ -411,7 +411,7 @@ export const createCompleteProgram = async (programData, workoutsData) => {
         allExercises.push(...exercises)
       }
     }
-    
+
     invalidateProgramCache(programData.user_id)
     return {
       program,
@@ -439,11 +439,838 @@ export const updateProgram = async (programId, updates) => {
       .single()
 
     if (error) throw error
-    
+
     invalidateProgramCache(data.user_id)
 
     return data
   }, 'updateProgram')
+}
+
+/**
+ * Validates input data for updateCompleteProgram function
+ * @param {string} programId - The program ID to validate
+ * @param {Object} programData - Program metadata to validate
+ * @param {Array} workoutsData - Workout structure array to validate
+ * @returns {Object} Validation result with isValid, errors, and warnings
+ */
+const validateUpdateCompleteProgram = (programId, programData, workoutsData) => {
+  const errors = []
+  const warnings = []
+
+  // Validate programId
+  if (!programId || typeof programId !== 'string' || programId.trim() === '') {
+    errors.push('Program ID is required and must be a non-empty string')
+  }
+
+  // Validate programData
+  if (!programData || typeof programData !== 'object') {
+    errors.push('Program data is required and must be an object')
+  } else {
+    // Validate required program fields
+    if (programData.duration !== undefined && (!Number.isInteger(programData.duration) || programData.duration < 1)) {
+      errors.push('Program duration must be a positive integer')
+    }
+    
+    if (programData.days_per_week !== undefined && (!Number.isInteger(programData.days_per_week) || programData.days_per_week < 1 || programData.days_per_week > 7)) {
+      errors.push('Days per week must be an integer between 1 and 7')
+    }
+
+    if (programData.weight_unit !== undefined && !['LB', 'KG'].includes(programData.weight_unit)) {
+      errors.push('Weight unit must be either "LB" or "KG"')
+    }
+
+    if (programData.name !== undefined && (typeof programData.name !== 'string' || programData.name.trim() === '')) {
+      errors.push('Program name must be a non-empty string')
+    }
+  }
+
+  // Validate workoutsData
+  if (!Array.isArray(workoutsData)) {
+    errors.push('Workouts data must be an array')
+  } else {
+    if (workoutsData.length === 0) {
+      errors.push('At least one workout must be provided')
+    }
+
+    // Validate each workout
+    workoutsData.forEach((workout, index) => {
+      if (!workout || typeof workout !== 'object') {
+        errors.push(`Workout at index ${index} must be an object`)
+        return
+      }
+
+      // Validate required workout fields
+      if (!Number.isInteger(workout.week_number) || workout.week_number < 1) {
+        errors.push(`Workout at index ${index}: week_number must be a positive integer`)
+      }
+
+      if (!Number.isInteger(workout.day_number) || workout.day_number < 1 || workout.day_number > 7) {
+        errors.push(`Workout at index ${index}: day_number must be an integer between 1 and 7`)
+      }
+
+      if (!workout.name || typeof workout.name !== 'string' || workout.name.trim() === '') {
+        errors.push(`Workout at index ${index}: name is required and must be a non-empty string`)
+      }
+
+      // Validate exercises array
+      if (!Array.isArray(workout.exercises)) {
+        errors.push(`Workout at index ${index}: exercises must be an array`)
+      } else {
+        workout.exercises.forEach((exercise, exerciseIndex) => {
+          if (!exercise || typeof exercise !== 'object') {
+            errors.push(`Workout ${index}, exercise ${exerciseIndex}: must be an object`)
+            return
+          }
+
+          if (!exercise.exercise_id || typeof exercise.exercise_id !== 'string') {
+            errors.push(`Workout ${index}, exercise ${exerciseIndex}: exercise_id is required and must be a string`)
+          }
+
+          if (!Number.isInteger(exercise.sets) || exercise.sets < 1) {
+            errors.push(`Workout ${index}, exercise ${exerciseIndex}: sets must be a positive integer`)
+          }
+
+          if (!exercise.reps || typeof exercise.reps !== 'string') {
+            errors.push(`Workout ${index}, exercise ${exerciseIndex}: reps is required and must be a string`)
+          }
+        })
+      }
+    })
+
+    // Check for data consistency issues
+    if (workoutsData.length > 0) {
+      // Check for duplicate workout combinations (week + day)
+      const workoutKeys = new Set()
+      const duplicates = []
+      
+      workoutsData.forEach((workout, index) => {
+        const key = `${workout.week_number}-${workout.day_number}`
+        if (workoutKeys.has(key)) {
+          duplicates.push(`Week ${workout.week_number}, Day ${workout.day_number}`)
+        }
+        workoutKeys.add(key)
+      })
+
+      if (duplicates.length > 0) {
+        errors.push(`Duplicate workout combinations found: ${duplicates.join(', ')}`)
+      }
+
+      // Check for missing weeks (gaps in week sequence)
+      const weeks = [...new Set(workoutsData.map(w => w.week_number))].sort((a, b) => a - b)
+      const expectedWeeks = Array.from({ length: weeks[weeks.length - 1] }, (_, i) => i + 1)
+      const missingWeeks = expectedWeeks.filter(week => !weeks.includes(week))
+      
+      if (missingWeeks.length > 0) {
+        warnings.push(`Missing weeks detected: ${missingWeeks.join(', ')}. This may cause inconsistent program structure.`)
+      }
+
+      // Check if program duration matches workout weeks
+      if (programData.duration !== undefined) {
+        const maxWeek = Math.max(...workoutsData.map(w => w.week_number))
+        if (programData.duration !== maxWeek) {
+          warnings.push(`Program duration (${programData.duration}) does not match maximum week number (${maxWeek}). Duration will be updated to match workout structure.`)
+        }
+      }
+
+      // Check for workouts with no exercises
+      const emptyWorkouts = workoutsData.filter(w => !w.exercises || w.exercises.length === 0)
+      if (emptyWorkouts.length > 0) {
+        warnings.push(`${emptyWorkouts.length} workout(s) have no exercises. These will create empty workout entries.`)
+      }
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  }
+}
+
+/**
+ * Creates user-friendly error messages for different failure scenarios
+ * @param {string} errorType - The type of error that occurred
+ * @param {Object} context - Additional context for the error message
+ * @returns {string} User-friendly error message
+ */
+const createUserFriendlyErrorMessage = (errorType, context = {}) => {
+  const baseMessages = {
+    VALIDATION_FAILED: 'The program data you provided has some issues that need to be fixed before saving.',
+    BACKUP_FAILED: 'Unable to create a backup of your current program. This is required for safe updates.',
+    UPDATE_PROGRAM_FAILED: 'Failed to update the program information in the database.',
+    DELETE_WORKOUTS_FAILED: 'Failed to remove the existing workout structure from your program.',
+    CREATE_WORKOUTS_FAILED: 'Failed to create the new workout structure for your program.',
+    CREATE_EXERCISES_FAILED: 'Failed to add exercises to your program workouts.',
+    ROLLBACK_FAILED: 'The update failed and we were unable to restore your program to its previous state.',
+    UNKNOWN_ERROR: 'An unexpected error occurred while updating your program.'
+  }
+
+  let message = baseMessages[errorType] || baseMessages.UNKNOWN_ERROR
+
+  // Add specific context based on error type
+  switch (errorType) {
+    case 'VALIDATION_FAILED':
+      if (context.errors && context.errors.length > 0) {
+        message += '\n\nIssues found:\n' + context.errors.map(error => `• ${error}`).join('\n')
+        message += '\n\nPlease fix these issues and try saving again.'
+      }
+      break
+
+    case 'BACKUP_FAILED':
+      message += ' Please try again in a moment. If the problem persists, contact support.'
+      break
+
+    case 'UPDATE_PROGRAM_FAILED':
+      message += ' Your program structure remains unchanged. Please check your internet connection and try again.'
+      break
+
+    case 'DELETE_WORKOUTS_FAILED':
+      message += ' Your program remains in its original state. Please try again.'
+      break
+
+    case 'CREATE_WORKOUTS_FAILED':
+      message += ' We\'ve restored your program to its previous state. Please check your workout structure and try again.'
+      break
+
+    case 'CREATE_EXERCISES_FAILED':
+      message += ' We\'ve restored your program to its previous state. Please check that all exercises are valid and try again.'
+      break
+
+    case 'ROLLBACK_FAILED':
+      message += ' Your program may be in an inconsistent state. Please refresh the page and check your program structure. Contact support if you notice any issues.'
+      if (context.originalError) {
+        message += `\n\nOriginal error: ${context.originalError}`
+      }
+      break
+
+    default:
+      message += ' Please try again. If the problem persists, contact support.'
+      break
+  }
+
+  return message
+}
+
+/**
+ * Update a complete program with workouts and exercises
+ * Handles adding/removing weeks by recreating the complete workout structure
+ * Includes transaction-like error handling with backup and rollback capabilities
+ * @param {string} programId - The program ID to update
+ * @param {Object} programData - Program metadata to update
+ * @param {Array} workoutsData - Complete workout structure array
+ * @returns {Promise<Object>} Updated program with workouts and exercises
+ */
+export const updateCompleteProgram = async (programId, programData, workoutsData) => {
+  return executeSupabaseOperation(async () => {
+    let backupData = null
+    let operationSteps = []
+
+    try {
+      // Step 0: Validate input data before starting operations
+      console.log('🔍 [VALIDATION_START] Validating input data before update:', { programId })
+      
+      const validationResult = validateUpdateCompleteProgram(programId, programData, workoutsData)
+      if (!validationResult.isValid) {
+        console.error('❌ [VALIDATION_ERROR] Input validation failed:', {
+          programId,
+          errors: validationResult.errors,
+          warnings: validationResult.warnings
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('VALIDATION_FAILED', {
+          errors: validationResult.errors,
+          programId
+        })
+        throw new Error(errorMessage)
+      }
+
+      if (validationResult.warnings && validationResult.warnings.length > 0) {
+        console.warn('⚠️ [VALIDATION_WARNING] Input validation warnings detected:', {
+          programId,
+          warnings: validationResult.warnings
+        })
+      }
+
+      console.log('✅ [VALIDATION_SUCCESS] Input validation passed:', {
+        programId,
+        workoutCount: workoutsData.length,
+        totalExercises: workoutsData.reduce((sum, w) => sum + (w.exercises?.length || 0), 0),
+        weekRange: workoutsData.length > 0 ? {
+          min: Math.min(...workoutsData.map(w => w.week_number)),
+          max: Math.max(...workoutsData.map(w => w.week_number))
+        } : null
+      })
+      // Step 1: Create backup of current program state
+      console.log('🔄 [BACKUP_START] Creating backup of current program state:', { programId })
+      
+      const { data: currentProgram, error: backupError } = await supabase
+        .from('programs')
+        .select(`
+          *,
+          program_workouts (
+            *,
+            program_exercises (*)
+          )
+        `)
+        .eq('id', programId)
+        .single()
+
+      if (backupError) {
+        console.error('❌ [BACKUP_ERROR] Failed to create backup:', {
+          programId,
+          error: backupError.message,
+          code: backupError.code,
+          details: backupError.details,
+          hint: backupError.hint
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('BACKUP_FAILED', {
+          programId,
+          originalError: backupError.message
+        })
+        throw new Error(errorMessage)
+      }
+
+      backupData = currentProgram
+      console.log('✅ [BACKUP_SUCCESS] Program state backed up:', {
+        programId,
+        workoutCount: backupData.program_workouts?.length || 0,
+        exerciseCount: backupData.program_workouts?.reduce((sum, w) => sum + (w.program_exercises?.length || 0), 0) || 0
+      })
+
+      // Step 2: Update program metadata
+      console.log('🔄 [UPDATE_START] Updating program metadata:', { programId })
+      operationSteps.push('program_updated')
+
+      const updateData = {
+        ...programData,
+        updated_at: new Date().toISOString()
+      }
+
+      const { data: updatedProgram, error: programError } = await supabase
+        .from('programs')
+        .update(updateData)
+        .eq('id', programId)
+        .select()
+        .single()
+
+      if (programError) {
+        console.error('❌ [UPDATE_ERROR] Failed to update program metadata:', {
+          programId,
+          error: programError.message,
+          code: programError.code,
+          details: programError.details,
+          hint: programError.hint,
+          updateData
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('UPDATE_PROGRAM_FAILED', {
+          programId,
+          originalError: programError.message
+        })
+        throw new Error(errorMessage)
+      }
+
+      console.log('✅ [UPDATE_SUCCESS] Program metadata updated:', { programId })
+
+      // Step 3: Delete existing program_exercises entries
+      console.log('🔄 [DELETE_START] Deleting existing program exercises:', { programId })
+      operationSteps.push('exercises_deleted')
+
+      // Get all workout IDs for this program to ensure proper deletion
+      const { data: existingWorkouts, error: workoutsFetchError } = await supabase
+        .from('program_workouts')
+        .select('id')
+        .eq('program_id', programId)
+
+      if (workoutsFetchError) {
+        console.error('❌ [DELETE_ERROR] Failed to fetch existing workouts for deletion:', {
+          programId,
+          error: workoutsFetchError.message,
+          code: workoutsFetchError.code,
+          details: workoutsFetchError.details,
+          hint: workoutsFetchError.hint
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('DELETE_WORKOUTS_FAILED', {
+          programId,
+          originalError: workoutsFetchError.message
+        })
+        throw new Error(errorMessage)
+      }
+
+      // Delete program_exercises entries if workouts exist
+      if (existingWorkouts && existingWorkouts.length > 0) {
+        const workoutIds = existingWorkouts.map(w => w.id)
+
+        const { error: exercisesDeleteError } = await supabase
+          .from('program_exercises')
+          .delete()
+          .in('workout_id', workoutIds)
+
+        if (exercisesDeleteError) {
+          console.error('❌ [DELETE_ERROR] Failed to delete existing program exercises:', {
+            programId,
+            workoutIds,
+            error: exercisesDeleteError.message,
+            code: exercisesDeleteError.code,
+            details: exercisesDeleteError.details,
+            hint: exercisesDeleteError.hint
+          })
+          
+          const errorMessage = createUserFriendlyErrorMessage('DELETE_WORKOUTS_FAILED', {
+            programId,
+            originalError: exercisesDeleteError.message
+          })
+          throw new Error(errorMessage)
+        }
+
+        console.log('✅ [DELETE_SUCCESS] Deleted program exercises for workouts:', {
+          programId,
+          workoutCount: workoutIds.length
+        })
+      }
+
+      // Step 4: Delete existing program_workouts entries
+      console.log('🔄 [DELETE_START] Deleting existing program workouts:', { programId })
+      operationSteps.push('workouts_deleted')
+
+      const { error: workoutsDeleteError } = await supabase
+        .from('program_workouts')
+        .delete()
+        .eq('program_id', programId)
+
+      if (workoutsDeleteError) {
+        console.error('❌ [DELETE_ERROR] Failed to delete existing program workouts:', {
+          programId,
+          error: workoutsDeleteError.message,
+          code: workoutsDeleteError.code,
+          details: workoutsDeleteError.details,
+          hint: workoutsDeleteError.hint
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('DELETE_WORKOUTS_FAILED', {
+          programId,
+          originalError: workoutsDeleteError.message
+        })
+        throw new Error(errorMessage)
+      }
+
+      console.log('✅ [DELETE_SUCCESS] Deleted program workouts:', {
+        programId,
+        workoutCount: existingWorkouts?.length || 0
+      })
+
+      // Step 5: Create new workouts for the program
+      console.log('🔄 [CREATE_START] Creating new program workouts:', { programId })
+      operationSteps.push('workouts_created')
+
+      const workoutsToInsert = workoutsData.map(workout => ({
+        program_id: programId,
+        week_number: workout.week_number,
+        day_number: workout.day_number,
+        name: workout.name
+      }))
+
+      const { data: newWorkouts, error: workoutsError } = await supabase
+        .from('program_workouts')
+        .insert(workoutsToInsert)
+        .select()
+
+      if (workoutsError) {
+        console.error('❌ [CREATE_ERROR] Failed to create new program workouts:', {
+          programId,
+          error: workoutsError.message,
+          code: workoutsError.code,
+          details: workoutsError.details,
+          hint: workoutsError.hint,
+          workoutsToInsert: workoutsToInsert.length
+        })
+        
+        const errorMessage = createUserFriendlyErrorMessage('CREATE_WORKOUTS_FAILED', {
+          programId,
+          originalError: workoutsError.message
+        })
+        throw new Error(errorMessage)
+      }
+
+      console.log('✅ [CREATE_SUCCESS] Created new program workouts:', {
+        programId,
+        workoutCount: newWorkouts.length
+      })
+
+      // Step 6: Create exercises for each workout
+      console.log('🔄 [CREATE_START] Creating new program exercises:', { programId })
+      operationSteps.push('exercises_created')
+
+      const allExercises = []
+      for (const workout of newWorkouts) {
+        const workoutData = workoutsData.find(w =>
+          w.week_number === workout.week_number && w.day_number === workout.day_number
+        )
+
+        if (workoutData && workoutData.exercises && workoutData.exercises.length > 0) {
+          const exercisesToInsert = workoutData.exercises.map((exercise, index) => ({
+            workout_id: workout.id,
+            exercise_id: exercise.exercise_id,
+            sets: exercise.sets,
+            reps: exercise.reps,
+            rest_minutes: exercise.rest_minutes || null,
+            notes: exercise.notes || '',
+            order_index: index
+          }))
+
+          const { data: exercises, error: exercisesError } = await supabase
+            .from('program_exercises')
+            .insert(exercisesToInsert)
+            .select()
+
+          if (exercisesError) {
+            console.error('❌ [CREATE_ERROR] Failed to create program exercises for workout:', {
+              programId,
+              workoutId: workout.id,
+              workoutName: workout.name,
+              exerciseCount: exercisesToInsert.length,
+              error: exercisesError.message,
+              code: exercisesError.code,
+              details: exercisesError.details,
+              hint: exercisesError.hint
+            })
+            
+            const errorMessage = createUserFriendlyErrorMessage('CREATE_EXERCISES_FAILED', {
+              programId,
+              workoutName: workout.name,
+              originalError: exercisesError.message
+            })
+            throw new Error(errorMessage)
+          }
+
+          allExercises.push(...exercises)
+        }
+      }
+
+      console.log('✅ [CREATE_SUCCESS] Created new program exercises:', {
+        programId,
+        exerciseCount: allExercises.length
+      })
+
+      // Step 7: Success - invalidate cache and cleanup
+      console.log('✅ [OPERATION_SUCCESS] All operations completed successfully:', { programId })
+      
+      // Invalidate program cache
+      invalidateProgramCache(updatedProgram.user_id)
+
+      // Clear backup data (successful completion)
+      backupData = null
+
+      return {
+        program: updatedProgram,
+        workouts: newWorkouts,
+        exercises: allExercises
+      }
+
+    } catch (error) {
+      // Rollback operations based on what steps were completed
+      console.error('❌ [OPERATION_FAILED] Update operation failed, initiating rollback:', {
+        programId,
+        error: error.message,
+        errorStack: error.stack,
+        completedSteps: operationSteps,
+        hasBackup: !!backupData,
+        timestamp: new Date().toISOString()
+      })
+
+      // If this is already a user-friendly error message, don't wrap it again
+      const isUserFriendlyError = error.message.includes('The program data you provided') || 
+                                  error.message.includes('Unable to create a backup') ||
+                                  error.message.includes('Failed to update the program') ||
+                                  error.message.includes('Failed to remove the existing') ||
+                                  error.message.includes('Failed to create the new') ||
+                                  error.message.includes('Failed to add exercises')
+
+      if (backupData) {
+        try {
+          console.log('🔄 [ROLLBACK_ATTEMPT] Attempting to restore program to previous state:', {
+            programId,
+            completedSteps: operationSteps,
+            backupWorkouts: backupData.program_workouts?.length || 0
+          })
+          
+          await rollbackProgramUpdate(programId, backupData, operationSteps)
+          
+          console.log('✅ [ROLLBACK_SUCCESS] Program state restored to previous version:', {
+            programId,
+            restoredWorkouts: backupData.program_workouts?.length || 0
+          })
+          
+          // If rollback succeeded, throw the original error (potentially user-friendly)
+          if (isUserFriendlyError) {
+            throw error
+          } else {
+            const errorMessage = createUserFriendlyErrorMessage('UNKNOWN_ERROR', {
+              programId,
+              originalError: error.message
+            })
+            throw new Error(errorMessage)
+          }
+          
+        } catch (rollbackError) {
+          console.error('❌ [ROLLBACK_FAILED] Failed to rollback program state:', {
+            programId,
+            rollbackError: rollbackError.message,
+            rollbackStack: rollbackError.stack,
+            originalError: error.message,
+            completedSteps: operationSteps,
+            timestamp: new Date().toISOString()
+          })
+          
+          // Create a comprehensive error message for rollback failure
+          const errorMessage = createUserFriendlyErrorMessage('ROLLBACK_FAILED', {
+            programId,
+            originalError: error.message
+          })
+          throw new Error(errorMessage)
+        }
+      } else {
+        // No backup data available, just throw appropriate error
+        console.error('❌ [NO_BACKUP] No backup data available for rollback:', {
+          programId,
+          error: error.message,
+          completedSteps: operationSteps
+        })
+        
+        if (isUserFriendlyError) {
+          throw error
+        } else {
+          const errorMessage = createUserFriendlyErrorMessage('UNKNOWN_ERROR', {
+            programId,
+            originalError: error.message
+          })
+          throw new Error(errorMessage)
+        }
+      }
+    }
+  }, 'updateCompleteProgram')
+}
+
+/**
+ * Internal function to rollback program update operations
+ * Restores the program to its previous state based on backup data and completed operations
+ * @param {string} programId - The program ID to rollback
+ * @param {Object} backupData - The backed up program state
+ * @param {Array} completedSteps - Array of operation steps that were completed
+ */
+const rollbackProgramUpdate = async (programId, backupData, completedSteps) => {
+  console.log('🔄 [ROLLBACK_START] Starting rollback operations:', {
+    programId,
+    completedSteps,
+    backupWorkouts: backupData.program_workouts?.length || 0,
+    backupExercises: backupData.program_workouts?.reduce((sum, w) => sum + (w.program_exercises?.length || 0), 0) || 0,
+    timestamp: new Date().toISOString()
+  })
+
+  try {
+    // If exercises were created, delete them first
+    if (completedSteps.includes('exercises_created')) {
+      console.log('🔄 [ROLLBACK] Removing newly created exercises:', { programId })
+      
+      const { data: currentWorkouts, error: fetchWorkoutsError } = await supabase
+        .from('program_workouts')
+        .select('id')
+        .eq('program_id', programId)
+
+      if (fetchWorkoutsError) {
+        console.error('❌ [ROLLBACK_ERROR] Failed to fetch workouts for exercise cleanup:', {
+          programId,
+          error: fetchWorkoutsError.message
+        })
+        throw new Error(`Failed to fetch workouts during rollback: ${fetchWorkoutsError.message}`)
+      }
+
+      if (currentWorkouts && currentWorkouts.length > 0) {
+        const workoutIds = currentWorkouts.map(w => w.id)
+        
+        const { error: deleteExercisesError } = await supabase
+          .from('program_exercises')
+          .delete()
+          .in('workout_id', workoutIds)
+
+        if (deleteExercisesError) {
+          console.error('❌ [ROLLBACK_ERROR] Failed to delete exercises during rollback:', {
+            programId,
+            workoutIds,
+            error: deleteExercisesError.message
+          })
+          throw new Error(`Failed to delete exercises during rollback: ${deleteExercisesError.message}`)
+        }
+
+        console.log('✅ [ROLLBACK_SUCCESS] Removed newly created exercises:', {
+          programId,
+          exerciseCount: workoutIds.length
+        })
+      }
+    }
+
+    // If workouts were created, delete them
+    if (completedSteps.includes('workouts_created')) {
+      console.log('🔄 [ROLLBACK] Removing newly created workouts:', { programId })
+      
+      const { error: deleteWorkoutsError } = await supabase
+        .from('program_workouts')
+        .delete()
+        .eq('program_id', programId)
+
+      if (deleteWorkoutsError) {
+        console.error('❌ [ROLLBACK_ERROR] Failed to delete workouts during rollback:', {
+          programId,
+          error: deleteWorkoutsError.message
+        })
+        throw new Error(`Failed to delete workouts during rollback: ${deleteWorkoutsError.message}`)
+      }
+
+      console.log('✅ [ROLLBACK_SUCCESS] Removed newly created workouts:', { programId })
+    }
+
+    // Restore original workouts if they were deleted
+    if (completedSteps.includes('workouts_deleted') && backupData.program_workouts) {
+      console.log('🔄 [ROLLBACK] Restoring original workouts:', {
+        programId,
+        workoutCount: backupData.program_workouts.length
+      })
+      
+      const workoutsToRestore = backupData.program_workouts.map(workout => ({
+        program_id: programId,
+        week_number: workout.week_number,
+        day_number: workout.day_number,
+        name: workout.name,
+        created_at: workout.created_at,
+        updated_at: workout.updated_at
+      }))
+
+      const { data: restoredWorkouts, error: restoreWorkoutsError } = await supabase
+        .from('program_workouts')
+        .insert(workoutsToRestore)
+        .select()
+
+      if (restoreWorkoutsError) {
+        console.error('❌ [ROLLBACK_ERROR] Failed to restore workouts:', {
+          programId,
+          error: restoreWorkoutsError.message,
+          workoutCount: workoutsToRestore.length
+        })
+        throw new Error(`Failed to restore workouts: ${restoreWorkoutsError.message}`)
+      }
+
+      console.log('✅ [ROLLBACK_SUCCESS] Restored original workouts:', {
+        programId,
+        restoredCount: restoredWorkouts.length
+      })
+
+      // Restore original exercises if they were deleted
+      if (completedSteps.includes('exercises_deleted')) {
+        console.log('🔄 [ROLLBACK] Restoring original exercises:', { programId })
+        
+        let totalExercisesRestored = 0
+        
+        for (const originalWorkout of backupData.program_workouts) {
+          if (originalWorkout.program_exercises && originalWorkout.program_exercises.length > 0) {
+            const restoredWorkout = restoredWorkouts.find(w =>
+              w.week_number === originalWorkout.week_number && w.day_number === originalWorkout.day_number
+            )
+
+            if (restoredWorkout) {
+              const exercisesToRestore = originalWorkout.program_exercises.map(exercise => ({
+                workout_id: restoredWorkout.id,
+                exercise_id: exercise.exercise_id,
+                sets: exercise.sets,
+                reps: exercise.reps,
+                rest_minutes: exercise.rest_minutes,
+                notes: exercise.notes,
+                order_index: exercise.order_index,
+                created_at: exercise.created_at,
+                updated_at: exercise.updated_at
+              }))
+
+              const { error: restoreExercisesError } = await supabase
+                .from('program_exercises')
+                .insert(exercisesToRestore)
+
+              if (restoreExercisesError) {
+                console.error('❌ [ROLLBACK_ERROR] Failed to restore exercises for workout:', {
+                  programId,
+                  workoutId: restoredWorkout.id,
+                  exerciseCount: exercisesToRestore.length,
+                  error: restoreExercisesError.message
+                })
+                throw new Error(`Failed to restore exercises for workout ${restoredWorkout.id}: ${restoreExercisesError.message}`)
+              }
+
+              totalExercisesRestored += exercisesToRestore.length
+            }
+          }
+        }
+
+        console.log('✅ [ROLLBACK_SUCCESS] Restored original exercises:', {
+          programId,
+          exerciseCount: totalExercisesRestored
+        })
+      }
+    }
+
+    // Restore original program metadata if it was updated
+    if (completedSteps.includes('program_updated')) {
+      console.log('🔄 [ROLLBACK] Restoring original program metadata:', { programId })
+      
+      const originalProgramData = {
+        name: backupData.name,
+        weight_unit: backupData.weight_unit,
+        duration: backupData.duration,
+        days_per_week: backupData.days_per_week,
+        is_template: backupData.is_template,
+        is_active: backupData.is_active,
+        is_current: backupData.is_current,
+        difficulty: backupData.difficulty,
+        goals: backupData.goals,
+        equipment: backupData.equipment,
+        description: backupData.description,
+        completed_weeks: backupData.completed_weeks,
+        start_date: backupData.start_date,
+        updated_at: backupData.updated_at
+      }
+
+      const { error: restoreProgramError } = await supabase
+        .from('programs')
+        .update(originalProgramData)
+        .eq('id', programId)
+
+      if (restoreProgramError) {
+        console.error('❌ [ROLLBACK_ERROR] Failed to restore program metadata:', {
+          programId,
+          error: restoreProgramError.message,
+          originalData: originalProgramData
+        })
+        throw new Error(`Failed to restore program metadata: ${restoreProgramError.message}`)
+      }
+
+      console.log('✅ [ROLLBACK_SUCCESS] Restored original program metadata:', { programId })
+    }
+
+    console.log('✅ [ROLLBACK_SUCCESS] All rollback operations completed successfully:', {
+      programId,
+      completedSteps,
+      timestamp: new Date().toISOString()
+    })
+
+  } catch (rollbackError) {
+    console.error('❌ [ROLLBACK_ERROR] Rollback operation failed:', {
+      programId,
+      error: rollbackError.message,
+      errorStack: rollbackError.stack,
+      completedSteps,
+      timestamp: new Date().toISOString()
+    })
+    throw rollbackError
+  }
 }
 
 /**
@@ -463,7 +1290,7 @@ export const setCurrentProgram = async (programId, userId) => {
       .single()
 
     if (error) throw error
-    
+
     // Invalidate user program cache (affects all programs since current status changed)
     invalidateProgramCache(userId)
 
@@ -490,7 +1317,7 @@ export const deactivateProgram = async (programId, userId) => {
       .single()
 
     if (error) throw error
-    
+
     // Invalidate user program cache
     invalidateProgramCache(userId)
 
@@ -511,7 +1338,7 @@ export const deleteProgram = async (programId, userId) => {
       .eq('user_id', userId)
 
     if (error) throw error
-    
+
     invalidateProgramCache(userId)
 
     return true
@@ -617,7 +1444,7 @@ export const updateProgramProgress = async (programId, completedWeeks) => {
       .single()
 
     if (error) throw error
-    
+
     // Invalidate user program cache
     invalidateProgramCache(data.user_id)
 
@@ -734,14 +1561,14 @@ export const updateProgramExercise = async (programId, weekNumber, dayNumber, ol
       .single()
 
     if (error) throw error
-    
+
     // Get the program to find the user_id for cache invalidation
     const { data: programData, error: programError } = await supabase
       .from('programs')
       .select('user_id')
       .eq('id', programId)
       .single()
-    
+
     if (!programError && programData) {
       // Invalidate user program cache
       invalidateProgramCache(programData.user_id)
