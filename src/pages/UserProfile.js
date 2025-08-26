@@ -21,6 +21,7 @@ function UserProfile() {
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [heightErrors, setHeightErrors] = useState({ feet: '', inches: '' });
   const [isUpdating, setIsUpdating] = useState(false);
   const [passwordUpdating, setPasswordUpdating] = useState(false);
 
@@ -70,6 +71,8 @@ function UserProfile() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    setUserData(prev => ({ ...prev, [name]: value }));
+    validateHeight(name, value);
     
     if (type === 'checkbox') {
       // Handle array fields (goals, equipment, injuries)
@@ -86,6 +89,32 @@ function UserProfile() {
     }
   };
 
+  const validateHeight = (field, value) => {
+    const numValue = Number(value);
+    let errors = { ...heightErrors };
+
+    if (field === 'heightFeet') {
+      if (numValue < 0) {
+        errors.feet = 'Feet must be 0 or greater';
+      } else if (numValue > 8) {
+        errors.feet = 'Feet must be 8 or less';
+      } else {
+        errors.feet = '';
+      }
+    }
+    if (field === 'heightInches') {
+      if (numValue < 0) {
+        errors.inches = 'Inches must be 0 or greater';
+      } else if (numValue > 11) {
+        errors.inches = 'Inches must be 11 or less';
+      } else {
+        errors.inches = '';
+      }
+    }
+
+    setHeightErrors(errors);
+  };
+
   const handleArrayInput = (name, value) => {
     if (value.trim()) {
       setUserData(prev => ({
@@ -93,6 +122,10 @@ function UserProfile() {
         [name]: [...(prev[name] || []), value.trim()]
       }));
     }
+  };
+
+  const isHeightValid = () => {
+    return !heightErrors.feet && !heightErrors.inches && userData.heightFeet !== '' && userData.heightInches !== '';
   };
 
   const removeArrayItem = (name, index) => {
@@ -106,6 +139,11 @@ function UserProfile() {
     e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (!isHeightValid()) {
+      setError('Please fix height errors before updating.');
+      return;
+    }
     setIsUpdating(true);
     clearError();
 
@@ -116,8 +154,9 @@ function UserProfile() {
         age: userData.age ? Number(userData.age) : null,
         experience_level: userData.experience_level,
         preferred_units: userData.preferred_units,
-        height: userData.height ? Number(userData.height) : null,
-        weight: userData.weight ? Number(userData.weight) : null,
+        heightFeet: userData.heightFeet ? Number(userData.heightFeet) : null,
+        heightInches: userData.heightInches ? Number(userData.heightInches) : null,
+        weightLbs: userData.weightLbs ? Number(userData.weightLbs) : null,
         goals: userData.goals,
         available_equipment: userData.available_equipment,
         injuries: userData.injuries
@@ -283,41 +322,58 @@ function UserProfile() {
 
                   <Row>
                     <Col md={6}>
-                      <Form.Group controlId="formHeight" className="profile-form-group">
-                        <Form.Label className="soft-label profile-label">
-                          Height ({userData.preferred_units === 'KG' ? 'cm' : 'inches'})
-                        </Form.Label>
+                      <Form.Group controlId="formHeightFeet" className="profile-form-group">
+                      <Form.Label className="soft-label profile-label">Height (feet)</Form.Label>
                         <Form.Control
                           type="number"
-                          name="height"
-                          value={userData.height}
+                          name="heightFeet"
+                          value={userData.heightFeet}
                           onChange={handleChange}
-                          placeholder={userData.preferred_units === 'KG' ? 'Height in cm' : 'Height in inches'}
+                          placeholder="Feet"
                           min="0"
+                          max="8"
+                          isInvalid={!!heightErrors.feet}
                           className="soft-input profile-input"
                           disabled={isUpdating}
                         />
                       </Form.Group>
                     </Col>
                     <Col md={6}>
-                      <Form.Group controlId="formWeight" className="profile-form-group">
-                        <Form.Label className="soft-label profile-label">
-                          Weight ({userData.preferred_units})
-                        </Form.Label>
-                        <Form.Control
-                          type="number"
-                          name="weight"
-                          value={userData.weight}
-                          onChange={handleChange}
-                          placeholder={`Weight in ${userData.preferred_units}`}
-                          min="0"
-                          step="0.1"
-                          className="soft-input profile-input"
-                          disabled={isUpdating}
-                        />
+                      <Form.Group controlId="formHeightInches" className="profile-form-group">
+                        <Form.Label className="soft-label profile-label">Height (inches)</Form.Label>
+                          <Form.Control
+                            type="number"
+                            name="heightInches"
+                            value={userData.heightInches}
+                            onChange={handleChange}
+                            placeholder="Inches"
+                            min="0"
+                            max="11"
+                            isInvalid={!!heightErrors.inches}
+                            step="0.1"
+                            className="soft-input profile-input"
+                            disabled={isUpdating}
+                          />
+                          <Form.Control.Feedback type="invalid">{heightErrors.inches}</Form.Control.Feedback>
                       </Form.Group>
                     </Col>
                   </Row>
+                    <Form.Group controlId="formWeightLbs" className="profile-form-group">
+                      <Form.Label className="soft-label profile-label">
+                        Weight ({userData.preferred_units})
+                      </Form.Label>
+                      <Form.Control
+                        type="number"
+                        name="weight"
+                        value={userData.weightLbs}
+                        onChange={handleChange}
+                        placeholder={`Weight in ${userData.preferred_units}`}
+                        min="0"
+                        step="0.1"
+                        className="soft-input profile-input"
+                        disabled={isUpdating}
+                      />
+                    </Form.Group>
 
                   <Button 
                     type="submit" 
