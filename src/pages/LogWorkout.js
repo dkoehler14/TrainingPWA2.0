@@ -221,6 +221,7 @@ function LogWorkout() {
 
   // Add save lock to prevent multiple simultaneous saves for the same workout session
   const saveLockRef = useRef(null);
+  const saveLockTimeoutRef = useRef(null);
 
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
@@ -827,9 +828,20 @@ function LogWorkout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Component mount state to prevent saves after unmount
+  const isMountedRef = useRef(true);
+
   // Enhanced debounced save function using SaveStrategyManager
   const debouncedSaveLog = useCallback(
     debounce(async (userData, programData, weekIndex, dayIndex, exerciseData, previousData = null) => {
+      // Check if component is still mounted before proceeding
+      if (!isMountedRef.current) {
+        console.log('🔄 SAVE CANCELLED: Component unmounted, skipping save', {
+          timestamp: new Date().toISOString()
+        });
+        return;
+      }
+
       if (!userData || !programData || exerciseData.length === 0) return;
 
       // Create unique lock key for this workout session
@@ -848,9 +860,23 @@ function LogWorkout() {
       markUnsaved();
 
       try {
-        // Set the save lock
+        // Set the save lock with timeout
         saveLockRef.current = lockKey;
         console.log('🔒 SAVE LOCK ACQUIRED:', { lockKey, timestamp: new Date().toISOString() });
+
+        // Set a timeout to automatically clear the lock after 30 seconds (safety mechanism)
+        if (saveLockTimeoutRef.current) {
+          clearTimeout(saveLockTimeoutRef.current);
+        }
+        saveLockTimeoutRef.current = setTimeout(() => {
+          if (saveLockRef.current === lockKey) {
+            saveLockRef.current = null;
+            console.log('⏰ SAVE LOCK AUTO-CLEARED: Lock timeout reached', {
+              lockKey,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }, 30000); // 30 second timeout
 
         // Execute save operation with error handling
         const result = await executeSave(async () => {
@@ -972,8 +998,12 @@ function LogWorkout() {
 
         throw error;
       } finally {
-        // Release the save lock
+        // Release the save lock and clear timeout
         saveLockRef.current = null;
+        if (saveLockTimeoutRef.current) {
+          clearTimeout(saveLockTimeoutRef.current);
+          saveLockTimeoutRef.current = null;
+        }
         console.log('🔓 SAVE LOCK RELEASED:', { timestamp: new Date().toISOString() });
       }
     }, 1500), // Debounce timing managed by SaveStrategyManager
@@ -982,6 +1012,14 @@ function LogWorkout() {
 
   // Enhanced immediate save function using SaveStrategyManager
   const immediateSaveLog = useCallback(async (userData, programData, weekIndex, dayIndex, exerciseData) => {
+    // Check if component is still mounted before proceeding
+    if (!isMountedRef.current) {
+      console.log('🔄 IMMEDIATE SAVE CANCELLED: Component unmounted, skipping save', {
+        timestamp: new Date().toISOString()
+      });
+      return;
+    }
+
     // Cancel any pending debounced saves
     debouncedSaveLog.cancel();
 
@@ -1001,9 +1039,23 @@ function LogWorkout() {
     }
 
     try {
-      // Set the save lock
+      // Set the save lock with timeout
       saveLockRef.current = lockKey;
       console.log('🔒 IMMEDIATE SAVE LOCK ACQUIRED:', { lockKey, timestamp: new Date().toISOString() });
+
+      // Set a timeout to automatically clear the lock after 30 seconds (safety mechanism)
+      if (saveLockTimeoutRef.current) {
+        clearTimeout(saveLockTimeoutRef.current);
+      }
+      saveLockTimeoutRef.current = setTimeout(() => {
+        if (saveLockRef.current === lockKey) {
+          saveLockRef.current = null;
+          console.log('⏰ IMMEDIATE SAVE LOCK AUTO-CLEARED: Lock timeout reached', {
+            lockKey,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }, 30000); // 30 second timeout
 
       // Execute save operation with error handling
       const result = await executeSave(async () => {
@@ -1126,14 +1178,28 @@ function LogWorkout() {
 
       throw error;
     } finally {
-      // Release the save lock
+      // Release the save lock and clear timeout
       saveLockRef.current = null;
+      if (saveLockTimeoutRef.current) {
+        clearTimeout(saveLockTimeoutRef.current);
+        saveLockTimeoutRef.current = null;
+      }
       console.log('🔓 IMMEDIATE SAVE LOCK RELEASED:', { timestamp: new Date().toISOString() });
     }
   }, [debouncedSaveLog, executeSave, addError, updateCachedWorkoutLog, cleanupInvalidCacheEntry, workoutDebugger, isWorkoutFinished]);
 
   // Initialize debugging and monitoring systems
   useEffect(() => {
+    // Clear any stale save locks on component mount
+    saveLockRef.current = null;
+    if (saveLockTimeoutRef.current) {
+      clearTimeout(saveLockTimeoutRef.current);
+      saveLockTimeoutRef.current = null;
+    }
+    console.log('🔄 COMPONENT MOUNT: Cleared any stale save locks', {
+      timestamp: new Date().toISOString()
+    });
+
     if (process.env.NODE_ENV === 'development') {
       // Initialize Supabase debugging
       initializeSupabaseDebugging();
@@ -1155,36 +1221,35 @@ function LogWorkout() {
     }
   }, [user]);
 
-  // Add beforeunload event listener to save any pending changes
-  useEffect(() => {
-    const handleBeforeUnload = (event) => {
-      // Check if there are any pending changes that need to be saved
-      if (user && selectedProgram && logData.length > 0) {
-        // Try to flush any pending debounced saves immediately
-        debouncedSaveLog.flush();
 
-        // For critical changes, we could also trigger an immediate save
-        // but this might be too aggressive and cause performance issues
-        immediateSaveLog(user, selectedProgram, selectedWeek, selectedDay, logData);
-      }
-    };
-
-    // Add the event listener
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // Cleanup function to remove the event listener
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [user, selectedProgram, logData, selectedWeek, selectedDay, debouncedSaveLog]);
 
   // Cleanup effect to flush any pending saves when component unmounts
   useEffect(() => {
+    // Mark component as mounted
+    isMountedRef.current = true;
+
     return () => {
+      // Mark component as unmounted to prevent further saves
+      isMountedRef.current = false;
+
       // Flush any pending debounced saves when component unmounts
       if (debouncedSaveLog && typeof debouncedSaveLog.flush === 'function') {
         debouncedSaveLog.flush();
+        console.log('🔄 FLUSHED: Pending debounced saves flushed on unmount', {
+          timestamp: new Date().toISOString()
+        });
       }
+
+      // Clear save lock and timeout on unmount
+      saveLockRef.current = null;
+      if (saveLockTimeoutRef.current) {
+        clearTimeout(saveLockTimeoutRef.current);
+        saveLockTimeoutRef.current = null;
+      }
+
+      console.log('🔓 SAVE LOCK CLEARED: Component unmounting', {
+        timestamp: new Date().toISOString()
+      });
 
       // Log SaveStrategyManager performance metrics on cleanup
       if (saveStrategyManager.current) {
@@ -1209,21 +1274,7 @@ function LogWorkout() {
     };
   }, [debouncedSaveLog, workoutDebugger]);
 
-  // Add visibility change handler to save when page becomes hidden
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && user && selectedProgram && logData.length > 0) {
-        // Flush any pending debounced saves when page becomes hidden
-        debouncedSaveLog.flush();
-      }
-    };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [user, selectedProgram, logData, debouncedSaveLog]);
 
   useEffect(() => {
     const fetchData = async () => {

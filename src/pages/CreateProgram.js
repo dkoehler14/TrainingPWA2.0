@@ -3,8 +3,10 @@ import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, C
 import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical } from 'react-bootstrap-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
+import { useFormPersistence } from '../hooks/useFormPersistence';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
+import AutoSaveIndicator from '../components/AutoSaveIndicator';
 import '../styles/CreateProgram.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createProgram, createCompleteProgram, getProgramById, updateProgram, updateCompleteProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
@@ -119,12 +121,51 @@ function CreateProgram({ mode = 'create' }) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isTemplate, setIsTemplate] = useState(false);
   const [editingDay, setEditingDay] = useState({ dayIndex: null, value: '' });
+  const [autoSaveTriggered, setAutoSaveTriggered] = useState(false);
 
   const setsRef = useRef(null);
   const repsRef = useRef(null);
 
   useNumberInput(setsRef);
   useNumberInput(repsRef);
+
+  // Form persistence to prevent data loss on tab switches
+  const formState = {
+    programName,
+    weightUnit,
+    weeks,
+    step,
+    creationSource,
+    isTemplate
+  };
+
+  const { clearSavedState } = useFormPersistence(
+    `createProgram_${mode}_${programId || 'new'}`,
+    formState,
+    (savedState) => {
+      // Only restore state if we're not in edit mode or if we haven't loaded the program yet
+      if (mode !== 'edit' && savedState) {
+        if (savedState.programName !== undefined) setProgramName(savedState.programName);
+        if (savedState.weightUnit !== undefined) setWeightUnit(savedState.weightUnit);
+        if (savedState.weeks !== undefined) setWeeks(savedState.weeks);
+        if (savedState.step !== undefined) setStep(savedState.step);
+        if (savedState.creationSource !== undefined) setCreationSource(savedState.creationSource);
+        if (savedState.isTemplate !== undefined) setIsTemplate(savedState.isTemplate);
+      }
+    },
+    {
+      debounceMs: 1000,
+      exclude: ['isLoading'], // Don't persist loading states
+      condition: () => mode !== 'edit' && step === 3 // Only persist when actively editing
+    }
+  );
+
+  // Trigger auto-save indicator when form state changes
+  useEffect(() => {
+    if (mode !== 'edit' && step === 3 && (programName || weeks.some(w => w.days.some(d => d.exercises.some(e => e.exerciseId))))) {
+      setAutoSaveTriggered(true);
+    }
+  }, [formState, mode, step, programName, weeks]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 767);
@@ -644,12 +685,14 @@ function CreateProgram({ mode = 'create' }) {
         // For edit mode, use updateCompleteProgram to handle the full workout structure
         await updateCompleteProgram(programId, programData, workoutsData);
         invalidateProgramCache(user.id);
+        clearSavedState(); // Clear saved form data
         alert('Program updated successfully!');
         navigate('/programs');
       } else {
         // For create mode, use createCompleteProgram with workouts
         await createCompleteProgram(programData, workoutsData);
         invalidateProgramCache(user.id);
+        clearSavedState(); // Clear saved form data
         alert('Program created successfully!');
         // Reset form for new program
         setProgramName('');
@@ -1105,7 +1148,10 @@ function CreateProgram({ mode = 'create' }) {
           <Row className="mb-4 program-misc-input">
             <Col xs={12} md={6} className="mb-3 mb-md-0">
               <Form.Group>
-                <Form.Label>Program Name</Form.Label>
+                <div className="d-flex justify-content-between align-items-center">
+                  <Form.Label>Program Name</Form.Label>
+                  {mode !== 'edit' && <AutoSaveIndicator isActive={autoSaveTriggered} />}
+                </div>
                 <Form.Control
                   type="text"
                   value={programName}

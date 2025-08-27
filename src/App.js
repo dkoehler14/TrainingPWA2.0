@@ -45,7 +45,7 @@ function AppContent() {
   const { } = useTheme();
 
   // Use auth hook instead of Firebase auth
-  const { user, userProfile, loading, isReady } = useAuth();
+  const { user, userProfile, loading, isReady, isInitialized, isAuthenticated } = useAuth();
   const { userRole } = useRoles();
 
   // Initialize app cache and development debugging on startup
@@ -130,7 +130,8 @@ function AppContent() {
     }
   }, [user, cacheInitialized, isReady]);
 
-  if (loading) {
+  // Only show loading on initial app load, not on tab switches
+  if (!isInitialized) {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
         <div className="text-center">
@@ -150,8 +151,8 @@ function AppContent() {
         <Route path="/create-program" element={user ? <CreateProgram /> : <Navigate to="/auth" />} />
         <Route path="/programs" element={user ? <ProgramsWorkoutHub userRole={userRole} /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <UserProfile /> : <Navigate to="/auth" />} />
-        <Route path="/log-workout" element={user ? <LogWorkout /> : <Navigate to="/auth" />} />
-        <Route path="/quick-workout" element={user ? <QuickWorkout /> : <Navigate to="/auth" />} />
+        <Route path="/log-workout" element={isAuthenticated ? <LogWorkout /> : <Navigate to="/auth" />} />
+        <Route path="/quick-workout" element={isAuthenticated ? <QuickWorkout /> : <Navigate to="/auth" />} />
         <Route path="/quick-workout-history" element={<Navigate to="/programs?view=quick-workouts" replace />} />
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/progress-coach" element={user ? <ProgressCoach /> : <Navigate to="/auth" />} />

@@ -1,13 +1,11 @@
-import React, { createContext, useEffect, useState, useCallback } from 'react'
-import { useSupabaseAuth } from '../hooks/useSupabaseAuth'
-import { 
-  getUserProfile, 
-  createUserProfile, 
-  updateUserProfile 
+import React, { createContext, useEffect, useState, useCallback, useMemo } from 'react'
+import { supabase } from '../config/supabase'
+import {
+  getUserProfile,
+  createUserProfile,
+  updateUserProfile
 } from '../services/userService'
 import { handleSupabaseError } from '../utils/supabaseErrorHandler'
-import { authService } from '../services/authService'
-import { initializeAuthConfig, authEventHandler } from '../config/supabaseAuth'
 
 /**
  * Authentication Context for Supabase
@@ -16,87 +14,102 @@ import { initializeAuthConfig, authEventHandler } from '../config/supabaseAuth'
 export const AuthContext = createContext({})
 
 export const AuthProvider = ({ children }) => {
-  const {
-    user: authUser,
-    session,
-    loading: authLoading,
-    signUp: supabaseSignUp,
-    signIn: supabaseSignIn,
-    signInWithGoogle: supabaseSignInWithGoogle,
-    signOut: supabaseSignOut,
-    resetPassword: supabaseResetPassword,
-    updatePassword: supabaseUpdatePassword,
-    updateEmail: supabaseUpdateEmail,
-    signInWithMagicLink,
-    verifyOtp
-  } = useSupabaseAuth()
+  // Direct Supabase auth state (consolidated from useSupabaseAuth)
+  const [authUser, setAuthUser] = useState(null)
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [isInitialized, setIsInitialized] = useState(false)
 
+  // Profile state
   const [userProfile, setUserProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [isInitialized, setIsInitialized] = useState(false)
 
-  // Initialize authentication system
+  // Initialize authentication system (consolidated - single auth listener)
   useEffect(() => {
+    let isMounted = true
+
     const initializeAuth = async () => {
       try {
         console.log('🔐 Initializing authentication system...')
-        
-        // Initialize auth configuration
-        await initializeAuthConfig()
-        
-        // Initialize auth service
-        await authService.initialize()
-        
-        setIsInitialized(true)
+
+        // Get initial session
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
+
+        if (isMounted) {
+          setSession(session)
+          setAuthUser(session?.user ?? null)
+          setIsInitialized(true)
+          setAuthLoading(false)
+
+          // Load profile if user exists
+          if (session?.user) {
+            loadUserProfile(session.user)
+          }
+        }
+
         console.log('✅ Authentication system initialized')
       } catch (error) {
         console.error('❌ Failed to initialize authentication system:', error)
-        setError(handleSupabaseError(error))
+        if (isMounted) {
+          setError(handleSupabaseError(error))
+          setIsInitialized(true)
+          setAuthLoading(false)
+        }
       }
     }
 
     initializeAuth()
-  }, [])
 
-  // Set up auth event listeners
-  useEffect(() => {
-    if (!isInitialized) return
+    // Single auth state change listener (consolidates all previous listeners)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔄 Auth state changed:', event, session?.user?.email)
 
-    const handleSignedIn = ({ user, session }) => {
-      console.log('🔐 User signed in event received')
-      loadUserProfile(user)
-    }
+        if (isMounted) {
+          const currentUserId = authUser?.id
+          const newUserId = session?.user?.id
 
-    const handleSignedOut = () => {
-      console.log('🔐 User signed out event received')
-      setUserProfile(null)
-      setError(null)
-    }
+          // Only update if there's an actual change in user state
+          if (currentUserId !== newUserId || !isInitialized) {
+            setSession(session)
+            setAuthUser(session?.user ?? null)
 
-    const handleUserUpdated = ({ user }) => {
-      console.log('🔐 User updated event received')
-      if (user) {
-        loadUserProfile(user)
+            // Handle different auth events
+            if (event === 'SIGNED_IN' && session?.user) {
+              console.log('👤 User signed in:', session.user.email)
+              loadUserProfile(session.user)
+            } else if (event === 'SIGNED_OUT') {
+              console.log('👋 User signed out')
+              setUserProfile(null)
+              setError(null)
+            }
+
+            if (!isInitialized) {
+              setIsInitialized(true)
+              setAuthLoading(false)
+            }
+          }
+        }
       }
-    }
-
-    // Subscribe to auth events
-    authEventHandler.on('signedIn', handleSignedIn)
-    authEventHandler.on('signedOut', handleSignedOut)
-    authEventHandler.on('userUpdated', handleUserUpdated)
+    )
 
     return () => {
-      authEventHandler.off('signedIn', handleSignedIn)
-      authEventHandler.off('signedOut', handleSignedOut)
-      authEventHandler.off('userUpdated', handleUserUpdated)
+      isMounted = false
+      subscription.unsubscribe()
     }
-  }, [isInitialized])
+  }, [authUser?.id, isInitialized])
 
   // Load user profile when auth user changes
   const loadUserProfile = useCallback(async (user = authUser) => {
     if (!user) {
       setUserProfile(null)
+      return
+    }
+
+    // Don't reload profile if we already have it for this user
+    if (userProfile && userProfile.id === user.id) {
       return
     }
 
@@ -112,7 +125,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setProfileLoading(false)
     }
-  }, [authUser])
+  }, [authUser, userProfile])
 
   // Load profile when auth user changes
   useEffect(() => {
@@ -121,20 +134,29 @@ export const AuthProvider = ({ children }) => {
     }
   }, [authUser, isInitialized, loadUserProfile])
 
-  // Enhanced sign up with profile creation
+  // Sign up with email and password
   const signUpWithProfile = async (email, password, profileData = {}) => {
     try {
       setError(null)
-      const result = await supabaseSignUp(email, password, profileData)
-      
-      if (result.user && !result.needsConfirmation) {
-        // Create user profile for immediately confirmed users
-        const profile = await createUserProfile(result.user, profileData)
-        setUserProfile(profile)
-        return { ...result, profile }
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: profileData
+        }
+      })
+
+      if (error) throw error
+
+      if (data.user && !data.user.email_confirmed_at) {
+        return {
+          user: data.user,
+          session: data.session,
+          needsConfirmation: true
+        }
       }
-      
-      return result
+
+      return { user: data.user, session: data.session }
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -142,16 +164,17 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Enhanced sign in with profile loading
+  // Sign in with email and password
   const signInWithProfile = async (email, password) => {
     try {
       setError(null)
-      const result = await supabaseSignIn(email, password)
-      
-      if (result.user) {
-        // Profile will be loaded by the auth event handler
-        return result
-      }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+
+      if (error) throw error
+      return { user: data.user, session: data.session }
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -159,14 +182,19 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Enhanced Google sign in with profile handling
+  // Sign in with Google
   const signInWithGoogleAndProfile = async () => {
     try {
       setError(null)
-      const result = await supabaseSignInWithGoogle()
-      
-      // Profile will be loaded by the auth event handler
-      return result
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`
+        }
+      })
+
+      if (error) throw error
+      return data
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -174,12 +202,19 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Enhanced magic link sign in
+  // Sign in with magic link
   const signInWithMagicLinkAndProfile = async (email) => {
     try {
       setError(null)
-      const result = await signInWithMagicLink(email)
-      return result
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`
+        }
+      })
+
+      if (error) throw error
+      return { success: true }
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -205,12 +240,12 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Enhanced sign out
+  // Sign out
   const signOutUser = async () => {
     try {
       setError(null)
-      await supabaseSignOut()
-      // Profile cleanup is handled by auth event handler
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -218,12 +253,16 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Reset password with error handling
+  // Reset password
   const resetUserPassword = async (email) => {
     try {
       setError(null)
-      const result = await supabaseResetPassword(email)
-      return result
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      })
+
+      if (error) throw error
+      return { success: true }
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -231,11 +270,15 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Update password with error handling
+  // Update password
   const updateUserPassword = async (newPassword) => {
     try {
       setError(null)
-      await supabaseUpdatePassword(newPassword)
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
+
+      if (error) throw error
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -243,12 +286,16 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Update email with error handling
+  // Update email
   const updateUserEmail = async (newEmail) => {
     try {
       setError(null)
-      await supabaseUpdateEmail(newEmail)
-      
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail
+      })
+
+      if (error) throw error
+
       // Update profile email if successful
       if (userProfile) {
         const updatedProfile = await updateUserProfile(userProfile.id, { email: newEmail })
@@ -261,12 +308,18 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  // Verify OTP with error handling
+  // Verify OTP
   const verifyOtpCode = async (email, token, type = 'email') => {
     try {
       setError(null)
-      const result = await verifyOtp(email, token, type)
-      return result
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type
+      })
+
+      if (error) throw error
+      return { user: data.user, session: data.session }
     } catch (error) {
       const handledError = handleSupabaseError(error)
       setError(handledError)
@@ -350,8 +403,8 @@ export const AuthProvider = ({ children }) => {
   // Clear error
   const clearError = useCallback(() => setError(null), [])
 
-  // Check if user is authenticated
-  const isAuthenticated = !!authUser
+  // Check if user is authenticated (memoized for stability)
+  const isAuthenticated = useMemo(() => !!authUser, [!!authUser])
 
   // Check if user has completed profile
   const hasCompleteProfile = !!(userProfile?.name && userProfile?.experience_level)
@@ -367,29 +420,29 @@ export const AuthProvider = ({ children }) => {
       // Return first role or default to 'user'
       return roles[0] || 'user'
     }
-    
+
     // Fallback to auth metadata (for backwards compatibility)
     const metadataRole = authUser?.user_metadata?.role
     if (metadataRole) {
       return metadataRole
     }
-    
+
     // Default role
     return 'user'
   }
-  
-  const userRole = getUserRole()
+
+  const userRole = useMemo(() => getUserRole(), [authUser?.user_metadata?.role, userProfile?.roles])
 
   // Check if profile is loading
   const isProfileLoading = profileLoading
 
-  // Check if system is ready
-  const isReady = isInitialized && !authLoading && !profileLoading
+  // Check if system is ready (memoized for stability)
+  const isReady = useMemo(() => isInitialized && !authLoading && !profileLoading, [isInitialized, authLoading, profileLoading])
 
   // Get session expiry information
   const getSessionInfo = useCallback(() => {
     if (!session) return null
-    
+
     return {
       expiresAt: new Date(session.expires_at * 1000),
       isExpired: new Date(session.expires_at * 1000) <= new Date(),
@@ -429,7 +482,7 @@ export const AuthProvider = ({ children }) => {
     createProfile,
     updatePreferences,
     updateSettings,
-    
+
     // Utility methods
     clearError,
     getSessionInfo,

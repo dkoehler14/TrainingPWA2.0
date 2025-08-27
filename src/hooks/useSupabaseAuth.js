@@ -10,21 +10,30 @@ export function useSupabaseAuth() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [session, setSession] = useState(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
+    let isMounted = true
+
     // Get initial session
     const getInitialSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
         if (error) throw error
         
-        setSession(session)
-        setUser(session?.user ?? null)
+        if (isMounted) {
+          setSession(session)
+          setUser(session?.user ?? null)
+          setIsInitialized(true)
+          setLoading(false)
+        }
       } catch (error) {
         console.error('Error getting initial session:', error)
         handleSupabaseError(error)
-      } finally {
-        setLoading(false)
+        if (isMounted) {
+          setIsInitialized(true)
+          setLoading(false)
+        }
       }
     }
 
@@ -34,14 +43,34 @@ export function useSupabaseAuth() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state changed:', event, session?.user?.email)
-        setSession(session)
-        setUser(session?.user ?? null)
-        setLoading(false)
+        
+        // Only update state if this is a meaningful auth change
+        // Ignore redundant events that happen on tab focus
+        if (isMounted) {
+          const currentUserId = user?.id
+          const newUserId = session?.user?.id
+          
+          // Only update if there's an actual change in user state
+          if (currentUserId !== newUserId || !isInitialized) {
+            setSession(session)
+            setUser(session?.user ?? null)
+            
+            // Only set loading to false if we're not already initialized
+            // This prevents unnecessary loading states on tab switches
+            if (!isInitialized) {
+              setIsInitialized(true)
+              setLoading(false)
+            }
+          }
+        }
       }
     )
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [user?.id, isInitialized])
 
   // Sign up with email and password
   const signUp = async (email, password, userData = {}) => {

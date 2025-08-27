@@ -65,11 +65,40 @@ function QuickWorkout() {
         setUserMessage(prev => ({ ...prev, show: false }));
     };
 
-    // Draft management functions using the service
-    const saveDraft = async (exercises, name, isAutoSave = false) => {
-        if (!user || exercises.length === 0) return;
+    // Track save state to prevent concurrent saves
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
+    
+    // Component mount state to prevent saves after unmount
+    const isMountedRef = useRef(true);
 
+    // Draft management functions using the service
+    const saveDraft = useCallback(async (exercises, name, isAutoSave = false) => {
+        // Check if component is still mounted before proceeding
+        if (!isMountedRef.current) {
+            console.log('🔄 QuickWorkout: Component unmounted, skipping save', {
+                timestamp: new Date().toISOString()
+            });
+            return;
+        }
+
+        if (!user || exercises.length === 0 || isSavingDraft) {
+            if (isSavingDraft) {
+                console.log('🔄 QuickWorkout: Save already in progress, skipping', {
+                    timestamp: new Date().toISOString()
+                });
+            }
+            return;
+        }
+
+        setIsSavingDraft(true);
         try {
+            console.log('🔄 QuickWorkout: Starting draft save', {
+                exerciseCount: exercises.length,
+                workoutName: name,
+                isAutoSave,
+                timestamp: new Date().toISOString()
+            });
+
             const result = await workoutLogService.saveDraft(
                 user.id,
                 exercises,
@@ -80,16 +109,23 @@ function QuickWorkout() {
             setCurrentDraft(result);
             setLastSaved(new Date());
 
+            console.log('✅ QuickWorkout: Draft save completed', {
+                draftId: result?.id,
+                timestamp: new Date().toISOString()
+            });
+
             if (!isAutoSave) {
                 showUserMessage('Draft saved successfully!', 'success');
             }
         } catch (error) {
-            console.error("Error saving draft:", error);
+            console.error("❌ QuickWorkout: Draft save failed", error);
             if (!isAutoSave) {
                 showUserMessage('Failed to save draft. Please try again.', 'error');
             }
+        } finally {
+            setIsSavingDraft(false);
         }
-    };
+    }, [user, currentDraft?.id, isSavingDraft]);
 
     const loadDraft = (draft) => {
         setCurrentDraft(draft);
@@ -151,18 +187,46 @@ function QuickWorkout() {
         }
     };
 
+    // Create a stable reference to the save function
+    const saveDraftRef = useRef();
+    
+    // Track when saveDraft function changes
+    useEffect(() => {
+        console.log('🔄 QuickWorkout: saveDraft function updated', {
+            timestamp: new Date().toISOString(),
+            userId: user?.id,
+            currentDraftId: currentDraft?.id
+        });
+        saveDraftRef.current = saveDraft;
+    }, [saveDraft, user?.id, currentDraft?.id]);
+
     // Auto-save function with debouncing
     const debouncedSaveDraft = useCallback(
         debounce(async (userData, exercises, name, isAutoSave) => {
+            // Check if component is still mounted before proceeding
+            if (!isMountedRef.current) {
+                console.log('🔄 QuickWorkout: Component unmounted, cancelling auto-save', {
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+
             if (!userData || !exercises || exercises.length === 0) return;
             try {
-                await saveDraft(exercises, name, isAutoSave);
-                console.log('Quick workout auto-saved');
+                console.log('🔄 QuickWorkout: Starting auto-save', {
+                    exerciseCount: exercises.length,
+                    workoutName: name,
+                    timestamp: new Date().toISOString()
+                });
+                await saveDraftRef.current(exercises, name, isAutoSave);
+                console.log('✅ QuickWorkout: Auto-save completed successfully', {
+                    timestamp: new Date().toISOString()
+                });
             } catch (error) {
-                console.error("Error auto-saving quick workout: ", error);
+                console.error("❌ QuickWorkout: Auto-save failed", error);
             }
         }, 1000), // 1 second debounce
-        [] // Empty dependency array ensures this is only created once
+        [] // Empty dependency array but using ref for stable access
     );
 
     // Cleanup old drafts using the service
@@ -179,8 +243,30 @@ function QuickWorkout() {
         }
     };
 
+    // Add cleanup effect for debounced save with component mount tracking
+    useEffect(() => {
+        // Mark component as mounted
+        isMountedRef.current = true;
+
+        return () => {
+            // Mark component as unmounted
+            isMountedRef.current = false;
+            
+            // Flush any pending saves when component unmounts
+            if (debouncedSaveDraft && typeof debouncedSaveDraft.flush === 'function') {
+                debouncedSaveDraft.flush();
+                console.log('🔄 QuickWorkout: Flushed pending saves on component unmount');
+            }
+        };
+    }, []); // Empty dependency array - this should only run on mount/unmount
+
     useEffect(() => {
         const initializeComponent = async () => {
+            console.log('🔄 QuickWorkout: Component mounting/initializing', {
+                userId: user?.id,
+                timestamp: new Date().toISOString()
+            });
+            
             if (user) {
                 const startTime = Date.now();
 
