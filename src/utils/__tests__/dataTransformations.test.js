@@ -20,7 +20,7 @@ import {
 
 // Mock programUtils for testing
 jest.mock('../programUtils', () => ({
-  parseWeeklyConfigs: jest.fn((configString) => {
+  parseWeeklyConfigs: jest.fn((configString, duration, daysPerWeek) => {
     try {
       return JSON.parse(configString)
     } catch {
@@ -522,7 +522,8 @@ describe('Data Transformation Utilities', () => {
           reps: [10, 8, 6],
           weights: [135, 140, 145],
           completed: [true, true, false],
-          notes: 'Good form',
+          workoutNotes: 'Good form',
+          programNotes: '',
           bodyweight: null,
           isAdded: false,
           addedType: null,
@@ -534,7 +535,8 @@ describe('Data Transformation Utilities', () => {
           reps: ['12', '10', '8'],
           weights: ['', '', ''],
           completed: [true, true, true],
-          notes: '',
+          workoutNotes: '',
+          programNotes: '',
           bodyweight: '180',
           isAdded: true,
           addedType: 'temporary',
@@ -547,6 +549,7 @@ describe('Data Transformation Utilities', () => {
       expect(result).toHaveLength(2);
       
       expect(result[0]).toEqual({
+        id: null,
         exerciseId: 'exercise-1',
         sets: 3,
         reps: [10, 8, 6],
@@ -560,16 +563,17 @@ describe('Data Transformation Utilities', () => {
       });
 
       expect(result[1]).toEqual({
+        id: null,
         exerciseId: 'exercise-2',
         sets: 3,
         reps: [12, 10, 8], // Converted to numbers
-        weights: [0, 0, 0], // Empty strings converted to 0
+        weights: [null, null, null], // Empty strings converted to null
         completed: [true, true, true],
         notes: '',
         bodyweight: 180, // Converted to number
         isAdded: true,
         addedType: 'temporary',
-        originalIndex: 0
+        originalIndex: -1
       });
     });
 
@@ -587,6 +591,7 @@ describe('Data Transformation Utilities', () => {
       const result = transformExercisesToSupabaseFormat(minimalExercise);
 
       expect(result[0]).toEqual({
+        id: null,
         exerciseId: 'exercise-1',
         sets: 3,
         reps: [10, 10, 10],
@@ -619,8 +624,8 @@ describe('Data Transformation Utilities', () => {
               notes: 'Good set',
               bodyweight: null,
               is_added: false,
-              added_type: null,
-              original_index: -1
+              added_type: 'permanent',
+              original_index: 0
             }
           ]
         },
@@ -657,7 +662,8 @@ describe('Data Transformation Utilities', () => {
               reps: [10, 8, 6],
               weights: [135, 140, 145],
               completed: [true, true, false],
-              notes: 'Good set',
+              workoutNotes: 'Good set',
+              programNotes: '',
               bodyweight: '',
               isAdded: false,
               addedType: null,
@@ -665,7 +671,8 @@ describe('Data Transformation Utilities', () => {
             }
           ],
           isWorkoutFinished: true,
-          workoutLogId: 'log-1'
+          workoutLogId: 'log-1',
+          lastSaved: expect.any(String)
         },
         '0_1': {
           exercises: [
@@ -675,7 +682,8 @@ describe('Data Transformation Utilities', () => {
               reps: ['', ''], // Filled with defaults
               weights: ['', ''], // Filled with defaults
               completed: [false, false], // Filled with defaults
-              notes: '',
+              workoutNotes: '',
+              programNotes: '',
               bodyweight: 180,
               isAdded: true,
               addedType: 'permanent',
@@ -683,7 +691,8 @@ describe('Data Transformation Utilities', () => {
             }
           ],
           isWorkoutFinished: false,
-          workoutLogId: 'log-2'
+          workoutLogId: 'log-2',
+          lastSaved: expect.any(String)
         }
       });
     });

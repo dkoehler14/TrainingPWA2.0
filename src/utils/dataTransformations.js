@@ -236,7 +236,7 @@ export const transformExercisesToSupabaseFormat = (exerciseData) => {
       reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
       weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
       completed: ex.completed,
-      notes: ex.notes || '',
+      notes: ex.workoutNotes || '',
       bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
       // Include added exercise metadata with mapped values
       isAdded: ex.isAdded || false,
@@ -273,6 +273,8 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
               // In the future, we could add a separate field to track this distinction
               mappedAddedType = 'temporary';
               break;
+            case 'temporary':
+            case 'permanent':
             case 'superset':
             case 'dropset':
             case 'replacement':
@@ -289,7 +291,8 @@ export const transformSupabaseWorkoutLogs = (workoutLogs) => {
           reps: ex.reps ? ex.reps.map(rep => rep === null ? '' : rep) : Array(ex.sets).fill(''),
           weights: ex.weights ? ex.weights.map(weight => weight === null ? '' : weight) : Array(ex.sets).fill(''),
           completed: ex.completed || Array(ex.sets).fill(false),
-          notes: ex.notes || '',
+          workoutNotes: ex.notes || '',
+          programNotes: '', // Will be populated from program configuration in LogWorkout
           bodyweight: ex.bodyweight || '',
           // Preserve added exercise metadata with mapped values
           isAdded: ex.is_added || false,

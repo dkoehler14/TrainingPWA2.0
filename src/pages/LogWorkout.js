@@ -599,7 +599,8 @@ function LogWorkout() {
         ...localExercise,
         // Only update non-user-input fields
         id: remoteExercise.id,
-        notes: remoteExercise.notes || localExercise.notes,
+        workoutNotes: remoteExercise.notes || localExercise.workoutNotes,
+        programNotes: localExercise.programNotes || '',
         metadata: {
           ...localExercise.metadata,
           remoteId: remoteExercise.id,
@@ -619,7 +620,8 @@ function LogWorkout() {
         weights: remoteExercise.weights || localExercise.weights,
         completed: remoteExercise.completed || localExercise.completed,
         bodyweight: remoteExercise.bodyweight || localExercise.bodyweight,
-        notes: remoteExercise.notes || localExercise.notes,
+        workoutNotes: remoteExercise.notes || localExercise.workoutNotes,
+        programNotes: localExercise.programNotes || '',
         lastModified: remoteExercise.updated_at,
         metadata: {
           ...localExercise.metadata,
@@ -644,7 +646,8 @@ function LogWorkout() {
       weights: supabaseExercise.weights || [],
       completed: supabaseExercise.completed || [],
       bodyweight: supabaseExercise.bodyweight,
-      notes: supabaseExercise.notes || '',
+      workoutNotes: supabaseExercise.notes || '',
+      programNotes: '', // Will be populated from program configuration
       lastModified: supabaseExercise.updated_at,
       metadata: {
         source: 'realtime_transform',
@@ -1487,10 +1490,25 @@ function LogWorkout() {
       // Optimized existing log processing with memoization
       const processedExercises = programLogs[key].exercises.map(ex => {
         const exercise = exercisesList.find(e => e.id === ex.exerciseId);
+        const programExercise = selectedProgram.weeklyConfigs[selectedWeek][selectedDay].exercises.find(pe => pe.exerciseId === ex.exerciseId);
+
+        let processedExercise = { ...ex };
         if (exercise?.exerciseType === 'Bodyweight' && ex.bodyweight) {
-          return { ...ex, weights: Array(ex.sets).fill(ex.bodyweight) };
+          processedExercise.weights = Array(ex.sets).fill(ex.bodyweight);
         }
-        return ex;
+
+        // Handle notes separation - migrate old notes to workoutNotes if needed
+        if (ex.notes !== undefined && !ex.workoutNotes) {
+          // Existing data with old notes field - migrate to workoutNotes
+          processedExercise.workoutNotes = '';
+          processedExercise.programNotes = programExercise?.notes || '';
+        } else {
+          // New structure or already migrated
+          processedExercise.programNotes = programExercise?.notes || '';
+          processedExercise.workoutNotes = ex.workoutNotes || '';
+        }
+
+        return processedExercise;
       });
 
       setLogData(processedExercises);
@@ -1542,7 +1560,8 @@ function LogWorkout() {
             repRange: isRange ? repValue : null,
             weights: Array(ex.sets).fill(''),
             completed: Array(ex.sets).fill(false),
-            notes: ex.notes || '',
+            programNotes: ex.notes || '',
+            workoutNotes: '',
             bodyweight: isBodyweightType ? '' : ''
           };
         });
@@ -1582,7 +1601,7 @@ function LogWorkout() {
 
   const openNotesModal = (exerciseIndex) => {
     setCurrentExerciseIndex(exerciseIndex);
-    setExerciseNotes(logData[exerciseIndex].notes || '');
+    setExerciseNotes(logData[exerciseIndex].workoutNotes || '');
     setShowNotesModal(true);
   };
 
@@ -1610,7 +1629,7 @@ function LogWorkout() {
     if (currentExerciseIndex === null) return;
 
     const newLogData = [...logData];
-    newLogData[currentExerciseIndex].notes = exerciseNotes;
+    newLogData[currentExerciseIndex].workoutNotes = exerciseNotes;
     setLogData(newLogData);
 
     // Trigger immediate save for notes (user explicitly saved)
@@ -1824,7 +1843,7 @@ function LogWorkout() {
       );
     } else if (field === 'notes') {
       // Exercise notes are metadata changes - use immediate save
-      newLogData[exerciseIndex].notes = value;
+      newLogData[exerciseIndex].workoutNotes = value;
       isExerciseOnlyChange = false;
     } else if (field === 'bodyweight') {
       // Bodyweight changes are metadata changes - use immediate save
@@ -2148,7 +2167,7 @@ function LogWorkout() {
           reps: ex.reps.map(rep => rep === '' || rep === null || rep === undefined ? null : Number(rep)),
           weights: ex.weights.map(weight => weight === '' || weight === null || weight === undefined ? null : Number(weight)),
           completed: ex.completed,
-          notes: ex.notes || '',
+          notes: ex.workoutNotes || '',
           bodyweight: ex.bodyweight ? Number(ex.bodyweight) : null,
           // Include added exercise metadata
           isAdded: ex.isAdded || false,
@@ -2844,8 +2863,8 @@ function LogWorkout() {
                                       className="d-flex align-items-center"
                                     >
                                       <Pencil />
-                                      {ex.notes ? 'Edit Notes' : 'Add Notes'}
-                                      {ex.notes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
+                                      {(ex.programNotes || ex.workoutNotes) ? 'Edit Notes' : 'Add Notes'}
+                                      {(ex.programNotes || ex.workoutNotes) && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}>&nbsp;</span>}
                                     </Dropdown.Item>
                                     {!isAddedExercise && (
                                       <Dropdown.Item
@@ -2947,7 +2966,7 @@ function LogWorkout() {
                                     onClick={() => openNotesModal(exIndex)}
                                     className="me-2"
                                   >
-                                    {ex.notes ? 'View/Edit Notes' : 'Add Notes'}
+                                    {(ex.programNotes || ex.workoutNotes) ? 'View/Edit Notes' : 'Add Notes'}
                                   </Button>
                                   {!isAddedExercise && (
                                     <Button
@@ -3000,11 +3019,20 @@ function LogWorkout() {
                             )}
                           </div>
 
-                          {/* Display notes preview if there is a note */}
-                          {ex.notes && (
+                          {/* Display notes preview if there are notes */}
+                          {(ex.programNotes || ex.workoutNotes) && (
                             <div className={`note-preview ${isMobile ? 'mt-2' : ''} mb-2 p-1 bg-light border rounded`}>
                               <small className="text-muted">
-                                <strong>Note:</strong> {ex.notes.length > 50 ? `${ex.notes.substring(0, 50)}...` : ex.notes}
+                                {ex.programNotes && (
+                                  <div className="mb-1">
+                                    <strong>📋 Program:</strong> {ex.programNotes.length > 40 ? `${ex.programNotes.substring(0, 40)}...` : ex.programNotes}
+                                  </div>
+                                )}
+                                {ex.workoutNotes && (
+                                  <div>
+                                    <strong>📝 Workout:</strong> {ex.workoutNotes.length > 40 ? `${ex.workoutNotes.substring(0, 40)}...` : ex.workoutNotes}
+                                  </div>
+                                )}
                               </small>
                             </div>
                           )}
@@ -3187,8 +3215,30 @@ function LogWorkout() {
                         </Modal.Title>
                       </Modal.Header>
                       <Modal.Body>
+                        {/* Program Notes Section (Read-only) */}
+                        {currentExerciseIndex !== null && logData[currentExerciseIndex]?.programNotes && (
+                          <Form.Group className="mb-3">
+                            <Form.Label className="text-muted">
+                              <small>📋 Program Notes (from your program)</small>
+                            </Form.Label>
+                            <Form.Control
+                              as="textarea"
+                              rows={2}
+                              value={logData[currentExerciseIndex].programNotes}
+                              readOnly
+                              className="soft-input notes-input bg-light"
+                              style={{ fontStyle: 'italic' }}
+                            />
+                          </Form.Group>
+                        )}
+
+                        {/* Workout Notes Section (Editable) */}
                         <Form.Group>
-                          <Form.Label>Notes for this exercise:</Form.Label>
+                          <Form.Label>
+                            {currentExerciseIndex !== null && logData[currentExerciseIndex]?.programNotes
+                              ? 'Your Workout Notes:'
+                              : 'Notes for this exercise:'}
+                          </Form.Label>
                           <Form.Control
                             as="textarea"
                             rows={4}
