@@ -392,14 +392,14 @@ function UserProfile() {
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter new password (min 6 characters)"
-                      minLength={6}
+                      placeholder="Enter new password (min 8 characters)"
+                      minLength={8}
                       required
                       className="soft-input profile-input"
                       disabled={passwordUpdating}
                     />
                     <Form.Text className="text-muted">
-                      Password must be at least 6 characters long.
+                      Password must be at least 8 characters long.
                     </Form.Text>
                   </Form.Group>
 

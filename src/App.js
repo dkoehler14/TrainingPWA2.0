@@ -10,6 +10,7 @@ import LogWorkout from './pages/LogWorkout';
 import QuickWorkout from './pages/QuickWorkout';
 import ProgressTracker from './pages/ProgressTracker';
 import Auth from './pages/Auth';
+import ResetPassword from './pages/ResetPassword';
 import ProgressTracker2 from './pages/ProgressTracker2';
 import ProgressTracker3 from './pages/Progress3';
 import ProgressCoach from './pages/ProgressCoach';
@@ -157,6 +158,7 @@ function AppContent() {
         <Route path="/progress-tracker" element={user ? <ProgressTracker /> : <Navigate to="/" />} />
         <Route path="/progress-coach" element={user ? <ProgressCoach /> : <Navigate to="/auth" />} />
         <Route path="/auth" element={!user ? <Auth /> : <Navigate to="/" />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-3" element={user ? <ProgressTracker3 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
