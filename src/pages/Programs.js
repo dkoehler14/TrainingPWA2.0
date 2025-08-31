@@ -1136,12 +1136,15 @@ function Programs({ userRole }) {
             }
 
             if (exerciseLog.weights && exerciseLog.reps) {
-              // Calculate weights and volume based on exercise type
+              // Calculate weights and volume based on exercise type (only for completed sets)
               let sessionMaxWeight = 0;
               let sessionVolume = 0;
               const calculatedWeights = [];
 
               exerciseLog.weights.forEach((weight, idx) => {
+                // Only process completed sets
+                if (!exerciseLog.completed?.[idx]) return;
+
                 const weightValue = parseFloat(weight) || 0;
                 const repsValue = exerciseLog.reps[idx] || 0;
                 const bodyweightValue = exerciseLog.bodyweight ? parseFloat(exerciseLog.bodyweight) : 0;
@@ -1178,20 +1181,23 @@ function Programs({ userRole }) {
               const weekNum = parseInt(weekPart.replace('week', ''));
               const dayNum = parseInt(dayPart.replace('day', ''));
 
-              exerciseMetrics[exerciseId].sessions.push({
-                weekNum,
-                dayNum,
-                weights: calculatedWeights,
-                reps: exerciseLog.reps,
-                maxWeight: sessionMaxWeight,
-                volume: sessionVolume,
-                completionDate: completionDate,
-                weekKey: weekKey,
-                bodyweight: exerciseLog.bodyweight
-              });
+              // Only add session if there are completed sets
+              if (calculatedWeights.length > 0) {
+                exerciseMetrics[exerciseId].sessions.push({
+                  weekNum,
+                  dayNum,
+                  weights: calculatedWeights,
+                  reps: exerciseLog.reps,
+                  maxWeight: sessionMaxWeight,
+                  volume: sessionVolume,
+                  completionDate: completionDate,
+                  weekKey: weekKey,
+                  bodyweight: exerciseLog.bodyweight
+                });
 
-              exerciseMetrics[exerciseId].maxWeight = Math.max(exerciseMetrics[exerciseId].maxWeight, sessionMaxWeight);
-              exerciseMetrics[exerciseId].totalVolume += sessionVolume;
+                exerciseMetrics[exerciseId].maxWeight = Math.max(exerciseMetrics[exerciseId].maxWeight, sessionMaxWeight);
+                exerciseMetrics[exerciseId].totalVolume += sessionVolume;
+              }
             }
           });
         }

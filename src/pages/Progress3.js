@@ -37,11 +37,12 @@ function Analytics() {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (user?.uid) {
+            if (user?.id || user?.uid) {
                 setIsLoading(true);
                 try {
+                    const userId = user.id || user.uid;
                     // Enhanced cache warming before data fetching
-                    await warmUserCache(user.id, 'normal')
+                    await warmUserCache(userId, 'normal')
                         .then(() => {
                             console.log('Cache warming completed for Progress3');
                         })
@@ -49,58 +50,16 @@ function Analytics() {
                             console.warn('Cache warming failed, proceeding with data fetch:', error);
                         });
 
-                    const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', user.id]] });
+                    const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', userId]] });
                     const logsWithDate = logsData.map(log => ({
                         ...log,
                         date: log.date.toDate ? log.date.toDate() : log.date
                     }));
                     setWorkoutLogs(logsWithDate);
 
-                    // Use metadata approach for efficient exercise fetching
+                    // Fetch exercises from new Supabase exercises table
                     let exercisesData = [];
-                    try {
-                        // Get global exercises from metadata
-                        const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
-                        
-                        // Get user-specific exercises from metadata
-                        const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-                        const userExercises = userExercisesDoc?.exercises || [];
-                        
-                        // Combine global and user exercises
-                        const allExercises = [...globalExercises, ...userExercises];
-                        
-                        // Add source metadata for consistency
-                        exercisesData = allExercises.map(exercise => ({
-                            ...exercise,
-                            source: globalExercises.includes(exercise) ? 'global' : 'user'
-                        }));
-                        
-                        // Remove duplicates based on ID (user exercises override global ones)
-                        const uniqueExercises = [];
-                        const seenIds = new Set();
-                        
-                        // Process user exercises first (higher priority)
-                        exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
-                            if (!seenIds.has(exercise.id)) {
-                                uniqueExercises.push(exercise);
-                                seenIds.add(exercise.id);
-                            }
-                        });
-                        
-                        // Then process global exercises
-                        exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
-                            if (!seenIds.has(exercise.id)) {
-                                uniqueExercises.push(exercise);
-                                seenIds.add(exercise.id);
-                            }
-                        });
-                        
-                        exercisesData = uniqueExercises;
-                    } catch (error) {
-                        console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
-                        // Fallback to original method
-                        exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-                    }
+                    exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
                     
                     setExercises(exercisesData);
 
@@ -109,14 +68,15 @@ function Analytics() {
 
                         const groupsMap = {};
                         exercisesData.forEach(exercise => {
-                            const primaryGroup = exercise.primaryMuscleGroup;
+                            const primaryGroup = exercise.primary_muscle_group || exercise.primaryMuscleGroup || 'Other';
                             if (!groupsMap[primaryGroup]) {
                                 groupsMap[primaryGroup] = [];
                             }
                             groupsMap[primaryGroup].push(exercise.name);
 
-                            if (exercise.secondaryMuscleGroups && exercise.secondaryMuscleGroups.length > 0) {
-                                exercise.secondaryMuscleGroups.forEach(secondaryGroup => {
+                            const secondaryGroups = exercise.secondary_muscle_groups || exercise.secondaryMuscleGroups;
+                            if (secondaryGroups && Array.isArray(secondaryGroups) && secondaryGroups.length > 0) {
+                                secondaryGroups.forEach(secondaryGroup => {
                                     if (!groupsMap[secondaryGroup]) {
                                         groupsMap[secondaryGroup] = [];
                                     }
@@ -138,7 +98,7 @@ function Analytics() {
             }
         };
         fetchData();
-    }, [user]);
+    }, [user?.id || user?.uid]);
 
     useEffect(() => {
         if (workoutLogs.length > 0 && exercises.length > 0 && Object.keys(muscleGroups).length > 0) {
@@ -189,16 +149,17 @@ function Analytics() {
                 const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
                 if (!exerciseData) return;
 
-                const primaryMuscleGroup = exerciseData.primaryMuscleGroup;
+                const primaryMuscleGroup = exerciseData.primary_muscle_group || exerciseData.primaryMuscleGroup;
 
                 if (primaryMuscleGroup) {
                     let volume = calculateExerciseVolume(exercise);
                     volumeByMuscle[primaryMuscleGroup] = (volumeByMuscle[primaryMuscleGroup] || 0) + volume;
 
-                    if (exerciseData.secondaryMuscleGroups && exerciseData.secondaryMuscleGroups.length > 0) {
-                        const secondaryVolume = volume * 0.4 / exerciseData.secondaryMuscleGroups.length;
+                    const secondaryGroups = exerciseData.secondary_muscle_groups || exerciseData.secondaryMuscleGroups;
+                    if (secondaryGroups && Array.isArray(secondaryGroups) && secondaryGroups.length > 0) {
+                        const secondaryVolume = volume * 0.4 / secondaryGroups.length;
 
-                        exerciseData.secondaryMuscleGroups.forEach(secondaryGroup => {
+                        secondaryGroups.forEach(secondaryGroup => {
                             volumeByMuscle[secondaryGroup] = (volumeByMuscle[secondaryGroup] || 0) + secondaryVolume;
                         });
                     }
@@ -218,7 +179,7 @@ function Analytics() {
 
     const calculateExerciseVolume = (exercise) => {
         let volume = 0;
-        if (exercise.sets && exercise.reps && exercise.weights) {
+        if (exercise && exercise.sets && exercise.reps && Array.isArray(exercise.reps) && exercise.weights && Array.isArray(exercise.weights)) {
             for (let i = 0; i < exercise.sets; i++) {
                 volume += (exercise.reps[i] || 0) * (exercise.weights[i] || 0);
             }
@@ -235,12 +196,14 @@ function Analytics() {
         logs.forEach(log => {
             const date = new Date(log.date).toLocaleDateString();
             log.exercises?.forEach(exercise => {
-                if (exercise.exerciseId === selectedExercise) {
-                    if (exercise.weights && exercise.weights.length > 0 && exercise.reps && exercise.reps.length > 0) {
+                if (exercise && exercise.exerciseId === selectedExercise) {
+                    if (exercise.weights && Array.isArray(exercise.weights) && exercise.weights.length > 0 &&
+                        exercise.reps && Array.isArray(exercise.reps) && exercise.reps.length > 0) {
                         const maxWeight = Math.max(...exercise.weights);
-                        const matchingReps = exercise.reps[exercise.weights.indexOf(maxWeight)];
+                        const weightIndex = exercise.weights.indexOf(maxWeight);
+                        const matchingReps = exercise.reps[weightIndex];
 
-                        if (matchingReps <= 10) {
+                        if (matchingReps && matchingReps <= 10) {
                             const estimatedOneRM = Math.round(maxWeight * (36 / (37 - matchingReps)));
 
                             if (!dateMap.has(date) || dateMap.get(date).estimatedOneRM < estimatedOneRM) {
@@ -310,10 +273,11 @@ function Analytics() {
 
         logs.forEach(log => {
             log.exercises?.forEach(exercise => {
+                if (!exercise || !exercise.exerciseId) return;
                 const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
                 if (!exerciseData) return;
 
-                if (exercise.weights && exercise.weights.length > 0) {
+                if (exercise.weights && Array.isArray(exercise.weights) && exercise.weights.length > 0) {
                     const maxWeight = Math.max(...exercise.weights);
                     const currentPR = prs.get(exercise.exerciseId) || { weight: 0, date: null };
 
@@ -584,6 +548,7 @@ function Analytics() {
 
             logs.forEach(log => {
                 log.exercises?.forEach(exercise => {
+                    if (!exercise || !exercise.exerciseId) return;
                     const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
                     if (!exerciseData) return;
 

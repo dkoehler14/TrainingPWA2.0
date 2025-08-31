@@ -42,57 +42,15 @@ function ProgressTracker2() {
 						});
 				}
 
-				// Use metadata approach for efficient exercise fetching
+				// Fetch exercises from new Supabase exercises table
 				let exercisesData = [];
-				try {
-					// Get global exercises from metadata
-					const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
-					
-					// Get user-specific exercises from metadata
-					const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-					const userExercises = userExercisesDoc?.exercises || [];
-					
-					// Combine global and user exercises
-					const allExercises = [...globalExercises, ...userExercises];
-					
-					// Add source metadata for consistency
-					exercisesData = allExercises.map(exercise => ({
-						...exercise,
-						source: globalExercises.includes(exercise) ? 'global' : 'user'
-					}));
-					
-					// Remove duplicates based on ID (user exercises override global ones)
-					const uniqueExercises = [];
-					const seenIds = new Set();
-					
-					// Process user exercises first (higher priority)
-					exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
-						if (!seenIds.has(exercise.id)) {
-							uniqueExercises.push(exercise);
-							seenIds.add(exercise.id);
-						}
-					});
-					
-					// Then process global exercises
-					exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
-						if (!seenIds.has(exercise.id)) {
-							uniqueExercises.push(exercise);
-							seenIds.add(exercise.id);
-						}
-					});
-					
-					exercisesData = uniqueExercises;
-				} catch (error) {
-					console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
-					// Fallback to original method
-					exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-				}
+				exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
 				
 				const fetchedExercises = exercisesData.map(doc => ({
 					value: doc.id,
 					label: doc.name,
-					primaryMuscleGroup: doc.primaryMuscleGroup || 'Other',
-					exerciseType: doc.exerciseType || 'Unknown'
+					primaryMuscleGroup: doc.primary_muscle_group || 'Other',
+					exerciseType: doc.exercise_type || 'Unknown'
 				}));
 				setExercises(fetchedExercises);
 				const groups = fetchedExercises.reduce((acc, ex) => {
@@ -118,11 +76,15 @@ function ProgressTracker2() {
 		const fetchLogs = async () => {
 			setIsLoading(true);
 			try {
+				// Convert dates to UTC ISO strings to avoid timezone parsing issues
+				const startDateISO = startDate.toISOString();
+				const endDateISO = endDate.toISOString();
+
 				const logsData = await getCollectionCached('workout_logs', {
 					where: [
 						['user_id', '==', user.id],
-						['date', '>=', startDate],
-						['date', '<=', endDate],
+						['date', '>=', startDateISO],
+						['date', '<=', endDateISO],
 						['is_finished', '==', true]
 					],
 					orderBy: [['date', 'asc']]
@@ -146,7 +108,9 @@ function ProgressTracker2() {
 	const overviewMetrics = useMemo(() => {
 		if (selectedGroup !== 'All Muscle Groups' || allLogs.length === 0) return null;
 		const totalVolume = allLogs.reduce((sum, log) => {
+			if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 			return sum + log.exercises.reduce((logSum, ex) => {
+				if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
 				return logSum + ex.weights.reduce((exSum, weight, idx) => {
 					if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
 					return exSum;
@@ -155,8 +119,10 @@ function ProgressTracker2() {
 		}, 0);
 		const volumeByGroup = Object.keys(muscleGroups).reduce((acc, group) => {
 			acc[group] = allLogs.reduce((sum, log) => {
+				if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 				return sum + log.exercises.reduce((logSum, ex) => {
 					if (muscleGroups[group].some(e => e.value === ex.exerciseId)) {
+						if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
 						return logSum + ex.weights.reduce((exSum, weight, idx) => {
 							if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
 							return exSum;
@@ -177,10 +143,12 @@ function ProgressTracker2() {
 		const exerciseIds = groupExercises
 			.filter(ex => selectedType === 'All Types' || ex.exerciseType === selectedType)
 			.map(ex => ex.value);
-		const filteredLogs = allLogs.filter(log => log.exercises.some(ex => exerciseIds.includes(ex.exerciseId)));
+		const filteredLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => exerciseIds.includes(ex.exerciseId)));
 		const totalVolume = filteredLogs.reduce((sum, log) => {
+			if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 			return sum + log.exercises.reduce((logSum, ex) => {
 				if (exerciseIds.includes(ex.exerciseId)) {
+					if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
 					return logSum + ex.weights.reduce((exSum, weight, idx) => {
 						if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
 						return exSum;
@@ -195,14 +163,15 @@ function ProgressTracker2() {
 
 	// Exercise metrics
 	const calculateExerciseMetrics = (exerciseId) => {
-		const exerciseLogs = allLogs.filter(log => log.exercises.some(ex => ex.exerciseId === exerciseId));
+		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => ex.exerciseId === exerciseId));
 		let pr = { weight: 0, date: null };
 		let lastWeight = { weight: 0, date: null };
 
 		// Calculate PR (highest weight ever from a completed set)
 		exerciseLogs.forEach(log => {
+			if (!log.exercises || !Array.isArray(log.exercises)) return;
 			const exercise = log.exercises.find(ex => ex.exerciseId === exerciseId);
-			if (exercise) {
+			if (exercise && exercise.weights && Array.isArray(exercise.weights) && exercise.completed && Array.isArray(exercise.completed)) {
 				exercise.weights.forEach((weight, idx) => {
 					if (exercise.completed[idx] && weight > pr.weight) {
 						pr = { weight, date: log.date };
@@ -214,8 +183,9 @@ function ProgressTracker2() {
 		// Calculate lastWeight (most recent completed set's max weight)
 		for (let i = exerciseLogs.length - 1; i >= 0; i--) {
 			const log = exerciseLogs[i];
+			if (!log.exercises || !Array.isArray(log.exercises)) continue;
 			const exercise = log.exercises.find(ex => ex.exerciseId === exerciseId);
-			if (exercise) {
+			if (exercise && exercise.weights && Array.isArray(exercise.weights) && exercise.completed && Array.isArray(exercise.completed)) {
 				const completedWeights = exercise.weights.filter(
 					(weight, index) => exercise.completed[index]
 				);
@@ -232,9 +202,11 @@ function ProgressTracker2() {
 	const exercisesWithData = useMemo(() => {
 		const set = new Set();
 		allLogs.forEach(log => {
+			if (!log.exercises || !Array.isArray(log.exercises)) return;
 			log.exercises.forEach(ex => {
+				if (!ex.completed || !Array.isArray(ex.completed)) return;
 				const exercise = exercises.find(e => e.value === ex.exerciseId);
-				if (ex.completed.some(c => c) && 
+				if (ex.completed.some(c => c) &&
 					(selectedType === 'All Types' || exercise?.exerciseType === selectedType)) {
 					set.add(ex.exerciseId);
 				}
@@ -255,14 +227,16 @@ function ProgressTracker2() {
 
 	// Exercise details modal
 	const ExerciseDetailsModal = ({ show, onHide, exercise }) => {
-		const exerciseLogs = allLogs.filter(log => log.exercises.some(ex => ex.exerciseId === exercise.value));
+		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => ex.exerciseId === exercise.value));
 		const chartData = {
 			labels: exerciseLogs.map(log => log.date.toLocaleDateString()),
 			datasets: [{
 				label: 'Max Weight (lbs)',
 				data: exerciseLogs.map(log => {
+					if (!log.exercises || !Array.isArray(log.exercises)) return 0;
 					const ex = log.exercises.find(e => e.exerciseId === exercise.value);
-					return ex ? Math.max(...ex.weights.filter((_, idx) => ex.completed[idx])) : 0;
+					if (!ex || !ex.weights || !Array.isArray(ex.weights) || !ex.completed || !Array.isArray(ex.completed)) return 0;
+					return Math.max(...ex.weights.filter((_, idx) => ex.completed[idx])) || 0;
 				}),
 				fill: false,
 				borderColor: 'rgb(75, 192, 192)',
@@ -397,7 +371,7 @@ function ProgressTracker2() {
 															<Card.Body>
 																<Card.Title>{exercise.label}</Card.Title>
 																<p><strong>PR:</strong> {metrics.pr.weight} lbs on {metrics.pr.date?.toLocaleDateString() || 'N/A'}</p>
-																<p><strong>Last Weight:</strong> {metrics.lastWeight.weight} lbs on {metrics.lastWeight.date.toLocaleDateString()}</p>
+																<p><strong>Last Weight:</strong> {metrics.lastWeight.weight} lbs on {metrics.lastWeight.date?.toLocaleDateString() || 'N/A'}</p>
 																<Button
 																	variant="primary"
 																	onClick={() => {

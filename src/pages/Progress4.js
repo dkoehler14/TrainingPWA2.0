@@ -6,6 +6,7 @@ import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCac
 
 // Utility functions
 const calculateVolume = (sets, reps, weights) => {
+    if (!reps || !Array.isArray(reps) || !weights || !Array.isArray(weights)) return 0;
     return reps.reduce((total, rep, index) => {
         const weight = Number(weights[index]) || 0;
         return total + (Number(rep) * weight);
@@ -21,29 +22,37 @@ const estimate1RM = (weight, reps) => {
 
 const getProgressiveOverloadData = (logs, exerciseId) => {
   const exerciseLogs = logs
-    .filter(log => log.exercises.some(ex => ex.exerciseId === exerciseId))
+    .filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => ex && ex.exerciseId === exerciseId))
     .sort((a, b) => a.date - b.date);
   return exerciseLogs.map(log => {
-    const ex = log.exercises.find(ex => ex.exerciseId === exerciseId);
+    if (!log.exercises || !Array.isArray(log.exercises)) return { date: '', volume: 0 };
+    const ex = log.exercises.find(ex => ex && ex.exerciseId === exerciseId);
+    if (!ex) return { date: '', volume: 0 };
     const volume = calculateVolume(ex.sets, ex.reps, ex.weights);
-    return { date: log.date.toDate().toLocaleString(), volume };
+    const dateStr = log.date && log.date.toDate ? log.date.toDate().toLocaleString() : '';
+    return { date: dateStr, volume };
   });
 };
 
 const getMuscleGroupVolume = (logs, exercises) => {
   const muscleGroupVolume = {};
   logs.forEach(log => {
+    if (!log.exercises || !Array.isArray(log.exercises)) return;
     log.exercises.forEach(ex => {
+      if (!ex || !ex.exerciseId) return;
       const exercise = exercises.find(e => e.id === ex.exerciseId);
       if (exercise) {
         const volume = calculateVolume(ex.sets, ex.reps, ex.weights);
-        const primary = exercise.primaryMuscleGroup;
+        const primary = exercise.primary_muscle_group || exercise.primaryMuscleGroup;
         if (primary) {
           muscleGroupVolume[primary] = (muscleGroupVolume[primary] || 0) + volume;
         }
-        exercise.secondaryMuscleGroups?.forEach(muscle => {
-          muscleGroupVolume[muscle] = (muscleGroupVolume[muscle] || 0) + volume * 0.5; // Half weight for secondary
-        });
+        const secondaryGroups = exercise.secondary_muscle_groups || exercise.secondaryMuscleGroups;
+        if (secondaryGroups && Array.isArray(secondaryGroups)) {
+          secondaryGroups.forEach(muscle => {
+            muscleGroupVolume[muscle] = (muscleGroupVolume[muscle] || 0) + volume * 0.5; // Half weight for secondary
+          });
+        }
       }
     });
   });
@@ -53,13 +62,17 @@ const getMuscleGroupVolume = (logs, exercises) => {
 const getPersonalRecords = (logs, exercises) => {
   const prs = {};
   logs.forEach(log => {
+    if (!log.exercises || !Array.isArray(log.exercises)) return;
     log.exercises.forEach(ex => {
+      if (!ex || !ex.exerciseId || !ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps)) return;
       const exName = exercises.find(e => e.id === ex.exerciseId)?.name || ex.exerciseId;
       if (!prs[exName]) prs[exName] = {};
       ex.weights.forEach((weight, i) => {
         const reps = ex.reps[i];
-        const w = Number(weight) || 0;
-        if (w > (prs[exName][reps] || 0)) prs[exName][reps] = w;
+        if (reps !== undefined) {
+          const w = Number(weight) || 0;
+          if (w > (prs[exName][reps] || 0)) prs[exName][reps] = w;
+        }
       });
     });
   });
@@ -95,51 +108,9 @@ function Progress4() {
         const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', user.id]] });
         setWorkoutLogs(logsData);
 
-        // Use metadata approach for efficient exercise fetching
+        // Fetch exercises from new Supabase exercises table
         let exercisesData = [];
-        try {
-          // Get global exercises from metadata
-          const globalExercises = await getAllExercisesMetadata(60 * 60 * 1000); // 1 hour TTL
-          
-          // Get user-specific exercises from metadata
-          const userExercisesDoc = await getDocCached('exercises_metadata', user.id, 60 * 60 * 1000);
-          const userExercises = userExercisesDoc?.exercises || [];
-          
-          // Combine global and user exercises
-          const allExercises = [...globalExercises, ...userExercises];
-          
-          // Add source metadata for consistency
-          exercisesData = allExercises.map(exercise => ({
-            ...exercise,
-            source: globalExercises.includes(exercise) ? 'global' : 'user'
-          }));
-          
-          // Remove duplicates based on ID (user exercises override global ones)
-          const uniqueExercises = [];
-          const seenIds = new Set();
-          
-          // Process user exercises first (higher priority)
-          exercisesData.filter(ex => ex.source === 'user').forEach(exercise => {
-            if (!seenIds.has(exercise.id)) {
-              uniqueExercises.push(exercise);
-              seenIds.add(exercise.id);
-            }
-          });
-          
-          // Then process global exercises
-          exercisesData.filter(ex => ex.source === 'global').forEach(exercise => {
-            if (!seenIds.has(exercise.id)) {
-              uniqueExercises.push(exercise);
-              seenIds.add(exercise.id);
-            }
-          });
-          
-          exercisesData = uniqueExercises;
-        } catch (error) {
-          console.warn('Failed to fetch exercises using metadata approach, falling back to collection:', error);
-          // Fallback to original method
-          exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-        }
+        exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
         
         setExercises(exercisesData);
       } catch (error) {
@@ -149,13 +120,14 @@ function Progress4() {
       }
     };
     fetchData();
-  }, []);
+  }, [user?.id]);
 
   // Filter logs by time period
   const filteredLogs = workoutLogs.filter(log => {
     if (timePeriod === 'all') return true;
+    if (!log.date) return false;
     const now = new Date();
-    const logDate = log.date.toDate();
+    const logDate = log.date.toDate ? log.date.toDate() : new Date(log.date);
     if (timePeriod === 'month') return now - logDate < 30 * 24 * 60 * 60 * 1000;
     if (timePeriod === '3months') return now - logDate < 90 * 24 * 60 * 60 * 1000;
     return true;
