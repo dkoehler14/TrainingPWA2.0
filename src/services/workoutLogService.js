@@ -14,15 +14,15 @@ import { supabaseCache } from '../api/supabaseCache'
 import { WorkoutLogCacheManager } from '../utils/cacheManager'
 
 // Import comprehensive error handling system
-const { 
-  WorkoutLogError, 
-  WorkoutLogErrorType, 
+const {
+  WorkoutLogError,
+  WorkoutLogErrorType,
   ErrorClassifier,
-  ErrorContextCollector 
+  ErrorContextCollector
 } = require('../utils/workoutLogErrorHandler')
 
 // Import comprehensive logging system
-const { 
+const {
   workoutLogLogger,
   OperationType,
   logInfo,
@@ -47,9 +47,9 @@ export const ConstraintViolationHandler = {
    * Check if error is a unique constraint violation
    */
   isUniqueConstraintViolation(error) {
-    return error.code === '23505' && 
-           (error.message.includes('unique_user_program_week_day') || 
-            error.message.includes('workout_logs_user_id_program_id_week_index_day_index_key'));
+    return error.code === '23505' &&
+      (error.message.includes('unique_user_program_week_day') ||
+        error.message.includes('workout_logs_user_id_program_id_week_index_day_index_key'));
   },
 
   /**
@@ -85,7 +85,7 @@ export const ConstraintViolationHandler = {
    */
   logConstraintViolation(operation, error, context = {}) {
     const details = this.extractConstraintDetails(error);
-    
+
     console.error('🚫 CONSTRAINT VIOLATION DETECTED:', {
       operation,
       timestamp: new Date().toISOString(),
@@ -108,7 +108,7 @@ export const ConstraintViolationHandler = {
    */
   async attemptConstraintRecovery(service, userId, workoutData, originalError) {
     const details = this.extractConstraintDetails(originalError);
-    
+
     console.log('🔄 CONSTRAINT RECOVERY: Attempting to find and update existing record', {
       constraintDetails: details,
       userId,
@@ -120,9 +120,9 @@ export const ConstraintViolationHandler = {
     try {
       // Find existing workout log
       const existingLog = await service.getWorkoutLog(
-        userId, 
-        workoutData.programId, 
-        workoutData.weekIndex, 
+        userId,
+        workoutData.programId,
+        workoutData.weekIndex,
         workoutData.dayIndex
       );
 
@@ -198,7 +198,7 @@ export const ConstraintViolationHandler = {
    */
   createUserFriendlyMessage(error, context = {}) {
     const details = this.extractConstraintDetails(error);
-    
+
     if (details.constraintName === 'unique_user_program_week_day') {
       return {
         title: 'Workout Already Exists',
@@ -229,7 +229,7 @@ class WorkoutLogService {
     this.DRAFT_CACHE_TTL = 5 * 60 * 1000 // 5 minutes for drafts
     this.PROGRAM_LOGS_CACHE_TTL = 10 * 60 * 1000 // 10 minutes for program logs
     this.EXERCISE_HISTORY_CACHE_TTL = 30 * 60 * 1000 // 30 minutes for exercise history
-    
+
     // Initialize constraint violation tracking
     this.constraintViolationStats = {
       totalViolations: 0,
@@ -251,7 +251,7 @@ class WorkoutLogService {
 
     // Log the incident with full context
     const violationDetails = ConstraintViolationHandler.logConstraintViolation(operation, error, context);
-    
+
     // Create user-friendly message
     const userMessage = ConstraintViolationHandler.createUserFriendlyMessage(error, context);
 
@@ -311,8 +311,8 @@ class WorkoutLogService {
   getConstraintViolationStats() {
     return {
       ...this.constraintViolationStats,
-      recoveryRate: this.constraintViolationStats.totalViolations > 0 
-        ? (this.constraintViolationStats.successfulRecoveries / this.constraintViolationStats.totalViolations) * 100 
+      recoveryRate: this.constraintViolationStats.totalViolations > 0
+        ? (this.constraintViolationStats.successfulRecoveries / this.constraintViolationStats.totalViolations) * 100
         : 0
     };
   }
@@ -370,8 +370,8 @@ class WorkoutLogService {
         }
 
         // Validate input data
-        if (!userId || !workoutData.programId || 
-            workoutData.weekIndex === undefined || workoutData.dayIndex === undefined) {
+        if (!userId || !workoutData.programId ||
+          workoutData.weekIndex === undefined || workoutData.dayIndex === undefined) {
           throw new WorkoutLogError(
             WorkoutLogErrorType.INVALID_DATA,
             'Missing required workout log data',
@@ -442,10 +442,10 @@ class WorkoutLogService {
         }, error);
 
         // Handle constraint violations with recovery if enabled
-        if (error instanceof WorkoutLogError && 
-            error.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION && 
-            enableRecovery) {
-          
+        if (error instanceof WorkoutLogError &&
+          error.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION &&
+          enableRecovery) {
+
           if (logOperations) {
             console.log('🔄 ENHANCED CREATE: Attempting constraint violation recovery', {
               originalError: error.message,
@@ -513,7 +513,7 @@ class WorkoutLogService {
         logOperations = true,
         cacheManager = null,
         programLogs = {},
-        setProgramLogs = () => {}
+        setProgramLogs = () => { }
       } = options;
 
       try {
@@ -546,7 +546,7 @@ class WorkoutLogService {
         if (cacheManager && result) {
           try {
             const cacheKey = cacheManager.generateKey(result.week_index, result.day_index);
-            
+
             if (validateCache) {
               // Validate existing cache entry
               const existingCache = await cacheManager.get(cacheKey, programLogs);
@@ -677,9 +677,9 @@ class WorkoutLogService {
             // Attempt recovery by updating existing record
             try {
               const recoveredLog = await ConstraintViolationHandler.attemptConstraintRecovery(
-                this, 
-                userId, 
-                workoutData, 
+                this,
+                userId,
+                workoutData,
                 error
               );
 
@@ -1093,16 +1093,16 @@ class WorkoutLogService {
         const allowedFields = ['is_finished', 'duration', 'notes', 'completed_date', 'name', 'is_draft'];
         const providedFields = Object.keys(metadata);
         const invalidFields = providedFields.filter(field => !allowedFields.includes(field));
-        
+
         if (invalidFields.length > 0) {
           throw new WorkoutLogError(
             WorkoutLogErrorType.INVALID_DATA,
             `Invalid metadata fields provided: ${invalidFields.join(', ')}`,
-            { 
-              invalidFields, 
-              allowedFields, 
+            {
+              invalidFields,
+              allowedFields,
               providedFields,
-              workoutLogId 
+              workoutLogId
             }
           );
         }
@@ -1237,7 +1237,7 @@ class WorkoutLogService {
       const {
         cacheManager = new WorkoutLogCacheManager(),
         programLogs = {},
-        setProgramLogs = () => {},
+        setProgramLogs = () => { },
         logOperations = true,
         workoutName = null,
         source = 'ensure-workout-log'
@@ -1328,7 +1328,7 @@ class WorkoutLogService {
         let existingLog = null;
         try {
           existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
-          
+
           if (existingLog && existingLog.id) {
             if (logOperations) {
               logInfo(OperationType.CREATE, 'Workout log found in database', {
@@ -1512,7 +1512,7 @@ class WorkoutLogService {
       const {
         cacheManager = new WorkoutLogCacheManager(),
         programLogs = {},
-        setProgramLogs = () => {},
+        setProgramLogs = () => { },
         isImmediate = false,
         workoutName = null,
         isFinished = false,
@@ -1588,7 +1588,7 @@ class WorkoutLogService {
             existingLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
             if (existingLog && existingLog.id) {
               workoutLogId = existingLog.id;
-              
+
               // Update cache with found workout log ID
               await cacheManager.set(cacheKey, {
                 workoutLogId,
@@ -1711,9 +1711,9 @@ class WorkoutLogService {
             });
 
             // Handle constraint violations specifically
-            if (createError instanceof WorkoutLogError && 
-                createError.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION) {
-              
+            if (createError instanceof WorkoutLogError &&
+              createError.type === WorkoutLogErrorType.DUPLICATE_CONSTRAINT_VIOLATION) {
+
               console.log('🔄 CONSTRAINT VIOLATION IN CACHE-FIRST: Attempting cache update', {
                 operation,
                 cacheKey,
@@ -1812,7 +1812,7 @@ class WorkoutLogService {
       const {
         cacheManager = new WorkoutLogCacheManager(),
         programLogs = {},
-        setProgramLogs = () => {},
+        setProgramLogs = () => { },
         forceRefresh = false
       } = options;
 
@@ -1846,7 +1846,7 @@ class WorkoutLogService {
 
         // Fetch from database
         const workoutLog = await this.getWorkoutLog(userId, programId, weekIndex, dayIndex);
-        
+
         if (workoutLog) {
           // Update cache with fresh data
           await cacheManager.set(cacheKey, {
@@ -2092,7 +2092,7 @@ class WorkoutLogService {
               useTransaction: true,
               validateData: true
             });
-            
+
             transactionState.exercisesUpdated = true;
 
             console.log('✅ EXERCISES UPSERTED IN TRANSACTION:', {
@@ -2279,8 +2279,8 @@ class WorkoutLogService {
               updatedCount: exercises.length
             });
           }
-          return { 
-            success: true, 
+          return {
+            success: true,
             operations: { inserted: 0, updated: 0, deleted: 0 },
             message: 'No changes detected'
           };
@@ -2350,7 +2350,7 @@ class WorkoutLogService {
           try {
             for (const exercise of changes.toUpdate) {
               const updateData = this._prepareExerciseData(exercise, workoutLogId);
-              
+
               const { error: updateError } = await supabase
                 .from('workout_log_exercises')
                 .update(updateData)
@@ -2388,7 +2388,7 @@ class WorkoutLogService {
         // Step 6: Insert new exercises
         if (changes.toInsert.length > 0) {
           try {
-            const insertData = changes.toInsert.map(exercise => 
+            const insertData = changes.toInsert.map(exercise =>
               this._prepareExerciseData(exercise, workoutLogId)
             );
 
@@ -2433,7 +2433,7 @@ class WorkoutLogService {
               validateConsistency: true,
               batchUpdates: exercises.length > 5 // Use batch updates for larger sets
             });
-            
+
             if (logOperations) {
               console.log('🔄 EXERCISE ORDER UPDATED:', {
                 workoutLogId,
@@ -2592,10 +2592,10 @@ class WorkoutLogService {
         if (logOperations) {
           console.log('ℹ️ REORDER EXERCISES: No exercises to reorder');
         }
-        return { 
-          success: true, 
-          updatedCount: 0, 
-          message: 'No exercises to reorder' 
+        return {
+          success: true,
+          updatedCount: 0,
+          message: 'No exercises to reorder'
         };
       }
 
@@ -2629,11 +2629,11 @@ class WorkoutLogService {
         // Step 2: Validate exercise order consistency
         if (validateConsistency && currentExercises.length > 0) {
           const validationResult = this._validateExerciseOrderConsistency(
-            currentExercises, 
-            exercises, 
+            currentExercises,
+            exercises,
             workoutLogId
           );
-          
+
           if (!validationResult.isValid) {
             console.warn('⚠️ EXERCISE ORDER INCONSISTENCY DETECTED:', validationResult);
             // Log warning but continue - order will be corrected
@@ -2642,8 +2642,8 @@ class WorkoutLogService {
 
         // Step 3: Determine which exercises need order updates
         const exercisesToUpdate = this._identifyOrderUpdatesNeeded(
-          currentExercises, 
-          exercises, 
+          currentExercises,
+          exercises,
           logOperations
         );
 
@@ -2651,10 +2651,10 @@ class WorkoutLogService {
           if (logOperations) {
             console.log('✅ REORDER EXERCISES: No order changes needed');
           }
-          return { 
-            success: true, 
-            updatedCount: 0, 
-            message: 'Exercise order already correct' 
+          return {
+            success: true,
+            updatedCount: 0,
+            message: 'Exercise order already correct'
           };
         }
 
@@ -2665,8 +2665,8 @@ class WorkoutLogService {
         if (batchUpdates && exercisesToUpdate.length > 1) {
           // Use batch update approach for better performance
           updatedCount = await this._batchUpdateExerciseOrder(
-            exercisesToUpdate, 
-            workoutLogId, 
+            exercisesToUpdate,
+            workoutLogId,
             logOperations
           );
         } else {
@@ -2687,10 +2687,10 @@ class WorkoutLogService {
                   newOrderIndex: update.newOrderIndex,
                   error: updateError.message
                 };
-                
+
                 console.error('❌ REORDER UPDATE FAILED:', errorDetails);
                 updateErrors.push(errorDetails);
-                
+
                 throw new WorkoutLogError(
                   WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
                   `Failed to update exercise order: ${updateError.message}`,
@@ -2722,11 +2722,11 @@ class WorkoutLogService {
         // Step 5: Final validation if requested
         if (validateConsistency && updatedCount > 0) {
           const finalValidation = await this._validateFinalExerciseOrder(
-            workoutLogId, 
-            exercises, 
+            workoutLogId,
+            exercises,
             logOperations
           );
-          
+
           if (!finalValidation.isValid) {
             console.error('❌ FINAL ORDER VALIDATION FAILED:', finalValidation);
             // This is a serious issue but don't fail the operation
@@ -2799,7 +2799,7 @@ class WorkoutLogService {
       // Check if all provided exercises with IDs exist in current exercises
       const currentExerciseIds = new Set(currentExercises.map(ex => ex.id));
       const providedExercisesWithIds = providedExercises.filter(ex => ex.id);
-      
+
       for (const providedEx of providedExercisesWithIds) {
         if (!currentExerciseIds.has(providedEx.id)) {
           validation.isValid = false;
@@ -2813,10 +2813,10 @@ class WorkoutLogService {
 
       // Check for duplicate order indices in current exercises
       const currentOrderIndices = currentExercises.map(ex => ex.order_index);
-      const duplicateIndices = currentOrderIndices.filter((index, pos) => 
+      const duplicateIndices = currentOrderIndices.filter((index, pos) =>
         currentOrderIndices.indexOf(index) !== pos
       );
-      
+
       if (duplicateIndices.length > 0) {
         validation.isValid = false;
         validation.issues.push({
@@ -2858,7 +2858,7 @@ class WorkoutLogService {
    */
   _identifyOrderUpdatesNeeded(currentExercises, providedExercises, logOperations = false) {
     const updatesNeeded = [];
-    
+
     // Create lookup map for current exercises
     const currentExerciseMap = new Map();
     currentExercises.forEach(ex => {
@@ -2869,7 +2869,7 @@ class WorkoutLogService {
     providedExercises.forEach((exercise, newIndex) => {
       if (exercise.id && currentExerciseMap.has(exercise.id)) {
         const currentOrderIndex = currentExerciseMap.get(exercise.id);
-        
+
         // Only update if the order index actually changed
         if (currentOrderIndex !== newIndex) {
           updatesNeeded.push({
@@ -2912,10 +2912,10 @@ class WorkoutLogService {
 
     let updatedCount = 0;
     const batchSize = 10; // Process in batches to avoid overwhelming the database
-    
+
     for (let i = 0; i < exercisesToUpdate.length; i += batchSize) {
       const batch = exercisesToUpdate.slice(i, i + batchSize);
-      
+
       // Execute batch updates in parallel
       const batchPromises = batch.map(async (update) => {
         const { error } = await supabase
@@ -3522,6 +3522,91 @@ class WorkoutLogService {
         { ttl: this.EXERCISE_HISTORY_CACHE_TTL }
       )
     }, 'getExerciseHistory')
+  }
+
+  /**
+   * Get workout logs with exercises for progress tracking (with caching)
+   * Supports date ranges and includes exercise details for progress analysis
+   */
+  async getWorkoutLogsForProgress(userId, options = {}) {
+    return withSupabaseErrorHandling(async () => {
+      const {
+        startDate,
+        endDate,
+        limit = 1000,
+        includeDrafts = false,
+        programId = null
+      } = options
+
+      // Create cache key based on parameters
+      const cacheKey = `workout_logs_progress_${userId}_${startDate || 'all'}_${endDate || 'all'}_${limit}_${includeDrafts}_${programId || 'all'}`
+
+      return supabaseCache.getWithCache(
+        cacheKey,
+        async () => {
+          let query = supabase
+            .from('workout_logs')
+            .select(`
+              *,
+              workout_log_exercises (
+                *,
+                exercises (
+                  id,
+                  name,
+                  primary_muscle_group,
+                  exercise_type,
+                  instructions
+                )
+              )
+            `)
+            .eq('user_id', userId)
+
+          // Add filters based on options
+          if (!includeDrafts) {
+            query = query.eq('is_finished', true)
+          }
+
+          if (programId) {
+            query = query.eq('program_id', programId)
+          }
+
+          if (startDate) {
+            query = query.gte('date', startDate)
+          }
+
+          if (endDate) {
+            query = query.lte('date', endDate)
+          }
+
+          // Order by date descending (most recent first)
+          query = query.order('date', { ascending: false })
+
+          if (limit && limit !== 'all') {
+            query = query.limit(limit)
+          }
+
+          const { data, error } = await query
+
+          if (error) throw error
+
+          // Transform data to match expected format and sort exercises
+          const transformedData = data.map(workout => {
+            // Sort exercises by order_index
+            if (workout.workout_log_exercises) {
+              workout.workout_log_exercises.sort((a, b) => a.order_index - b.order_index)
+            }
+
+            // Add exercises array for backward compatibility with existing code
+            workout.exercises = workout.workout_log_exercises || []
+
+            return workout
+          })
+
+          return transformedData
+        },
+        { ttl: this.WORKOUT_LOGS_CACHE_TTL || 15 * 60 * 1000 } // 15 minutes default
+      )
+    }, 'getWorkoutLogsForProgress')
   }
 
   /**

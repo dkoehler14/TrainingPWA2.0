@@ -3,18 +3,22 @@ import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-boo
 import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 import '../styles/Progress3.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
-
+import workoutLogService from '../services/workoutLogService';
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
 
-function Analytics() {
+function Progress3() {
     const [workoutLogs, setWorkoutLogs] = useState([]);
     const [exercises, setExercises] = useState([]);
     const [muscleGroups, setMuscleGroups] = useState({});
     const [selectedExercise, setSelectedExercise] = useState(null);
     const [activeTab, setActiveTab] = useState('overview');
     const [dateRange, setDateRange] = useState('month');
+    const [startDate, setStartDate] = useState(new Date(new Date().setMonth(new Date().getMonth() - 1)));
+    const [endDate, setEndDate] = useState(new Date());
     const [muscleGroupData, setMuscleGroupData] = useState([]);
     const [strengthMetrics, setStrengthMetrics] = useState([]);
     const [completionRate, setCompletionRate] = useState(0);
@@ -37,74 +41,62 @@ function Analytics() {
 
     useEffect(() => {
         const fetchData = async () => {
-            if (user?.id || user?.uid) {
-                setIsLoading(true);
-                try {
-                    const userId = user.id || user.uid;
-                    // Enhanced cache warming before data fetching
-                    await warmUserCache(userId, 'normal')
-                        .then(() => {
-                            console.log('Cache warming completed for Progress3');
-                        })
-                        .catch((error) => {
-                            console.warn('Cache warming failed, proceeding with data fetch:', error);
-                        });
+            setIsLoading(true);
+            try {
+                console.log('Progress3: Fetching data for user:', user?.id);
 
-                    const logsData = await getCollectionCached('workout_logs', { where: [['user_id', '==', userId]] });
-                    const logsWithDate = logsData.map(log => ({
-                        ...log,
-                        date: log.date.toDate ? log.date.toDate() : log.date
-                    }));
-                    setWorkoutLogs(logsWithDate);
+                // Convert dates to ISO strings for API
+                const startDateISO = startDate.toISOString();
+                const endDateISO = endDate.toISOString();
+                console.log('Progress3: Date range:', startDateISO, 'to', endDateISO);
 
-                    // Fetch exercises from new Supabase exercises table
-                    let exercisesData = [];
-                    exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-                    
-                    setExercises(exercisesData);
-
-                    if (exercisesData.length > 0) {
-                        setSelectedExercise(exercisesData[0].id);
-
-                        const groupsMap = {};
-                        exercisesData.forEach(exercise => {
-                            const primaryGroup = exercise.primary_muscle_group || exercise.primaryMuscleGroup || 'Other';
-                            if (!groupsMap[primaryGroup]) {
-                                groupsMap[primaryGroup] = [];
-                            }
-                            groupsMap[primaryGroup].push(exercise.name);
-
-                            const secondaryGroups = exercise.secondary_muscle_groups || exercise.secondaryMuscleGroups;
-                            if (secondaryGroups && Array.isArray(secondaryGroups) && secondaryGroups.length > 0) {
-                                secondaryGroups.forEach(secondaryGroup => {
-                                    if (!groupsMap[secondaryGroup]) {
-                                        groupsMap[secondaryGroup] = [];
-                                    }
-                                    if (!groupsMap[secondaryGroup].includes(exercise.name)) {
-                                        groupsMap[secondaryGroup].push(exercise.name);
-                                    }
-                                });
-                            }
-                        });
-                        setMuscleGroups(groupsMap);
-                    }
-                } catch (error) {
-                    console.error("Error fetching data: ", error);
-                } finally {
-                    setIsLoading(false);
+                // Use the new service method with date filtering
+                const logsData = await workoutLogService.getWorkoutLogsForProgress(user.id, {
+                    startDate: startDateISO,
+                    endDate: endDateISO,
+                    limit: 1000,
+                    includeDrafts: false
+                });
+                console.log('Progress3: Fetched workout logs:', logsData?.length || 0, 'logs');
+                if (logsData && logsData.length > 0) {
+                    console.log('Progress3: Sample log:', logsData[0]);
                 }
-            } else {
+                setWorkoutLogs(logsData);
+
+                // Fetch exercises
+                const exercisesData = await getCollectionCached('exercises', {});
+                console.log('Progress3: Fetched exercises:', exercisesData?.length || 0, 'exercises');
+                setExercises(exercisesData);
+
+                // Group exercises by muscle group
+                const groups = exercisesData.reduce((acc, ex) => {
+                    const group = ex.primary_muscle_group || ex.primaryMuscleGroup || 'Other';
+                    if (!acc[group]) acc[group] = [];
+                    acc[group].push(ex);
+                    return acc;
+                }, {});
+                console.log('Progress3: Created muscle groups:', Object.keys(groups).length, 'groups');
+                setMuscleGroups(groups);
+            } catch (error) {
+                console.error("Progress3: Error fetching data: ", error);
+            } finally {
                 setIsLoading(false);
             }
         };
-        fetchData();
-    }, [user?.id || user?.uid]);
+
+        if (user?.id) {
+            fetchData();
+        } else {
+            console.log('Progress3: No user ID available');
+            setIsLoading(false);
+        }
+    }, [user?.id, startDate, endDate]);
 
     useEffect(() => {
         if (workoutLogs.length > 0 && exercises.length > 0 && Object.keys(muscleGroups).length > 0) {
             processAnalyticsData();
         }
-    }, [workoutLogs, exercises, muscleGroups, dateRange, selectedExercise]);
+    }, [workoutLogs, exercises, muscleGroups, startDate, endDate, selectedExercise]);
 
     const processAnalyticsData = () => {
         const filteredLogs = filterLogsByDateRange(workoutLogs);
@@ -116,25 +108,11 @@ function Analytics() {
     };
 
     const filterLogsByDateRange = (logs) => {
-        const now = new Date();
-        let startDate = new Date();
-
-        switch (dateRange) {
-            case 'week':
-                startDate.setDate(now.getDate() - 7);
-                break;
-            case 'month':
-                startDate.setMonth(now.getMonth() - 1);
-                break;
-            case 'year':
-                startDate.setFullYear(now.getFullYear() - 1);
-                break;
-            case 'all':
-            default:
-                return logs;
-        }
-
-        return logs.filter(log => log.date >= startDate);
+        // Use the actual date range states instead of predefined ranges
+        return logs.filter(log => {
+            const logDate = new Date(log.date);
+            return logDate >= startDate && logDate <= endDate;
+        });
     };
 
     const calculateVolumeByMuscleGroup = (logs) => {
@@ -145,8 +123,13 @@ function Analytics() {
         });
 
         logs.forEach(log => {
-            log.exercises?.forEach(exercise => {
-                const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
+            if (!log.exercises || !Array.isArray(log.exercises)) return;
+
+            log.exercises.forEach(exercise => {
+                if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
+
+                const exerciseId = exercise.exerciseId || exercise.exercise_id;
+                const exerciseData = exercises.find(e => e.id === exerciseId);
                 if (!exerciseData) return;
 
                 const primaryMuscleGroup = exerciseData.primary_muscle_group || exerciseData.primaryMuscleGroup;
@@ -194,9 +177,11 @@ function Analytics() {
         const dateMap = new Map();
 
         logs.forEach(log => {
+            if (!log.exercises || !Array.isArray(log.exercises)) return;
+
             const date = new Date(log.date).toLocaleDateString();
-            log.exercises?.forEach(exercise => {
-                if (exercise && exercise.exerciseId === selectedExercise) {
+            log.exercises.forEach(exercise => {
+                if (exercise && (exercise.exerciseId || exercise.exercise_id) === selectedExercise) {
                     if (exercise.weights && Array.isArray(exercise.weights) && exercise.weights.length > 0 &&
                         exercise.reps && Array.isArray(exercise.reps) && exercise.reps.length > 0) {
                         const maxWeight = Math.max(...exercise.weights);
@@ -242,13 +227,17 @@ function Analytics() {
         const volumeByWeek = new Map();
 
         logs.forEach(log => {
+            if (!log.exercises || !Array.isArray(log.exercises)) return;
+
             const { dateObj, dateStr } = getWeekStartDate(log.date);
             const weekKey = dateStr;
 
             let weeklyVolume = volumeByWeek.get(weekKey) || 0;
 
-            log.exercises?.forEach(exercise => {
-                weeklyVolume += calculateExerciseVolume(exercise);
+            log.exercises.forEach(exercise => {
+                if (exercise) {
+                    weeklyVolume += calculateExerciseVolume(exercise);
+                }
             });
 
             volumeByWeek.set(weekKey, weeklyVolume);
@@ -272,9 +261,12 @@ function Analytics() {
         const prs = new Map();
 
         logs.forEach(log => {
-            log.exercises?.forEach(exercise => {
-                if (!exercise || !exercise.exerciseId) return;
-                const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
+            if (!log.exercises || !Array.isArray(log.exercises)) return;
+log.exercises.forEach(exercise => {
+    if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
+
+    const exerciseId = exercise.exerciseId || exercise.exercise_id;
+    const exerciseData = exercises.find(e => e.id === exerciseId);
                 if (!exerciseData) return;
 
                 if (exercise.weights && Array.isArray(exercise.weights) && exercise.weights.length > 0) {
@@ -282,11 +274,11 @@ function Analytics() {
                     const currentPR = prs.get(exercise.exerciseId) || { weight: 0, date: null };
 
                     if (maxWeight > currentPR.weight) {
-                        prs.set(exercise.exerciseId, {
-                            exerciseId: exercise.exerciseId,
+                        prs.set(exerciseId, {
+                            exerciseId: exerciseId,
                             exerciseName: exerciseData.name,
                             weight: maxWeight,
-                            date: log.date.toLocaleDateString()
+                            date: new Date(log.date).toLocaleDateString()
                         });
                     }
                 }
@@ -330,9 +322,7 @@ function Analytics() {
                                     <div className="progress-text">{completionRate}%</div>
                                 </div>
                                 <div className="text-center mt-3">
-                                    Completion rate for {dateRange === 'week' ? 'the past week' :
-                                        dateRange === 'month' ? 'the past month' :
-                                        dateRange === 'year' ? 'the past year' : 'all time'}
+                                    Completion rate from {startDate.toLocaleDateString()} to {endDate.toLocaleDateString()}
                                 </div>
                             </Card.Body>
                         </Card>
@@ -547,14 +537,17 @@ function Analytics() {
             });
 
             logs.forEach(log => {
-                log.exercises?.forEach(exercise => {
-                    if (!exercise || !exercise.exerciseId) return;
-                    const exerciseData = exercises.find(e => e.id === exercise.exerciseId);
+                if (!log.exercises || !Array.isArray(log.exercises)) return;
+
+                log.exercises.forEach(exercise => {
+                    if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
+                    const exerciseId = exercise.exerciseId || exercise.exercise_id;
+                    const exerciseData = exercises.find(e => e.id === exerciseId);
                     if (!exerciseData) return;
 
                     const volume = calculateExerciseVolume(exercise);
 
-                    const primaryGroup = exerciseData.primaryMuscleGroup;
+                    const primaryGroup = exerciseData.primaryMuscleGroup || exerciseData.primary_muscle_group;
                     if (primaryGroup) {
                         weeklyVolume[primaryGroup] = (weeklyVolume[primaryGroup] || 0) + volume;
                     }
@@ -690,24 +683,31 @@ function Analytics() {
                         <div className="soft-card analytics-card shadow border-0">
                             <div className="d-flex justify-content-between align-items-center mb-4">
                                 <h1 className="soft-title analytics-title">Workout Analytics</h1>
-                                <div className="d-flex">
-                                    <Form.Select
-                                        className="me-2"
-                                        value={dateRange}
-                                        onChange={(e) => setDateRange(e.target.value)}
-                                    >
-                                        <option value="week">Past Week</option>
-                                        <option value="month">Past Month</option>
-                                        <option value="year">Past Year</option>
-                                        <option value="all">All Time</option>
-                                    </Form.Select>
-                                    <div className="date-range-display d-flex align-items-center">
-                                        <Calendar className="me-2" />
-                                        <span>
-                                            {dateRange === 'week' ? 'Last 7 days' :
-                                                dateRange === 'month' ? 'Last 30 days' :
-                                                    dateRange === 'year' ? 'Last 365 days' : 'All time'}
-                                        </span>
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="date-range-picker">
+                                        <Form.Label className="me-2">From:</Form.Label>
+                                        <DatePicker
+                                            selected={startDate}
+                                            onChange={date => setStartDate(date)}
+                                            selectsStart
+                                            startDate={startDate}
+                                            endDate={endDate}
+                                            className="form-control form-control-sm"
+                                            dateFormat="MMM dd, yyyy"
+                                        />
+                                    </div>
+                                    <div className="date-range-picker">
+                                        <Form.Label className="me-2">To:</Form.Label>
+                                        <DatePicker
+                                            selected={endDate}
+                                            onChange={date => setEndDate(date)}
+                                            selectsEnd
+                                            startDate={startDate}
+                                            endDate={endDate}
+                                            minDate={startDate}
+                                            className="form-control form-control-sm"
+                                            dateFormat="MMM dd, yyyy"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -750,4 +750,4 @@ function Analytics() {
     );
 }
 
-export default Analytics;
+export default Progress3;

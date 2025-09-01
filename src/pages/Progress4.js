@@ -6,11 +6,11 @@ import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCac
 
 // Utility functions
 const calculateVolume = (sets, reps, weights) => {
-    if (!reps || !Array.isArray(reps) || !weights || !Array.isArray(weights)) return 0;
-    return reps.reduce((total, rep, index) => {
-        const weight = Number(weights[index]) || 0;
-        return total + (Number(rep) * weight);
-      }, 0);
+  if (!reps || !Array.isArray(reps) || !weights || !Array.isArray(weights)) return 0;
+  return reps.reduce((total, rep, index) => {
+    const weight = Number(weights[index]) || 0;
+    return total + (Number(rep) * weight);
+  }, 0);
 };
 
 const estimate1RM = (weight, reps) => {
@@ -111,7 +111,7 @@ function Progress4() {
         // Fetch exercises from new Supabase exercises table
         let exercisesData = [];
         exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-        
+
         setExercises(exercisesData);
       } catch (error) {
         console.error("Error fetching data: ", error);

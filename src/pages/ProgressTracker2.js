@@ -8,7 +8,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend } from 'chart.js';
 import '../styles/ProgressTracker.css'; // Ensure this CSS file exists
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
-
+import workoutLogService from '../services/workoutLogService';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
 
 function ProgressTracker2() {
@@ -31,27 +31,34 @@ function ProgressTracker2() {
 		const fetchExercises = async () => {
 			setIsExercisesLoading(true);
 			try {
+				console.log('ProgressTracker2: Fetching exercises');
+
 				// Enhanced cache warming before data fetching
 				if (user?.id) {
 					await warmUserCache(user.id, 'normal')
 						.then(() => {
-							console.log('Cache warming completed for ProgressTracker2');
+							console.log('ProgressTracker2: Cache warming completed');
 						})
 						.catch((error) => {
-							console.warn('Cache warming failed, proceeding with data fetch:', error);
+							console.warn('ProgressTracker2: Cache warming failed, proceeding with data fetch:', error);
 						});
 				}
 
 				// Fetch exercises from new Supabase exercises table
 				let exercisesData = [];
 				exercisesData = await getCollectionCached('exercises', {}, 60 * 60 * 1000);
-				
+				console.log('ProgressTracker2: Raw exercises data:', exercisesData?.length || 0, 'exercises');
+
 				const fetchedExercises = exercisesData.map(doc => ({
 					value: doc.id,
 					label: doc.name,
 					primaryMuscleGroup: doc.primary_muscle_group || 'Other',
 					exerciseType: doc.exercise_type || 'Unknown'
 				}));
+				console.log('ProgressTracker2: Processed exercises:', fetchedExercises?.length || 0, 'exercises');
+				if (fetchedExercises && fetchedExercises.length > 0) {
+					console.log('ProgressTracker2: Sample exercise:', fetchedExercises[0]);
+				}
 				setExercises(fetchedExercises);
 				const groups = fetchedExercises.reduce((acc, ex) => {
 					const group = ex.primaryMuscleGroup || 'Other';
@@ -59,11 +66,12 @@ function ProgressTracker2() {
 					acc[group].push(ex);
 					return acc;
 				}, {});
+				console.log('ProgressTracker2: Created muscle groups:', Object.keys(groups).length, 'groups');
 				setMuscleGroups(groups);
 				const types = new Set(fetchedExercises.map(ex => ex.exerciseType || 'Unknown'));
 				setExerciseTypes(['All Types', ...Array.from(types)]);
 			} catch (error) {
-				console.error("Error fetching exercises:", error);
+				console.error("ProgressTracker2: Error fetching exercises:", error);
 			} finally {
 				setIsExercisesLoading(false);
 			}
@@ -76,63 +84,116 @@ function ProgressTracker2() {
 		const fetchLogs = async () => {
 			setIsLoading(true);
 			try {
+				console.log('ProgressTracker2: Fetching logs for user:', user?.id);
+
 				// Convert dates to UTC ISO strings to avoid timezone parsing issues
 				const startDateISO = startDate.toISOString();
 				const endDateISO = endDate.toISOString();
+				console.log('ProgressTracker2: Date range:', startDateISO, 'to', endDateISO);
 
-				const logsData = await getCollectionCached('workout_logs', {
-					where: [
-						['user_id', '==', user.id],
-						['date', '>=', startDateISO],
-						['date', '<=', endDateISO],
-						['is_finished', '==', true]
-					],
-					orderBy: [['date', 'asc']]
+				// Use the service method for consistent data fetching and caching
+				const logsData = await workoutLogService.getWorkoutLogsForProgress(user.id, {
+					startDate: startDateISO,
+					endDate: endDateISO,
+					limit: 1000,
+					includeDrafts: false
 				});
+				console.log('ProgressTracker2: Fetched logs data:', logsData?.length || 0, 'logs');
+
 				const fetchedLogs = logsData.map(doc => ({
 					id: doc.id,
 					...doc,
-					date: doc.date.toDate ? doc.date.toDate() : doc.date
+					date: doc.date.toDate ? doc.date.toDate() : new Date(doc.date)
 				}));
+				console.log('ProgressTracker2: Processed logs:', fetchedLogs?.length || 0, 'logs');
+				if (fetchedLogs && fetchedLogs.length > 0) {
+					console.log('ProgressTracker2: Sample log:', fetchedLogs[0]);
+				}
 				setAllLogs(fetchedLogs);
 			} catch (error) {
-				console.error("Error fetching logs:", error);
+				console.error("ProgressTracker2: Error fetching logs:", error);
 			} finally {
 				setIsLoading(false);
 			}
 		};
-		fetchLogs();
-	}, [startDate, endDate]);
+
+		if (user?.id) {
+			fetchLogs();
+		} else {
+			console.log('ProgressTracker2: No user ID available');
+			setIsLoading(false);
+		}
+	}, [startDate, endDate, user?.id]);
 
 	// Overview metrics
 	const overviewMetrics = useMemo(() => {
-		if (selectedGroup !== 'All Muscle Groups' || allLogs.length === 0) return null;
+		if (selectedGroup !== 'All Muscle Groups' || allLogs.length === 0 || Object.keys(muscleGroups).length === 0) return null;
+
+		console.log('ProgressTracker2: Calculating overview metrics');
+		console.log('ProgressTracker2: Available muscle groups:', Object.keys(muscleGroups));
+		console.log('ProgressTracker2: Total logs:', allLogs.length);
+
+		// Debug: Check data structure
+		if (allLogs.length > 0) {
+			console.log('ProgressTracker2: Sample log structure:', {
+				id: allLogs[0].id,
+				date: allLogs[0].date,
+				exercisesCount: allLogs[0].exercises?.length || 0,
+				sampleExercise: allLogs[0].exercises?.[0] ? {
+					exerciseId: allLogs[0].exercises[0].exerciseId,
+					sets: allLogs[0].exercises[0].sets,
+					weights: allLogs[0].exercises[0].weights,
+					reps: allLogs[0].exercises[0].reps,
+					completed: allLogs[0].exercises[0].completed
+				} : null
+			});
+		}
+
+		// Debug: Check muscle groups structure
+		Object.keys(muscleGroups).forEach(group => {
+			console.log(`ProgressTracker2: Muscle group ${group}:`, muscleGroups[group].map(e => ({ id: e.value, name: e.label })));
+		});
+
 		const totalVolume = allLogs.reduce((sum, log) => {
 			if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 			return sum + log.exercises.reduce((logSum, ex) => {
 				if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
 				return logSum + ex.weights.reduce((exSum, weight, idx) => {
-					if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
+					if (ex.completed[idx]) return exSum + (weight * ex.reps[idx]);
 					return exSum;
 				}, 0);
 			}, 0);
 		}, 0);
+
+		console.log('ProgressTracker2: Total volume calculated:', totalVolume);
+
 		const volumeByGroup = Object.keys(muscleGroups).reduce((acc, group) => {
 			acc[group] = allLogs.reduce((sum, log) => {
 				if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 				return sum + log.exercises.reduce((logSum, ex) => {
-					if (muscleGroups[group].some(e => e.value === ex.exerciseId)) {
+					// Check if this exercise belongs to the current muscle group
+					// The service method uses 'exercise_id' from the database, but we need to check both
+					const exerciseId = ex.exerciseId || ex.exercise_id;
+					const exerciseInGroup = muscleGroups[group].some(e => e.value === exerciseId);
+					console.log(`ProgressTracker2: Exercise ${exerciseId} (from ${ex.exerciseId ? 'exerciseId' : 'exercise_id'}) in group ${group}:`, exerciseInGroup);
+
+					if (exerciseInGroup) {
 						if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
-						return logSum + ex.weights.reduce((exSum, weight, idx) => {
-							if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
+						const exerciseVolume = ex.weights.reduce((exSum, weight, idx) => {
+							if (ex.completed[idx]) return exSum + (weight * ex.reps[idx]);
 							return exSum;
 						}, 0);
+						console.log(`ProgressTracker2: Exercise ${exerciseId} volume:`, exerciseVolume);
+						return logSum + exerciseVolume;
 					}
 					return logSum;
 				}, 0);
 			}, 0);
+			console.log(`ProgressTracker2: Group ${group} total volume:`, acc[group]);
 			return acc;
 		}, {});
+
+		console.log('ProgressTracker2: Volume by group:', volumeByGroup);
 		return { totalVolume, volumeByGroup };
 	}, [allLogs, selectedGroup, muscleGroups]);
 
@@ -143,11 +204,11 @@ function ProgressTracker2() {
 		const exerciseIds = groupExercises
 			.filter(ex => selectedType === 'All Types' || ex.exerciseType === selectedType)
 			.map(ex => ex.value);
-		const filteredLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => exerciseIds.includes(ex.exerciseId)));
+		const filteredLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => exerciseIds.includes(ex.exerciseId || ex.exercise_id)));
 		const totalVolume = filteredLogs.reduce((sum, log) => {
 			if (!log.exercises || !Array.isArray(log.exercises)) return sum;
 			return sum + log.exercises.reduce((logSum, ex) => {
-				if (exerciseIds.includes(ex.exerciseId)) {
+				if (exerciseIds.includes(ex.exerciseId || ex.exercise_id)) {
 					if (!ex.weights || !Array.isArray(ex.weights) || !ex.reps || !Array.isArray(ex.reps) || !ex.completed || !Array.isArray(ex.completed)) return logSum;
 					return logSum + ex.weights.reduce((exSum, weight, idx) => {
 						if (ex.completed[idx]) return exSum + weight * ex.reps[idx];
@@ -163,14 +224,14 @@ function ProgressTracker2() {
 
 	// Exercise metrics
 	const calculateExerciseMetrics = (exerciseId) => {
-		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => ex.exerciseId === exerciseId));
+		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => (ex.exerciseId || ex.exercise_id) === exerciseId));
 		let pr = { weight: 0, date: null };
 		let lastWeight = { weight: 0, date: null };
 
 		// Calculate PR (highest weight ever from a completed set)
 		exerciseLogs.forEach(log => {
 			if (!log.exercises || !Array.isArray(log.exercises)) return;
-			const exercise = log.exercises.find(ex => ex.exerciseId === exerciseId);
+			const exercise = log.exercises.find(ex => (ex.exerciseId || ex.exercise_id) === exerciseId);
 			if (exercise && exercise.weights && Array.isArray(exercise.weights) && exercise.completed && Array.isArray(exercise.completed)) {
 				exercise.weights.forEach((weight, idx) => {
 					if (exercise.completed[idx] && weight > pr.weight) {
@@ -184,7 +245,7 @@ function ProgressTracker2() {
 		for (let i = exerciseLogs.length - 1; i >= 0; i--) {
 			const log = exerciseLogs[i];
 			if (!log.exercises || !Array.isArray(log.exercises)) continue;
-			const exercise = log.exercises.find(ex => ex.exerciseId === exerciseId);
+			const exercise = log.exercises.find(ex => (ex.exerciseId || ex.exercise_id) === exerciseId);
 			if (exercise && exercise.weights && Array.isArray(exercise.weights) && exercise.completed && Array.isArray(exercise.completed)) {
 				const completedWeights = exercise.weights.filter(
 					(weight, index) => exercise.completed[index]
@@ -205,10 +266,11 @@ function ProgressTracker2() {
 			if (!log.exercises || !Array.isArray(log.exercises)) return;
 			log.exercises.forEach(ex => {
 				if (!ex.completed || !Array.isArray(ex.completed)) return;
-				const exercise = exercises.find(e => e.value === ex.exerciseId);
+				const exerciseId = ex.exerciseId || ex.exercise_id;
+				const exercise = exercises.find(e => e.value === exerciseId);
 				if (ex.completed.some(c => c) &&
 					(selectedType === 'All Types' || exercise?.exerciseType === selectedType)) {
-					set.add(ex.exerciseId);
+					set.add(exerciseId);
 				}
 			});
 		});
@@ -227,14 +289,14 @@ function ProgressTracker2() {
 
 	// Exercise details modal
 	const ExerciseDetailsModal = ({ show, onHide, exercise }) => {
-		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => ex.exerciseId === exercise.value));
+		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => (ex.exerciseId || ex.exercise_id) === exercise.value));
 		const chartData = {
-			labels: exerciseLogs.map(log => log.date.toLocaleDateString()),
+			labels: exerciseLogs.map(log => new Date(log.date).toLocaleDateString()),
 			datasets: [{
 				label: 'Max Weight (lbs)',
 				data: exerciseLogs.map(log => {
 					if (!log.exercises || !Array.isArray(log.exercises)) return 0;
-					const ex = log.exercises.find(e => e.exerciseId === exercise.value);
+					const ex = log.exercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
 					if (!ex || !ex.weights || !Array.isArray(ex.weights) || !ex.completed || !Array.isArray(ex.completed)) return 0;
 					return Math.max(...ex.weights.filter((_, idx) => ex.completed[idx])) || 0;
 				}),
@@ -323,17 +385,51 @@ function ProgressTracker2() {
 										{overviewMetrics ? (
 											<>
 												<p><strong>Total Volume:</strong> {overviewMetrics.totalVolume.toFixed(0)} lbs</p>
-												<Bar
-													data={{
-														labels: Object.keys(overviewMetrics.volumeByGroup),
-														datasets: [{
-															label: 'Volume by Muscle Group',
-															data: Object.values(overviewMetrics.volumeByGroup),
-															backgroundColor: 'rgba(75, 192, 192, 0.6)'
-														}]
-													}}
-													options={{ responsive: true, plugins: { legend: { position: 'top' } } }}
-												/>
+												{Object.keys(overviewMetrics.volumeByGroup).length > 0 && Object.values(overviewMetrics.volumeByGroup).some(v => v > 0) ? (
+													<>
+														{console.log('ProgressTracker2: Rendering bar chart with data:', {
+															labels: Object.keys(overviewMetrics.volumeByGroup),
+															data: Object.values(overviewMetrics.volumeByGroup)
+														})}
+														<Bar
+															data={{
+																labels: Object.keys(overviewMetrics.volumeByGroup),
+																datasets: [{
+																	label: 'Volume by Muscle Group (lbs)',
+																	data: Object.values(overviewMetrics.volumeByGroup),
+																	backgroundColor: 'rgba(75, 192, 192, 0.6)',
+																	borderColor: 'rgba(75, 192, 192, 1)',
+																	borderWidth: 1
+																}]
+															}}
+															options={{
+																responsive: true,
+																plugins: {
+																	legend: { position: 'top' },
+																	tooltip: {
+																		callbacks: {
+																			label: function(context) {
+																				return `${context.label}: ${context.parsed.y.toLocaleString()} lbs`;
+																			}
+																		}
+																	}
+																},
+																scales: {
+																	y: {
+																		beginAtZero: true,
+																		ticks: {
+																			callback: function(value) {
+																				return value.toLocaleString() + ' lbs';
+																			}
+																		}
+																	}
+																}
+															}}
+														/>
+													</>
+												) : (
+													<p>No volume data available for muscle groups in the selected date range.</p>
+												)}
 											</>
 										) : (
 											<p>No data available for the selected date range.</p>
@@ -370,8 +466,8 @@ function ProgressTracker2() {
 														<Card>
 															<Card.Body>
 																<Card.Title>{exercise.label}</Card.Title>
-																<p><strong>PR:</strong> {metrics.pr.weight} lbs on {metrics.pr.date?.toLocaleDateString() || 'N/A'}</p>
-																<p><strong>Last Weight:</strong> {metrics.lastWeight.weight} lbs on {metrics.lastWeight.date?.toLocaleDateString() || 'N/A'}</p>
+																<p><strong>PR:</strong> {metrics.pr.weight} lbs on {metrics.pr.date ? new Date(metrics.pr.date).toLocaleDateString() : 'N/A'}</p>
+																<p><strong>Last Weight:</strong> {metrics.lastWeight.weight} lbs on {metrics.lastWeight.date ? new Date(metrics.lastWeight.date).toLocaleDateString() : 'N/A'}</p>
 																<Button
 																	variant="primary"
 																	onClick={() => {
