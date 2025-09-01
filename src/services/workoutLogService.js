@@ -49,7 +49,9 @@ export const ConstraintViolationHandler = {
   isUniqueConstraintViolation(error) {
     return error.code === '23505' &&
       (error.message.includes('unique_user_program_week_day') ||
-        error.message.includes('workout_logs_user_id_program_id_week_index_day_index_key'));
+        error.message.includes('workout_logs_user_id_program_id_week_index_day_index_key') ||
+        error.message.includes('unique_workout_log_exercise') ||
+        error.message.includes('workout_log_exercises_workout_log_id_exercise_id_key'));
   },
 
   /**
@@ -65,6 +67,8 @@ export const ConstraintViolationHandler = {
 
     if (error.message.includes('unique_user_program_week_day')) {
       details.constraintName = 'unique_user_program_week_day';
+    } else if (error.message.includes('unique_workout_log_exercise')) {
+      details.constraintName = 'unique_workout_log_exercise';
     }
 
     // Try to extract conflicting values from error message
@@ -209,6 +213,18 @@ export const ConstraintViolationHandler = {
           programId: context.programId,
           weekIndex: context.weekIndex,
           dayIndex: context.dayIndex
+        }
+      };
+    } else if (details.constraintName === 'unique_workout_log_exercise') {
+      return {
+        title: 'Exercise Already Added',
+        message: 'This exercise has already been added to your workout. You can modify the existing exercise entry instead.',
+        type: 'warning',
+        recoverable: true,
+        context: {
+          workoutLogId: context.workoutLogId,
+          exerciseId: context.exerciseId,
+          constraintType: 'duplicate_exercise'
         }
       };
     }
@@ -2398,30 +2414,63 @@ class WorkoutLogService {
               .select('id');
 
             if (insertError) {
-              throw new WorkoutLogError(
-                WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
-                `Failed to insert exercises: ${insertError.message}`,
-                { workoutLogId, insertData },
-                insertError
-              );
-            }
+              // Handle unique constraint violation for duplicate exercises
+              if (ConstraintViolationHandler.isUniqueConstraintViolation(insertError)) {
+                const violationDetails = ConstraintViolationHandler.extractConstraintDetails(insertError);
+                const userMessage = ConstraintViolationHandler.createUserFriendlyMessage(insertError, {
+                  workoutLogId,
+                  exerciseId: insertData[0]?.exercise_id // First exercise that caused the violation
+                });
 
-            operationResults.inserted = insertedExercises?.length || 0;
+                console.warn('⚠️ EXERCISE DUPLICATE DETECTED DURING INSERT:', {
+                  workoutLogId,
+                  constraintDetails: violationDetails,
+                  userMessage,
+                  attemptedInserts: insertData.length
+                });
 
-            if (logOperations) {
-              console.log('➕ EXERCISES INSERTED:', {
-                workoutLogId,
-                insertedCount: operationResults.inserted,
-                insertedIds: insertedExercises?.map(ex => ex.id) || []
-              });
+                // For batch inserts, we need to handle this differently
+                // Return partial success with the constraint violation details
+                operationResults.errors.push({
+                  operation: 'insert',
+                  error: insertError.message,
+                  type: 'unique_constraint_violation',
+                  constraintDetails: violationDetails,
+                  userMessage,
+                  exercises: changes.toInsert.length
+                });
+
+                // Don't throw - allow partial success
+                operationResults.inserted = 0; // No exercises were actually inserted due to constraint
+              } else {
+                throw new WorkoutLogError(
+                  WorkoutLogErrorType.EXERCISE_UPSERT_FAILED,
+                  `Failed to insert exercises: ${insertError.message}`,
+                  { workoutLogId, insertData },
+                  insertError
+                );
+              }
+            } else {
+              operationResults.inserted = insertedExercises?.length || 0;
+
+              if (logOperations) {
+                console.log('➕ EXERCISES INSERTED:', {
+                  workoutLogId,
+                  insertedCount: operationResults.inserted,
+                  insertedIds: insertedExercises?.map(ex => ex.id) || []
+                });
+              }
             }
           } catch (insertError) {
-            operationResults.errors.push({
-              operation: 'insert',
-              error: insertError.message,
-              exercises: changes.toInsert.length
-            });
-            throw insertError;
+            // Only add to errors if not already handled as constraint violation
+            if (!ConstraintViolationHandler.isUniqueConstraintViolation(insertError)) {
+              operationResults.errors.push({
+                operation: 'insert',
+                error: insertError.message,
+                exercises: changes.toInsert.length
+              });
+              throw insertError;
+            }
           }
         }
 

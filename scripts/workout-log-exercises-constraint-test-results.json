@@ -1,0 +1,39 @@
+{
+  "tests": [
+    {
+      "name": "Unique constraint exists",
+      "passed": false,
+      "timestamp": "2025-09-01T22:09:53.951Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "name": "Duplicate exercise insertion blocked",
+      "passed": false,
+      "timestamp": "2025-09-01T22:09:53.978Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "name": "Different exercises in same workout allowed",
+      "passed": false,
+      "timestamp": "2025-09-01T22:09:53.984Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "name": "Same exercise in different workouts allowed",
+      "passed": false,
+      "timestamp": "2025-09-01T22:09:53.998Z",
+      "error": "TypeError: fetch failed"
+    },
+    {
+      "name": "Upsert function exists",
+      "passed": false,
+      "timestamp": "2025-09-01T22:09:54.012Z",
+      "error": "TypeError: fetch failed"
+    }
+  ],
+  "passed": 0,
+  "failed": 5,
+  "startTime": "2025-09-01T22:09:53.865Z",
+  "endTime": "2025-09-01T22:09:54.012Z",
+  "duration": 147
+}

@@ -379,6 +379,13 @@ function QuickWorkout() {
 
 
     const addExerciseToWorkout = (exercise) => {
+        // Check for duplicate exercises within the same workout
+        const isDuplicate = selectedExercises.some(ex => ex.exerciseId === exercise.id);
+        if (isDuplicate) {
+            alert(`Cannot add duplicate exercise: ${exercise.name} is already selected for this workout.`);
+            return; // Don't add the exercise
+        }
+
         const newExercise = {
             exerciseId: exercise.id,
             sets: 3, // Default to 3 sets

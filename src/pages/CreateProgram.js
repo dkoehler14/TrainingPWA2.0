@@ -944,13 +944,34 @@ function CreateProgram({ mode = 'create' }) {
 
   const updateExercise = (weekIndex, dayIndex, exIndex, field, value) => {
     const newWeeks = [...weeks];
-    newWeeks.forEach(week => {
-      if (field === 'exerciseId') {
-        week.days[dayIndex].exercises[exIndex][field] = value ? value.value : '';
-      } else {
-        week.days[dayIndex].exercises[exIndex][field] = value;
+
+    if (field === 'exerciseId') {
+      // Check for duplicate exercises within the same day
+      const selectedExerciseId = value ? value.value : '';
+      if (selectedExerciseId) {
+        // Check if this exercise is already selected in the current day
+        const currentDayExercises = newWeeks[0].days[dayIndex].exercises;
+        const isDuplicate = currentDayExercises.some((exercise, index) =>
+          index !== exIndex && exercise.exerciseId === selectedExerciseId
+        );
+
+        if (isDuplicate) {
+          // Find the exercise name for the error message
+          const exerciseName = exercises.find(ex => ex.value === selectedExerciseId)?.label || 'this exercise';
+          alert(`Cannot add duplicate exercise: ${exerciseName} is already selected for this day.`);
+          return; // Don't update the exercise
+        }
       }
-    });
+
+      newWeeks.forEach(week => {
+        week.days[dayIndex].exercises[exIndex][field] = value ? value.value : '';
+      });
+    } else {
+      newWeeks.forEach(week => {
+        week.days[dayIndex].exercises[exIndex][field] = value;
+      });
+    }
+
     setWeeks(newWeeks);
   };
 
