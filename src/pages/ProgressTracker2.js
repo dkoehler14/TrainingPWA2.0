@@ -242,7 +242,8 @@ function ProgressTracker2() {
 		});
 
 		// Calculate lastWeight (most recent completed set's max weight)
-		for (let i = exerciseLogs.length - 1; i >= 0; i--) {
+		// Since exerciseLogs is in descending order (most recent first), start from index 0
+		for (let i = 0; i < exerciseLogs.length; i++) {
 			const log = exerciseLogs[i];
 			if (!log.exercises || !Array.isArray(log.exercises)) continue;
 			const exercise = log.exercises.find(ex => (ex.exerciseId || ex.exercise_id) === exerciseId);
@@ -289,7 +290,9 @@ function ProgressTracker2() {
 
 	// Exercise details modal
 	const ExerciseDetailsModal = ({ show, onHide, exercise }) => {
-		const exerciseLogs = allLogs.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => (ex.exerciseId || ex.exercise_id) === exercise.value));
+		const exerciseLogs = allLogs
+			.filter(log => log.exercises && Array.isArray(log.exercises) && log.exercises.some(ex => (ex.exerciseId || ex.exercise_id) === exercise.value))
+			.sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest first)
 		const chartData = {
 			labels: exerciseLogs.map(log => new Date(log.date).toLocaleDateString()),
 			datasets: [{

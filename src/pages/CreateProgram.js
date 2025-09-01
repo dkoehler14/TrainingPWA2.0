@@ -1067,6 +1067,7 @@ function CreateProgram({ mode = 'create' }) {
         invalidateProgramCache(user.id);
         clearSavedState(); // Clear saved form data
         alert('Program created successfully!');
+        navigate('/programs');
         // Reset form for new program
         setProgramName('');
         setWeightUnit('LB');
