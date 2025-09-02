@@ -40,16 +40,16 @@ function NavBar({ user, userRole, isReady }) {
         />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
-            <Nav.Link href="/" className="nav-link">Home</Nav.Link>
+            {user && <Nav.Link href="/" className="nav-link">Home</Nav.Link>}
             {user && <Nav.Link href="/log-workout" className="nav-link">Current Workout</Nav.Link>}
             {user && <Nav.Link href="/quick-workout" className="nav-link">Quick Workout</Nav.Link>}
 
-            <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>
+            {user && <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>}
             {user && <Nav.Link href="/progress-tracker" className="nav-link">Analytics</Nav.Link>}
             {user && <Nav.Link href="/progress-coach" className="nav-link">Progress & AI Coach</Nav.Link>}
             {/* {user && <Nav.Link href="/analytics" className="nav-link">Analytics</Nav.Link>} */}
-            <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>
-            <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>
+            {user && <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>}
+            {user && <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>}
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
             {isReady && userRole === 'admin' && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
           </Nav>
