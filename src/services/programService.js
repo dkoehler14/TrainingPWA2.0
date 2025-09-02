@@ -1275,9 +1275,26 @@ const rollbackProgramUpdate = async (programId, backupData, completedSteps) => {
 
 /**
  * Set program as current
+ * Ensures only one program per user can be current at a time
  */
 export const setCurrentProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
+    // First, unset any existing current program for this user
+    const { error: unsetError } = await supabase
+      .from('programs')
+      .update({
+        is_current: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', userId)
+      .eq('is_current', true)
+
+    if (unsetError) {
+      console.error('Error unsetting previous current program:', unsetError)
+      throw unsetError
+    }
+
+    // Then set the new program as current
     const { data, error } = await supabase
       .from('programs')
       .update({

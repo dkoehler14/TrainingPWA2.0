@@ -660,21 +660,51 @@ function Programs({ userRole }) {
   const handleSetCurrentProgram = async (programId) => {
     if (!user) return;
 
+    // Find the program being set as current for better user feedback
+    const targetProgram = userPrograms.find(p => p.id === programId);
+    const programName = targetProgram?.name || 'Selected program';
+
     try {
+      console.log('🎯 Setting program as current:', {
+        programId,
+        programName,
+        userId: user.id
+      });
+
       await setCurrentProgram(programId, user.id);
+
+      console.log('✅ Program set as current successfully, refreshing program list');
 
       // Refresh programs list using optimized single call to ensure data consistency
       const allPrograms = await getUserPrograms(user.id);
-      const updatedUserPrograms = allPrograms.filter(p => !p.is_template);
-      const updatedTemplatePrograms = allPrograms.filter(p => p.is_template);
+      const updatedUserPrograms = safelyProcessPrograms(allPrograms.filter(p => !p.is_template), 'updated user programs');
+      const updatedTemplatePrograms = safelyProcessPrograms(allPrograms.filter(p => p.is_template), 'updated template programs');
 
       setUserPrograms(updatedUserPrograms);
       setTemplatePrograms(updatedTemplatePrograms);
 
-      alert('Program set as current!');
+      // Show success message with program name
+      alert(`"${programName}" has been set as your current program!`);
+      
+      console.log('🎯 Current program updated successfully:', {
+        newCurrentProgram: updatedUserPrograms.find(p => p.is_current)?.name || 'None',
+        totalPrograms: updatedUserPrograms.length
+      });
+
     } catch (error) {
-      console.error("Error setting current program: ", error);
-      alert('Failed to set current program');
+      console.error("❌ Error setting current program:", {
+        error: error.message,
+        programId,
+        programName,
+        userId: user.id
+      });
+      
+      // Show more specific error message
+      const errorMessage = error.message.includes('Failed to') 
+        ? `Failed to set "${programName}" as current program. Please try again.`
+        : `Unable to set "${programName}" as current program. Please check your connection and try again.`;
+      
+      alert(errorMessage);
     }
   };
 
@@ -831,15 +861,15 @@ function Programs({ userRole }) {
                 <Pencil className="me-1" /> Edit
               </Button>
               {!isTemplate && !program.is_current && hasWorkoutData && (
-                <Button
-                  variant="outline-success"
-                  size="sm"
-                  onClick={() => handleSetCurrentProgram(program.id)}
-                  className="w-100"
-                  title={!hasWorkoutData ? 'Cannot set as current - program has no workout data' : ''}
-                >
-                  <Clock className="me-1" /> Set Current
-                </Button>
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={() => handleSetCurrentProgram(program.id)}
+                    className="w-100"
+                    title="Set this program as your current active program"
+                  >
+                    <Clock className="me-1" /> Set Current
+                  </Button>
               )}
               {!isTemplate && (
                 <Button
@@ -900,14 +930,14 @@ function Programs({ userRole }) {
               <Pencil className="me-1" /> Edit
             </Button>
             {!isTemplate && !program.is_current && hasWorkoutData && (
-              <Button
-                variant="outline-success"
-                size="sm"
-                onClick={() => handleSetCurrentProgram(program.id)}
-                title={!hasWorkoutData ? 'Cannot set as current - program has no workout data' : ''}
-              >
-                <Clock className="me-1" /> Set Current
-              </Button>
+                <Button
+                  variant="outline-success"
+                  size="sm"
+                  onClick={() => handleSetCurrentProgram(program.id)}
+                  title="Set this program as your current active program"
+                >
+                  <Clock className="me-1" /> Set Current
+                </Button>
             )}
             {!isTemplate && (
               <Button
@@ -948,12 +978,17 @@ function Programs({ userRole }) {
 
   const renderProgramCard = (program, isTemplate = false) => {
     return (
-      <Card key={program.id} className={`mb-3 program-card ${program.hasError ? 'border-warning' : ''}`}>
+      <Card key={program.id} className={`mb-3 program-card ${program.hasError ? 'border-warning' : ''} ${program.is_current && !isTemplate ? 'border-primary current-program' : ''}`}>
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start">
             <div className="flex-grow-1">
               <Card.Title className="d-flex align-items-center">
                 {program.name}
+                {program.is_current && !isTemplate && (
+                  <Badge bg="primary" className="ms-2" title="This is your current active program">
+                    Current
+                  </Badge>
+                )}
                 {/* {program.hasError && (
                   <Badge bg="warning" className="ms-2" title={program.errorMessage}>
                     ⚠️ Issue
@@ -967,6 +1002,9 @@ function Programs({ userRole }) {
               </Card.Title>
               <Card.Subtitle className="text-muted mb-2">
                 {program.duration} weeks | {program.days_per_week} days/week
+                {program.is_current && !isTemplate && (
+                  <span className="text-primary ms-2">• Active Program</span>
+                )}
               </Card.Subtitle>
 
               {/* Show error/warning messages */}
@@ -989,9 +1027,12 @@ function Programs({ userRole }) {
                 </Alert>
               )} */}
             </div>
-            {program.is_current && !isTemplate && (
-              <Star className="text-warning" size={24} />
-            )}
+            {/* {program.is_current && !isTemplate && (
+              <div className="d-flex align-items-center">
+                <Star className="text-warning me-1" size={20} fill="currentColor" />
+                <small className="text-primary fw-bold">CURRENT</small>
+              </div>
+            )} */}
           </div>
 
           <div className="d-flex justify-content-between align-items-center mt-3">

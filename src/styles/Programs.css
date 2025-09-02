@@ -69,6 +69,80 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
+/* Current program highlighting */
+.program-card.current-program {
+  border: 2px solid #0d6efd !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.program-card.current-program::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0d6efd, #6610f2);
+}
+
+.program-card.current-program:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.25);
+}
+
+.program-card.current-program .card-body {
+  position: relative;
+  z-index: 1;
+}
+
+/* Current program badge styling */
+.program-card .badge.bg-primary {
+  background: linear-gradient(45deg, #0d6efd, #6610f2) !important;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.4em 0.8em;
+}
+
+/* Current program star and text styling */
+.program-card .text-warning {
+  filter: drop-shadow(0 1px 2px rgba(255, 193, 7, 0.3));
+}
+
+.program-card .text-primary.fw-bold {
+  font-size: 0.75rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0 1px 2px rgba(13, 110, 253, 0.2);
+}
+
+/* Button styling improvements */
+.program-card .btn-success:disabled {
+  background: linear-gradient(45deg, #28a745, #20c997) !important;
+  border-color: #28a745 !important;
+  opacity: 1 !important;
+  cursor: default;
+}
+
+.program-card .btn-outline-secondary:disabled {
+  color: #6c757d;
+  border-color: #dee2e6;
+  background-color: #f8f9fa;
+  opacity: 0.8;
+  cursor: not-allowed;
+}
+
+/* Hover effects for enabled buttons */
+.program-card .btn-outline-success:not(:disabled):hover {
+  background-color: #28a745;
+  border-color: #28a745;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.25);
+}
+
 /* New styles for program details */
 .progress-circle {
   position: relative;

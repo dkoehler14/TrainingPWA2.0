@@ -42,9 +42,9 @@ function Home() {
         // Get current program
         let currentProgram = null;
         try {
-          const programs = await getUserPrograms(user.id/*, {
+          const programs = await getUserPrograms(user.id, {
             is_current: true
-          }*/);
+          });
           currentProgram = programs.length > 0 ? programs[0] : null;
           console.log("home.js currentProgram: ", currentProgram);
         } catch (programError) {
