@@ -176,8 +176,9 @@ export function useRoles() {
   const getUserRole = () => {
     const roles = getUserRoles()
     
-    // Priority order for primary role: admin > moderator > user
+    // Priority order for primary role: admin > coach > moderator > user
     if (roles.includes('admin')) return 'admin'
+    if (roles.includes('coach')) return 'coach'
     if (roles.includes('moderator')) return 'moderator'
     
     // Return first role or default to 'user'
@@ -201,6 +202,7 @@ export function useRoles() {
   
   const isAdmin = () => hasRole('admin')
   const isModerator = () => hasRole('moderator')
+  const isCoach = () => hasRole('coach')
   const isUser = () => hasRole('user')
   
   return {
@@ -211,6 +213,7 @@ export function useRoles() {
     hasAllRoles,
     isAdmin,
     isModerator,
+    isCoach,
     isUser
   }
 }

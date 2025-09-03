@@ -11,6 +11,11 @@ import { handleSupabaseError } from '../utils/supabaseErrorHandler'
  */
 import { validateUserProfile } from '../utils/userValidation'
 
+/**
+ * Import permission service for role checking
+ */
+// import { hasCoachRole, hasAdminRole } from './permissionService' // Unused for now
+
 
 
 /**
@@ -525,6 +530,180 @@ export const reactivateUserProfile = async (userId) => {
     return data
   } catch (error) {
     console.error('Error reactivating user profile:', error)
+    throw handleSupabaseError(error)
+  }
+}
+/**
+ *
+ Coach Role Management Functions
+ */
+
+/**
+ * Promote user to coach role
+ * @param {string} userId - User ID to promote
+ * @param {Object} coachData - Coach profile data
+ * @returns {Promise<Object>} Updated user profile
+ */
+export const promoteToCoach = async (userId, coachData = {}) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('promote_to_coach', {
+        target_user_id: userId,
+        coach_specializations: coachData.specializations || [],
+        coach_bio: coachData.bio || ''
+      })
+
+    if (error) throw error
+
+    console.log('User promoted to coach:', userId)
+    return await getUserProfile(userId)
+  } catch (error) {
+    console.error('Error promoting user to coach:', error)
+    throw handleSupabaseError(error)
+  }
+}
+
+/**
+ * Demote coach role from user
+ * @param {string} userId - User ID to demote
+ * @returns {Promise<Object>} Updated user profile
+ */
+export const demoteCoach = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('demote_coach', {
+        target_user_id: userId
+      })
+
+    if (error) throw error
+
+    console.log('Coach demoted:', userId)
+    return await getUserProfile(userId)
+  } catch (error) {
+    console.error('Error demoting coach:', error)
+    throw handleSupabaseError(error)
+  }
+}
+
+/**
+ * Add role to user
+ * @param {string} userId - User ID
+ * @param {string} role - Role to add
+ * @returns {Promise<Object>} Updated user profile
+ */
+export const addUserRole = async (userId, role) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('add_user_role', {
+        user_id: userId,
+        new_role: role
+      })
+
+    if (error) throw error
+
+    console.log(`Role '${role}' added to user:`, userId)
+    return await getUserProfile(userId)
+  } catch (error) {
+    console.error(`Error adding role '${role}' to user:`, error)
+    throw handleSupabaseError(error)
+  }
+}
+
+/**
+ * Remove role from user
+ * @param {string} userId - User ID
+ * @param {string} role - Role to remove
+ * @returns {Promise<Object>} Updated user profile
+ */
+export const removeUserRole = async (userId, role) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('remove_user_role', {
+        user_id: userId,
+        old_role: role
+      })
+
+    if (error) throw error
+
+    console.log(`Role '${role}' removed from user:`, userId)
+    return await getUserProfile(userId)
+  } catch (error) {
+    console.error(`Error removing role '${role}' from user:`, error)
+    throw handleSupabaseError(error)
+  }
+}
+
+/**
+ * Check if user has specific role
+ * @param {string} userId - User ID
+ * @param {string} role - Role to check
+ * @returns {Promise<boolean>} True if user has role
+ */
+export const userHasRole = async (userId, role) => {
+  try {
+    const { data, error } = await supabase
+      .rpc('user_has_role', {
+        user_id: userId,
+        check_role: role
+      })
+
+    if (error) throw error
+    return data === true
+  } catch (error) {
+    console.error(`Error checking if user has role '${role}':`, error)
+    return false
+  }
+}
+
+/**
+ * Get all users with coach role
+ * @returns {Promise<Array>} Array of coach users
+ */
+export const getAllCoaches = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        id,
+        name,
+        email,
+        created_at,
+        coach_profiles (
+          specializations,
+          certifications,
+          bio,
+          is_active,
+          client_limit
+        )
+      `)
+      .contains('roles', ['coach'])
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error('Error getting all coaches:', error)
+    throw handleSupabaseError(error)
+  }
+}
+
+/**
+ * Get user's roles
+ * @param {string} userId - User ID
+ * @returns {Promise<Array>} Array of user roles
+ */
+export const getUserRoles = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('roles')
+      .eq('id', userId)
+      .single()
+
+    if (error) throw error
+    return data?.roles || []
+  } catch (error) {
+    console.error('Error getting user roles:', error)
     throw handleSupabaseError(error)
   }
 }

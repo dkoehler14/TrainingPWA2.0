@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
+import { useSimpleNavigationPermissions } from '../hooks/useSimpleRoleCheck';
 import { useTheme } from '../context/ThemeContext';
 import '../styles/NavBar.css';
 
@@ -9,6 +10,9 @@ function NavBar({ user, userRole, isReady }) {
   const { signOut } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const navbarToggleRef = useRef(null);
+
+  // Use simple navigation permissions that don't cause infinite loops
+  const { showAdminNav, showCoachNav, showCreateProgram, showAnalytics } = useSimpleNavigationPermissions();
 
   const handleLogout = async () => {
     try {
@@ -45,13 +49,14 @@ function NavBar({ user, userRole, isReady }) {
             {user && <Nav.Link href="/quick-workout" className="nav-link">Quick Workout</Nav.Link>}
 
             {user && <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>}
-            {user && <Nav.Link href="/progress-tracker" className="nav-link">Analytics</Nav.Link>}
+            {user && showAnalytics && <Nav.Link href="/progress-tracker" className="nav-link">Analytics</Nav.Link>}
             {user && <Nav.Link href="/progress-coach" className="nav-link">Progress & AI Coach</Nav.Link>}
             {/* {user && <Nav.Link href="/analytics" className="nav-link">Analytics</Nav.Link>} */}
             {user && <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>}
-            {user && <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>}
+            {user && showCreateProgram && <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>}
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
-            {isReady && userRole === 'admin' && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
+            {isReady && showCoachNav && <Nav.Link href="/coach-dashboard" className="nav-link">Coach Dashboard</Nav.Link>}
+            {isReady && showAdminNav && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
           </Nav>
           <Nav className="d-flex align-items-center">
             <Button

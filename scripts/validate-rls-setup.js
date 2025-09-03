@@ -8,14 +8,29 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+const path = require('path');
+
+// Parse command line arguments for env file
+const args = process.argv.slice(2);
+const envFileArg = args.find(arg => arg.startsWith('--env='));
+const envFile = envFileArg ? envFileArg.split('=')[1] : '.env';
+
+// Load the specified environment file
+require('dotenv').config({ path: path.resolve(process.cwd(), envFile) });
+
+console.log(`📁 Using environment file: ${envFile}`);
 
 const REQUIRED_TABLES = [
   'users',
   'exercises', 
   'programs',
   'workout_logs',
-  'user_analytics'
+  'user_analytics',
+  // Coach role system tables
+  'coach_profiles',
+  'coach_client_relationships',
+  'client_invitations',
+  'coaching_insights'
 ];
 
 async function validateRLSSetup() {
@@ -24,7 +39,7 @@ async function validateRLSSetup() {
   // Use service role for admin operations
   const supabase = createClient(
     process.env.REACT_APP_SUPABASE_URL,
-    process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY
   );
 
   try {
@@ -80,10 +95,11 @@ async function validateRLSSetup() {
 }
 
 // Check required environment variables
-if (!process.env.REACT_APP_SUPABASE_URL || !process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY) {
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.REACT_APP_SUPABASE_SERVICE_ROLE_KEY;
+if (!process.env.REACT_APP_SUPABASE_URL || !serviceRoleKey) {
   console.error('❌ Missing required environment variables:');
   console.error('   REACT_APP_SUPABASE_URL');
-  console.error('   REACT_APP_SUPABASE_SERVICE_ROLE_KEY');
+  console.error('   SUPABASE_SERVICE_ROLE_KEY or REACT_APP_SUPABASE_SERVICE_ROLE_KEY');
   process.exit(1);
 }
 

@@ -43,10 +43,7 @@ export const AuthProvider = ({ children }) => {
           setIsInitialized(true)
           setAuthLoading(false)
 
-          // Load profile if user exists
-          if (session?.user) {
-            loadUserProfile(session.user)
-          }
+          // Profile will be loaded by the separate useEffect
         }
 
         console.log('✅ Authentication system initialized')
@@ -68,28 +65,19 @@ export const AuthProvider = ({ children }) => {
         console.log('🔄 Auth state changed:', event, session?.user?.email)
 
         if (isMounted) {
-          const currentUserId = authUser?.id
-          const newUserId = session?.user?.id
+          setSession(session)
+          setAuthUser(session?.user ?? null)
 
-          // Only update if there's an actual change in user state
-          if (currentUserId !== newUserId || !isInitialized) {
-            setSession(session)
-            setAuthUser(session?.user ?? null)
+          // Handle different auth events
+          if (event === 'SIGNED_OUT') {
+            console.log('👋 User signed out')
+            setUserProfile(null)
+            setError(null)
+          }
 
-            // Handle different auth events
-            if (event === 'SIGNED_IN' && session?.user) {
-              console.log('👤 User signed in:', session.user.email)
-              loadUserProfile(session.user)
-            } else if (event === 'SIGNED_OUT') {
-              console.log('👋 User signed out')
-              setUserProfile(null)
-              setError(null)
-            }
-
-            if (!isInitialized) {
-              setIsInitialized(true)
-              setAuthLoading(false)
-            }
+          if (!isInitialized) {
+            setIsInitialized(true)
+            setAuthLoading(false)
           }
         }
       }
@@ -99,40 +87,39 @@ export const AuthProvider = ({ children }) => {
       isMounted = false
       subscription.unsubscribe()
     }
-  }, [authUser?.id, isInitialized])
-
-  // Load user profile when auth user changes
-  const loadUserProfile = useCallback(async (user = authUser) => {
-    if (!user) {
-      setUserProfile(null)
-      return
-    }
-
-    // Don't reload profile if we already have it for this user
-    if (userProfile && userProfile.id === user.id) {
-      return
-    }
-
-    setProfileLoading(true)
-    setError(null)
-
-    try {
-      const profile = await getUserProfile(user.id)
-      setUserProfile(profile)
-    } catch (error) {
-      console.error('Error loading user profile:', error)
-      setError(handleSupabaseError(error))
-    } finally {
-      setProfileLoading(false)
-    }
-  }, [authUser, userProfile])
+  }, []) // Remove all dependencies to prevent infinite loop
 
   // Load profile when auth user changes
   useEffect(() => {
-    if (isInitialized) {
-      loadUserProfile()
+    const loadProfile = async () => {
+      if (!authUser) {
+        setUserProfile(null)
+        return
+      }
+
+      // Don't reload if we already have the profile for this user
+      if (userProfile && userProfile.id === authUser.id) {
+        return
+      }
+
+      setProfileLoading(true)
+      setError(null)
+
+      try {
+        const profile = await getUserProfile(authUser.id)
+        setUserProfile(profile)
+      } catch (error) {
+        console.error('Error loading user profile:', error)
+        setError(handleSupabaseError(error))
+      } finally {
+        setProfileLoading(false)
+      }
     }
-  }, [authUser, isInitialized, loadUserProfile])
+
+    if (isInitialized) {
+      loadProfile()
+    }
+  }, [authUser?.id, isInitialized]) // Only depend on user ID and initialization status
 
   // Sign up with email and password
   const signUpWithProfile = async (email, password, profileData = {}) => {
@@ -404,18 +391,19 @@ export const AuthProvider = ({ children }) => {
   const clearError = useCallback(() => setError(null), [])
 
   // Check if user is authenticated (memoized for stability)
-  const isAuthenticated = useMemo(() => !!authUser, [!!authUser])
+  const isAuthenticated = useMemo(() => !!authUser, [authUser])
 
   // Check if user has completed profile
   const hasCompleteProfile = !!(userProfile?.name && userProfile?.experience_level)
 
-  // Get user role (for backwards compatibility)
-  const getUserRole = () => {
+  // Get user role (memoized for stability)
+  const userRole = useMemo(() => {
     // Get roles from userProfile (database) first
     if (userProfile?.roles && Array.isArray(userProfile.roles)) {
       const roles = userProfile.roles
-      // Priority order for primary role: admin > moderator > user
+      // Priority order for primary role: admin > coach > moderator > user
       if (roles.includes('admin')) return 'admin'
+      if (roles.includes('coach')) return 'coach'
       if (roles.includes('moderator')) return 'moderator'
       // Return first role or default to 'user'
       return roles[0] || 'user'
@@ -429,9 +417,7 @@ export const AuthProvider = ({ children }) => {
 
     // Default role
     return 'user'
-  }
-
-  const userRole = useMemo(() => getUserRole(), [authUser?.user_metadata?.role, userProfile?.roles])
+  }, [authUser?.user_metadata?.role, userProfile?.roles])
 
   // Check if profile is loading
   const isProfileLoading = profileLoading
@@ -485,8 +471,7 @@ export const AuthProvider = ({ children }) => {
 
     // Utility methods
     clearError,
-    getSessionInfo,
-    loadUserProfile
+    getSessionInfo
   }
 
   return (

@@ -1633,4 +1633,296 @@ export const getProgramStatistics = async (programId) => {
       avgSetsPerExercise: summary.avg_sets_per_exercise
     }
   }, 'getProgramStatistics')
+}/**
+ * Coa
+ch-Specific Program Functions
+ */
+
+/**
+ * Create a program assigned to a client by a coach
+ * @param {Object} programData - Program data
+ * @param {string} clientId - Client user ID
+ * @param {Object} coachData - Coach assignment data
+ * @returns {Promise<Object>} Created program
+ */
+export const createCoachAssignedProgram = async (programData, clientId, coachData = {}) => {
+  return executeSupabaseOperation(async () => {
+    const assignedProgramData = {
+      ...programData,
+      user_id: clientId, // Program belongs to client
+      coach_assigned: true,
+      assigned_to_client: clientId,
+      assigned_at: new Date().toISOString(),
+      coach_notes: coachData.notes || null,
+      client_goals: coachData.goals || [],
+      expected_duration_weeks: coachData.expectedDurationWeeks || null,
+      program_difficulty: coachData.difficulty || null,
+      visibility: 'coach_only'
+    }
+
+    const { data, error } = await supabase
+      .from('programs')
+      .insert([assignedProgramData])
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Invalidate cache for both coach and client
+    invalidateProgramCache(programData.user_id) // Coach's cache
+    invalidateProgramCache(clientId) // Client's cache
+
+    console.log('Coach-assigned program created:', data.name, 'for client:', clientId)
+    return data
+  }, 'createCoachAssignedProgram')
+}
+
+/**
+ * Get programs assigned by a coach to their clients
+ * @param {string} coachId - Coach user ID
+ * @param {Object} filters - Optional filters
+ * @returns {Promise<Array>} Array of coach-assigned programs
+ */
+export const getCoachAssignedPrograms = async (coachId, filters = {}) => {
+  return executeSupabaseOperation(async () => {
+    let query = supabase
+      .from('programs')
+      .select(`
+        *,
+        client:users!assigned_to_client(
+          id,
+          name,
+          email
+        )
+      `)
+      .eq('user_id', coachId)
+      .eq('coach_assigned', true)
+      .order('assigned_at', { ascending: false })
+
+    if (filters.clientId) {
+      query = query.eq('assigned_to_client', filters.clientId)
+    }
+
+    if (filters.isActive !== undefined) {
+      query = query.eq('is_active', filters.isActive)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+    return data || []
+  }, 'getCoachAssignedPrograms')
+}
+
+/**
+ * Get programs assigned to a client by their coach
+ * @param {string} clientId - Client user ID
+ * @param {string} coachId - Optional coach ID filter
+ * @returns {Promise<Array>} Array of programs assigned to client
+ */
+export const getClientAssignedPrograms = async (clientId, coachId = null) => {
+  return executeSupabaseOperation(async () => {
+    let query = supabase
+      .from('programs')
+      .select(`
+        *,
+        coach:users!user_id(
+          id,
+          name,
+          email
+        )
+      `)
+      .eq('assigned_to_client', clientId)
+      .eq('coach_assigned', true)
+      .order('assigned_at', { ascending: false })
+
+    if (coachId) {
+      query = query.eq('user_id', coachId)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+    return data || []
+  }, 'getClientAssignedPrograms')
+}
+
+/**
+ * Update coach assignment details for a program
+ * @param {string} programId - Program ID
+ * @param {Object} updates - Coach assignment updates
+ * @returns {Promise<Object>} Updated program
+ */
+export const updateCoachAssignment = async (programId, updates) => {
+  return executeSupabaseOperation(async () => {
+    const updateData = {
+      coach_notes: updates.notes,
+      client_goals: updates.goals,
+      expected_duration_weeks: updates.expectedDurationWeeks,
+      program_difficulty: updates.difficulty,
+      updated_at: new Date().toISOString()
+    }
+
+    // Remove undefined values
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key]
+      }
+    })
+
+    const { data, error } = await supabase
+      .from('programs')
+      .update(updateData)
+      .eq('id', programId)
+      .eq('coach_assigned', true)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Invalidate cache for both coach and client
+    invalidateProgramCache(data.user_id) // Coach's cache
+    if (data.assigned_to_client) {
+      invalidateProgramCache(data.assigned_to_client) // Client's cache
+    }
+
+    console.log('Coach assignment updated for program:', data.name)
+    return data
+  }, 'updateCoachAssignment')
+}
+
+/**
+ * Unassign a program from a client (remove coach assignment)
+ * @param {string} programId - Program ID
+ * @returns {Promise<Object>} Updated program
+ */
+export const unassignProgram = async (programId) => {
+  return executeSupabaseOperation(async () => {
+    const { data, error } = await supabase
+      .from('programs')
+      .update({
+        coach_assigned: false,
+        assigned_to_client: null,
+        assigned_at: null,
+        coach_notes: null,
+        client_goals: [],
+        visibility: 'private',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', programId)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    // Invalidate cache for coach
+    invalidateProgramCache(data.user_id)
+
+    console.log('Program unassigned:', data.name)
+    return data
+  }, 'unassignProgram')
+}
+
+/**
+ * Get programs accessible by a coach for a specific client
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @returns {Promise<Array>} Array of accessible programs
+ */
+export const getCoachAccessiblePrograms = async (coachId, clientId) => {
+  return executeSupabaseOperation(async () => {
+    // Get programs created by the client that the coach can view
+    const { data: clientPrograms, error: clientError } = await supabase
+      .from('programs')
+      .select('*')
+      .eq('user_id', clientId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+
+    if (clientError) throw clientError
+
+    // Get programs assigned by this coach to this client
+    const { data: assignedPrograms, error: assignedError } = await supabase
+      .from('programs')
+      .select('*')
+      .eq('user_id', coachId)
+      .eq('assigned_to_client', clientId)
+      .eq('coach_assigned', true)
+      .order('assigned_at', { ascending: false })
+
+    if (assignedError) throw assignedError
+
+    return {
+      clientPrograms: clientPrograms || [],
+      assignedPrograms: assignedPrograms || []
+    }
+  }, 'getCoachAccessiblePrograms')
+}
+
+/**
+ * Copy a program and assign it to a client
+ * @param {string} sourceProgramId - Source program ID to copy
+ * @param {string} clientId - Client to assign the copied program to
+ * @param {Object} coachData - Coach assignment data
+ * @returns {Promise<Object>} Copied and assigned program
+ */
+export const copyAndAssignProgram = async (sourceProgramId, clientId, coachData = {}) => {
+  return executeSupabaseOperation(async () => {
+    // First copy the program
+    const newProgramData = {
+      name: coachData.name || `Assigned Program - ${new Date().toLocaleDateString()}`,
+      description: coachData.description || 'Program assigned by coach',
+      is_template: false,
+      is_active: true,
+      coach_assigned: true,
+      assigned_to_client: clientId,
+      assigned_at: new Date().toISOString(),
+      coach_notes: coachData.notes || null,
+      client_goals: coachData.goals || [],
+      expected_duration_weeks: coachData.expectedDurationWeeks || null,
+      program_difficulty: coachData.difficulty || null,
+      visibility: 'coach_only'
+    }
+
+    const copiedProgram = await copyProgram(sourceProgramId, newProgramData, coachData.coachId)
+
+    console.log('Program copied and assigned:', copiedProgram.name, 'to client:', clientId)
+    return copiedProgram
+  }, 'copyAndAssignProgram')
+}
+
+/**
+ * Get program assignment statistics for a coach
+ * @param {string} coachId - Coach user ID
+ * @returns {Promise<Object>} Assignment statistics
+ */
+export const getCoachProgramStats = async (coachId) => {
+  return executeSupabaseOperation(async () => {
+    const { data: assignedPrograms, error } = await supabase
+      .from('programs')
+      .select('id, assigned_to_client, is_active, assigned_at')
+      .eq('user_id', coachId)
+      .eq('coach_assigned', true)
+
+    if (error) throw error
+
+    const programs = assignedPrograms || []
+    const totalAssigned = programs.length
+    const activeAssignments = programs.filter(p => p.is_active).length
+    const uniqueClients = new Set(programs.map(p => p.assigned_to_client)).size
+
+    // Get recent assignments (last 30 days)
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const recentAssignments = programs.filter(p => 
+      new Date(p.assigned_at) > thirtyDaysAgo
+    ).length
+
+    return {
+      totalAssigned,
+      activeAssignments,
+      uniqueClients,
+      recentAssignments
+    }
+  }, 'getCoachProgramStats')
 }

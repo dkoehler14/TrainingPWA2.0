@@ -3942,4 +3942,463 @@ class WorkoutLogService {
 
 // Export singleton instance
 const workoutLogService = new WorkoutLogService()
-export default workoutLogService
+export default workoutLogService/**
+
+ * Coach Access Functions for Workout Logs
+ */
+
+/**
+ * Get workout logs for a client (coach access)
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @param {Object} options - Query options
+ * @returns {Promise<Array>} Array of client workout logs
+ */
+export const getClientWorkoutLogs = async (coachId, clientId, options = {}) => {
+  return withSupabaseErrorHandling(async () => {
+    // First verify coach has permission to access client data
+    const { canAccessClientData } = await import('./permissionService')
+    const hasAccess = await canAccessClientData(coachId, clientId, 'workouts')
+    
+    if (!hasAccess) {
+      throw new Error('Permission denied: Cannot access client workout data')
+    }
+
+    const {
+      startDate,
+      endDate,
+      limit = 50,
+      includeDrafts = false,
+      programId = null
+    } = options
+
+    let query = supabase
+      .from('workout_logs')
+      .select(`
+        *,
+        workout_log_exercises (
+          *,
+          exercises (
+            id,
+            name,
+            primary_muscle_group,
+            exercise_type
+          )
+        )
+      `)
+      .eq('user_id', clientId)
+
+    if (!includeDrafts) {
+      query = query.eq('is_finished', true)
+    }
+
+    if (programId) {
+      query = query.eq('program_id', programId)
+    }
+
+    if (startDate) {
+      query = query.gte('date', startDate)
+    }
+
+    if (endDate) {
+      query = query.lte('date', endDate)
+    }
+
+    query = query.order('date', { ascending: false }).limit(limit)
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    return data || []
+  }, 'getClientWorkoutLogs')
+}
+
+/**
+ * Get client workout statistics for coach
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @param {string} timeframe - Time period ('7d', '30d', '90d', '1y')
+ * @returns {Promise<Object>} Client workout statistics
+ */
+export const getClientWorkoutStats = async (coachId, clientId, timeframe = '30d') => {
+  return withSupabaseErrorHandling(async () => {
+    // Verify coach has permission to access client analytics
+    const { canAccessClientData } = await import('./permissionService')
+    const hasAccess = await canAccessClientData(coachId, clientId, 'analytics')
+    
+    if (!hasAccess) {
+      throw new Error('Permission denied: Cannot access client analytics data')
+    }
+
+    const startDate = new Date()
+
+    switch (timeframe) {
+      case '7d':
+        startDate.setDate(startDate.getDate() - 7)
+        break
+      case '30d':
+        startDate.setDate(startDate.getDate() - 30)
+        break
+      case '90d':
+        startDate.setDate(startDate.getDate() - 90)
+        break
+      case '1y':
+        startDate.setFullYear(startDate.getFullYear() - 1)
+        break
+      default:
+        startDate.setDate(startDate.getDate() - 30)
+    }
+
+    const { data, error } = await supabase
+      .from('workout_logs')
+      .select(`
+        id,
+        completed_date,
+        duration,
+        workout_log_exercises (
+          sets,
+          reps,
+          weights,
+          completed,
+          bodyweight,
+          exercises (
+            primary_muscle_group,
+            exercise_type
+          )
+        )
+      `)
+      .eq('user_id', clientId)
+      .eq('is_finished', true)
+      .gte('completed_date', startDate.toISOString())
+      .order('completed_date', { ascending: false })
+
+    if (error) throw error
+
+    // Calculate statistics (same logic as getWorkoutStats but for client)
+    let totalWorkouts = data.length
+    let totalVolume = 0
+    let totalSets = 0
+    let totalReps = 0
+    let muscleGroupBreakdown = {}
+
+    data.forEach(workout => {
+      workout.workout_log_exercises.forEach(exercise => {
+        const muscleGroup = exercise.exercises.primary_muscle_group
+
+        if (!muscleGroupBreakdown[muscleGroup]) {
+          muscleGroupBreakdown[muscleGroup] = { volume: 0, sets: 0 }
+        }
+
+        exercise.completed.forEach((isCompleted, setIndex) => {
+          if (isCompleted) {
+            const weight = exercise.weights[setIndex] && exercise.weights[setIndex] !== '' ? Number(exercise.weights[setIndex]) : 0
+            const reps = exercise.reps[setIndex] && exercise.reps[setIndex] !== '' ? Number(exercise.reps[setIndex]) : 0
+            const bodyweight = exercise.bodyweight && exercise.bodyweight !== '' ? Number(exercise.bodyweight) : 0
+
+            const validWeight = isNaN(weight) ? 0 : weight
+            const validReps = isNaN(reps) ? 0 : reps
+            const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+            let effectiveWeight = validWeight
+            if (exercise.exercises.exercise_type === 'Bodyweight') {
+              effectiveWeight = validBodyweight
+            } else if (exercise.exercises.exercise_type === 'Bodyweight Loadable') {
+              effectiveWeight = validBodyweight + validWeight
+            }
+
+            const volume = effectiveWeight * validReps
+            totalVolume += volume
+            totalSets += 1
+            totalReps += validReps
+
+            muscleGroupBreakdown[muscleGroup].volume += volume
+            muscleGroupBreakdown[muscleGroup].sets += 1
+          }
+        })
+      })
+    })
+
+    return {
+      clientId,
+      timeframe,
+      totalWorkouts,
+      totalVolume,
+      totalSets,
+      totalReps,
+      averageWorkoutsPerWeek: totalWorkouts / (timeframe === '7d' ? 1 : timeframe === '30d' ? 4.3 : timeframe === '90d' ? 12.9 : 52),
+      muscleGroupBreakdown
+    }
+  }, 'getClientWorkoutStats')
+}
+
+/**
+ * Get client exercise history for coach
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @param {string} exerciseId - Exercise ID
+ * @param {number} limit - Number of records to return
+ * @returns {Promise<Array>} Client exercise history
+ */
+export const getClientExerciseHistory = async (coachId, clientId, exerciseId, limit = 50) => {
+  return withSupabaseErrorHandling(async () => {
+    // Verify coach has permission to access client workout data
+    const { canAccessClientData } = await import('./permissionService')
+    const hasAccess = await canAccessClientData(coachId, clientId, 'workouts')
+    
+    if (!hasAccess) {
+      throw new Error('Permission denied: Cannot access client workout data')
+    }
+
+    const { data, error } = await supabase
+      .from('workout_log_exercises')
+      .select(`
+        *,
+        workout_logs!inner (
+          id,
+          user_id,
+          completed_date,
+          week_index,
+          day_index,
+          is_finished
+        ),
+        exercises (
+          id,
+          name,
+          primary_muscle_group,
+          exercise_type
+        )
+      `)
+      .eq('exercise_id', exerciseId)
+      .eq('workout_logs.user_id', clientId)
+      .eq('workout_logs.is_finished', true)
+      .order('workout_logs(completed_date)', { ascending: false })
+      .limit(limit)
+
+    if (error) throw error
+
+    // Transform data to match expected format (same as getExerciseHistory)
+    const historyData = []
+
+    data.forEach(logExercise => {
+      const workout = logExercise.workout_logs
+      const exercise = logExercise.exercises
+
+      for (let setIndex = 0; setIndex < logExercise.sets; setIndex++) {
+        if (logExercise.completed && logExercise.completed[setIndex]) {
+          const weight = logExercise.weights[setIndex] && logExercise.weights[setIndex] !== '' ? Number(logExercise.weights[setIndex]) : 0
+          const reps = logExercise.reps[setIndex] && logExercise.reps[setIndex] !== '' ? Number(logExercise.reps[setIndex]) : 0
+          const bodyweight = logExercise.bodyweight && logExercise.bodyweight !== '' ? Number(logExercise.bodyweight) : 0
+
+          const validWeight = isNaN(weight) ? 0 : weight
+          const validReps = isNaN(reps) ? 0 : reps
+          const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+          let totalWeight = validWeight
+          let displayWeight = validWeight
+
+          if (exercise.exercise_type === 'Bodyweight') {
+            totalWeight = validBodyweight
+            displayWeight = validBodyweight
+          } else if (exercise.exercise_type === 'Bodyweight Loadable' && validBodyweight > 0) {
+            totalWeight = validBodyweight + validWeight
+            displayWeight = `${validBodyweight} + ${validWeight} = ${totalWeight}`
+          }
+
+          historyData.push({
+            date: new Date(workout.completed_date),
+            week: (workout.week_index || 0) + 1,
+            day: (workout.day_index || 0) + 1,
+            set: setIndex + 1,
+            weight: validWeight,
+            totalWeight: totalWeight,
+            displayWeight: displayWeight,
+            reps: validReps,
+            completed: true,
+            bodyweight: validBodyweight,
+            exerciseType: exercise.exercise_type
+          })
+        }
+      }
+    })
+
+    return historyData
+  }, 'getClientExerciseHistory')
+}
+
+/**
+ * Get client analytics for coach
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @param {string} exerciseId - Optional exercise ID filter
+ * @returns {Promise<Array>} Client analytics data
+ */
+export const getClientAnalytics = async (coachId, clientId, exerciseId = null) => {
+  return withSupabaseErrorHandling(async () => {
+    // Verify coach has permission to access client analytics
+    const { canAccessClientData } = await import('./permissionService')
+    const hasAccess = await canAccessClientData(coachId, clientId, 'analytics')
+    
+    if (!hasAccess) {
+      throw new Error('Permission denied: Cannot access client analytics data')
+    }
+
+    let query = supabase
+      .from('user_analytics')
+      .select(`
+        *,
+        exercises (
+          id,
+          name,
+          primary_muscle_group,
+          exercise_type
+        )
+      `)
+      .eq('user_id', clientId)
+
+    if (exerciseId) {
+      query = query.eq('exercise_id', exerciseId)
+    }
+
+    const { data, error } = await query.order('last_workout_date', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  }, 'getClientAnalytics')
+}
+
+/**
+ * Get workout progress comparison for coach
+ * @param {string} coachId - Coach user ID
+ * @param {string} clientId - Client user ID
+ * @param {Object} options - Comparison options
+ * @returns {Promise<Object>} Progress comparison data
+ */
+export const getClientProgressComparison = async (coachId, clientId, options = {}) => {
+  return withSupabaseErrorHandling(async () => {
+    // Verify coach has permission to access client progress data
+    const { canAccessClientData } = await import('./permissionService')
+    const hasAccess = await canAccessClientData(coachId, clientId, 'progress')
+    
+    if (!hasAccess) {
+      throw new Error('Permission denied: Cannot access client progress data')
+    }
+
+    const {
+      exerciseId,
+      timeframe = '90d',
+      compareType = 'volume' // 'volume', 'max_weight', 'total_reps'
+    } = options
+
+    const endDate = new Date()
+    const startDate = new Date()
+
+    switch (timeframe) {
+      case '30d':
+        startDate.setDate(startDate.getDate() - 30)
+        break
+      case '90d':
+        startDate.setDate(startDate.getDate() - 90)
+        break
+      case '6m':
+        startDate.setMonth(startDate.getMonth() - 6)
+        break
+      case '1y':
+        startDate.setFullYear(startDate.getFullYear() - 1)
+        break
+      default:
+        startDate.setDate(startDate.getDate() - 90)
+    }
+
+    let query = supabase
+      .from('workout_log_exercises')
+      .select(`
+        *,
+        workout_logs!inner (
+          completed_date,
+          is_finished
+        ),
+        exercises (
+          name,
+          primary_muscle_group,
+          exercise_type
+        )
+      `)
+      .eq('workout_logs.user_id', clientId)
+      .eq('workout_logs.is_finished', true)
+      .gte('workout_logs.completed_date', startDate.toISOString())
+      .lte('workout_logs.completed_date', endDate.toISOString())
+
+    if (exerciseId) {
+      query = query.eq('exercise_id', exerciseId)
+    }
+
+    query = query.order('workout_logs(completed_date)', { ascending: true })
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    // Process data for progress comparison
+    const progressData = []
+    const exerciseProgress = {}
+
+    data.forEach(logExercise => {
+      const exerciseId = logExercise.exercise_id
+      const exerciseName = logExercise.exercises.name
+      const date = logExercise.workout_logs.completed_date
+
+      if (!exerciseProgress[exerciseId]) {
+        exerciseProgress[exerciseId] = {
+          name: exerciseName,
+          data: []
+        }
+      }
+
+      // Calculate metrics for this workout
+      let totalVolume = 0
+      let maxWeight = 0
+      let totalReps = 0
+
+      logExercise.completed.forEach((isCompleted, setIndex) => {
+        if (isCompleted) {
+          const weight = logExercise.weights[setIndex] && logExercise.weights[setIndex] !== '' ? Number(logExercise.weights[setIndex]) : 0
+          const reps = logExercise.reps[setIndex] && logExercise.reps[setIndex] !== '' ? Number(logExercise.reps[setIndex]) : 0
+          const bodyweight = logExercise.bodyweight && logExercise.bodyweight !== '' ? Number(logExercise.bodyweight) : 0
+
+          const validWeight = isNaN(weight) ? 0 : weight
+          const validReps = isNaN(reps) ? 0 : reps
+          const validBodyweight = isNaN(bodyweight) ? 0 : bodyweight
+
+          let effectiveWeight = validWeight
+          if (logExercise.exercises.exercise_type === 'Bodyweight') {
+            effectiveWeight = validBodyweight
+          } else if (logExercise.exercises.exercise_type === 'Bodyweight Loadable') {
+            effectiveWeight = validBodyweight + validWeight
+          }
+
+          totalVolume += effectiveWeight * validReps
+          maxWeight = Math.max(maxWeight, effectiveWeight)
+          totalReps += validReps
+        }
+      })
+
+      exerciseProgress[exerciseId].data.push({
+        date,
+        totalVolume,
+        maxWeight,
+        totalReps
+      })
+    })
+
+    return {
+      clientId,
+      timeframe,
+      compareType,
+      exerciseProgress
+    }
+  }, 'getClientProgressComparison')
+}
+
+// Coach access functions are already exported individually above
+// No need for additional export block since they use 'export const'

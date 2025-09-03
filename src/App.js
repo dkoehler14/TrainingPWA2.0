@@ -16,7 +16,9 @@ import ProgressTracker3 from './pages/Progress3';
 import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
+import CoachDashboard from './pages/CoachDashboard';
 import CacheDemo from './components/CacheDemo';
+import { CoachRoute, AdminRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { Spinner } from 'react-bootstrap';
@@ -163,34 +165,16 @@ function AppContent() {
         <Route path="/progress-tracker-3" element={user ? <ProgressTracker3 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
-        <Route path="/admin" element={(() => {
-          // If not authenticated, redirect to auth
-          if (!user) {
-            return <Navigate to="/auth" />;
-          }
-
-          // If authenticated but profile not loaded yet, show loading
-          if (!userProfile) {
-            return (
-              <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
-                <div className="text-center">
-                  <div className="spinner-border text-primary" role="status">
-                    <span className="visually-hidden">Loading...</span>
-                  </div>
-                  <p className="mt-2">Loading user profile...</p>
-                </div>
-              </div>
-            );
-          }
-
-          // Now we can safely check the role since profile is loaded
-          if (userRole !== 'admin') {
-            return <Navigate to="/" />;
-          }
-
-          // All checks passed, show admin page
-          return <Admin />;
-        })()} />
+        <Route path="/coach-dashboard" element={
+          <CoachRoute>
+            <CoachDashboard />
+          </CoachRoute>
+        } />
+        <Route path="/admin" element={
+          <AdminRoute>
+            <Admin />
+          </AdminRoute>
+        } />
         <Route path="/cache-demo" element={(() => {
           // If not authenticated, redirect to auth
           if (!user) {
