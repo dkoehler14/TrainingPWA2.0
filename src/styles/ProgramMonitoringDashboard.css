@@ -1,0 +1,279 @@
+/* Program Monitoring Dashboard Styles */
+
+.program-monitoring-dashboard {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Progress bars */
+.program-monitoring-dashboard .progress {
+  height: 8px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+.program-monitoring-dashboard .progress-bar {
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Metric cards */
+.program-monitoring-dashboard .metric-card {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.program-monitoring-dashboard .metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.program-monitoring-dashboard .metric-card .card-body {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.program-monitoring-dashboard .metric-card h4 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.program-monitoring-dashboard .metric-card small {
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Weekly progress cards */
+.program-monitoring-dashboard .weekly-progress-card {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.program-monitoring-dashboard .weekly-progress-card:hover {
+  border-color: #007bff;
+}
+
+.program-monitoring-dashboard .weekly-progress-card .card-body {
+  padding: 0.75rem;
+}
+
+/* Exercise progress table */
+.program-monitoring-dashboard .table {
+  margin-bottom: 0;
+}
+
+.program-monitoring-dashboard .table th {
+  border-top: none;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 0.75rem 0.5rem;
+}
+
+.program-monitoring-dashboard .table td {
+  padding: 0.75rem 0.5rem;
+  vertical-align: middle;
+  border-top: 1px solid #f8f9fa;
+}
+
+.program-monitoring-dashboard .table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Badge styles */
+.program-monitoring-dashboard .badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+}
+
+/* Alert styles for insights */
+.program-monitoring-dashboard .alert {
+  border: none;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.program-monitoring-dashboard .alert-success {
+  background-color: #d1f2eb;
+  color: #0c5460;
+}
+
+.program-monitoring-dashboard .alert-warning {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.program-monitoring-dashboard .alert-danger {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.program-monitoring-dashboard .alert-info {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+/* List group styles */
+.program-monitoring-dashboard .list-group-item {
+  border: none;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f8f9fa;
+}
+
+.program-monitoring-dashboard .list-group-item:last-child {
+  border-bottom: none;
+}
+
+.program-monitoring-dashboard .list-group-item:hover {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+/* Spinner styles */
+.program-monitoring-dashboard .spinner-border {
+  width: 2rem;
+  height: 2rem;
+  border-width: 0.2em;
+}
+
+/* Card header styles */
+.program-monitoring-dashboard .card-header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem 1.25rem;
+  border-radius: 12px 12px 0 0;
+}
+
+.program-monitoring-dashboard .card-header h5 {
+  margin-bottom: 0;
+  font-weight: 600;
+  color: #495057;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .program-monitoring-dashboard .metric-card h4 {
+    font-size: 1.5rem;
+  }
+  
+  .program-monitoring-dashboard .metric-card small {
+    font-size: 0.75rem;
+  }
+  
+  .program-monitoring-dashboard .table-responsive {
+    font-size: 0.875rem;
+  }
+  
+  .program-monitoring-dashboard .weekly-progress-card .card-body {
+    padding: 0.5rem;
+  }
+}
+
+/* Loading state */
+.program-monitoring-dashboard .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: #6c757d;
+}
+
+.program-monitoring-dashboard .loading-state .spinner-border {
+  margin-bottom: 1rem;
+}
+
+/* Empty state */
+.program-monitoring-dashboard .empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #6c757d;
+}
+
+.program-monitoring-dashboard .empty-state h6 {
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+/* Effectiveness score styling */
+.program-monitoring-dashboard .effectiveness-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: white;
+}
+
+.program-monitoring-dashboard .effectiveness-score.success {
+  background-color: #28a745;
+}
+
+.program-monitoring-dashboard .effectiveness-score.info {
+  background-color: #17a2b8;
+}
+
+.program-monitoring-dashboard .effectiveness-score.warning {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.program-monitoring-dashboard .effectiveness-score.danger {
+  background-color: #dc3545;
+}
+
+/* Animation for progress bars */
+@keyframes progressAnimation {
+  from {
+    width: 0%;
+  }
+}
+
+.program-monitoring-dashboard .progress-bar {
+  animation: progressAnimation 1s ease-out;
+}
+
+/* Hover effects for interactive elements */
+.program-monitoring-dashboard .btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.program-monitoring-dashboard .card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Focus states for accessibility */
+.program-monitoring-dashboard .btn:focus,
+.program-monitoring-dashboard .form-select:focus {
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  border-color: #80bdff;
+}
+
+/* Print styles */
+@media print {
+  .program-monitoring-dashboard .btn,
+  .program-monitoring-dashboard .card-header .btn {
+    display: none;
+  }
+  
+  .program-monitoring-dashboard .card {
+    box-shadow: none;
+    border: 1px solid #dee2e6;
+  }
+}

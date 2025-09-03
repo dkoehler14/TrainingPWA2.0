@@ -77,6 +77,29 @@
   overflow: hidden;
 }
 
+/* Coach-assigned program highlighting */
+.program-card.border-success {
+  border: 2px solid #198754 !important;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fff8 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.program-card.border-success::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #198754, #20c997);
+}
+
+.program-card.border-success:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(25, 135, 84, 0.25);
+}
+
 .program-card.current-program::before {
   content: '';
   position: absolute;
@@ -100,6 +123,39 @@
 /* Current program badge styling */
 .program-card .badge.bg-primary {
   background: linear-gradient(45deg, #0d6efd, #6610f2) !important;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.4em 0.8em;
+}
+
+/* Coach assigned badge styling */
+.program-card .badge.bg-success {
+  background: linear-gradient(45deg, #198754, #20c997) !important;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.4em 0.8em;
+}
+
+/* Personal program badge styling */
+.program-card .badge.bg-info {
+  background: linear-gradient(45deg, #0dcaf0, #6f42c1) !important;
+  border: none;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.4em 0.8em;
+}
+
+/* Template program badge styling */
+.program-card .badge.bg-secondary {
+  background: linear-gradient(45deg, #6c757d, #495057) !important;
   border: none;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -212,6 +268,35 @@
 .nav-tabs .nav-link:hover {
   border-color: transparent;
   color: #0d6efd;
+}
+
+/* Program view tabs styling */
+.programs-container .nav-tabs {
+  border-bottom: 2px solid #dee2e6;
+  margin-bottom: 1.5rem;
+}
+
+.programs-container .nav-tabs .nav-link {
+  border: none;
+  color: #6c757d;
+  padding: 0.75rem 1.25rem;
+  margin-right: 0.5rem;
+  font-weight: 500;
+  background: none;
+  border-radius: 0;
+  transition: all 0.2s ease;
+}
+
+.programs-container .nav-tabs .nav-link.active {
+  color: #0d6efd;
+  background-color: transparent;
+  border-bottom: 3px solid #0d6efd;
+  font-weight: 600;
+}
+
+.programs-container .nav-tabs .nav-link:hover:not(.active) {
+  color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.05);
 }
 
 .table th {

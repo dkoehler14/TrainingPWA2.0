@@ -1,0 +1,103 @@
+/* Program Assignment Modal Styles */
+
+.program-assignment-modal .modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-bottom: none;
+}
+
+.program-assignment-modal .modal-header .btn-close {
+  filter: invert(1);
+}
+
+.program-assignment-modal .assignment-summary {
+  background: #f8f9fa;
+  border-left: 4px solid #007bff;
+  padding: 1rem;
+  border-radius: 0.375rem;
+}
+
+.program-assignment-modal .assignment-summary h6 {
+  color: #495057;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.program-assignment-modal .goal-badge {
+  background: #007bff;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  margin: 0.125rem;
+}
+
+.program-assignment-modal .goal-badge .btn-close {
+  font-size: 0.7em;
+  margin-left: 0.25rem;
+}
+
+.program-assignment-modal .form-label {
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.5rem;
+}
+
+.program-assignment-modal .form-control:focus,
+.program-assignment-modal .form-select:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.program-assignment-modal .alert-info {
+  background-color: #e7f3ff;
+  border-color: #b3d9ff;
+  color: #004085;
+}
+
+.program-assignment-modal .alert-info ul {
+  padding-left: 1.25rem;
+}
+
+.program-assignment-modal .alert-info li {
+  margin-bottom: 0.25rem;
+}
+
+.program-assignment-modal .btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  transition: all 0.2s ease;
+}
+
+.program-assignment-modal .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.program-assignment-modal .btn-primary:disabled {
+  background: #6c757d;
+  transform: none;
+  box-shadow: none;
+}
+
+.program-assignment-modal .spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .program-assignment-modal .modal-dialog {
+    margin: 0.5rem;
+  }
+  
+  .program-assignment-modal .assignment-summary .row {
+    flex-direction: column;
+  }
+  
+  .program-assignment-modal .assignment-summary .col-md-6:first-child {
+    margin-bottom: 1rem;
+  }
+}

@@ -8,6 +8,7 @@ import {
   Alert
 } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
+import { useRealtimeInsights } from '../hooks/useRealtimeInsights';
 import { 
   getUserNotifications, 
   getUnreadNotificationCount,
@@ -34,6 +35,17 @@ function NotificationBell() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isOpen, setIsOpen] = useState(false);
+
+  // Get real-time insight notifications
+  const { 
+    unreadCount: insightUnreadCount, 
+    isConnected: insightConnected 
+  } = useRealtimeInsights({
+    enableNotifications: true
+  });
+
+  // Total unread count includes both notifications and insights
+  const totalUnreadCount = unreadCount + insightUnreadCount;
 
   // Load notifications and unread count
   const loadNotifications = async () => {
@@ -191,23 +203,37 @@ function NotificationBell() {
         style={{ border: 'none', background: 'none' }}
       >
         🔔
-        {unreadCount > 0 && (
+        {totalUnreadCount > 0 && (
           <Badge 
             bg="danger" 
             pill 
             className="position-absolute top-0 start-100 translate-middle"
             style={{ fontSize: '0.7rem' }}
           >
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {totalUnreadCount > 99 ? '99+' : totalUnreadCount}
           </Badge>
+        )}
+        {insightConnected && (
+          <span 
+            className="position-absolute bottom-0 end-0 bg-success rounded-circle"
+            style={{ width: '8px', height: '8px' }}
+            title="Real-time notifications active"
+          />
         )}
       </Dropdown.Toggle>
 
       <Dropdown.Menu style={{ width: '350px', maxHeight: '500px', overflowY: 'auto' }}>
         <div className="px-3 py-2 border-bottom">
           <div className="d-flex justify-content-between align-items-center">
-            <h6 className="mb-0">Notifications</h6>
-            {unreadCount > 0 && (
+            <div>
+              <h6 className="mb-0">Notifications</h6>
+              {insightUnreadCount > 0 && (
+                <Badge bg="warning" className="mt-1">
+                  {insightUnreadCount} new insight{insightUnreadCount > 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
+            {totalUnreadCount > 0 && (
               <Button 
                 variant="link" 
                 size="sm" 
@@ -220,6 +246,35 @@ function NotificationBell() {
           </div>
         </div>
 
+        {/* Insight notifications section */}
+        {insightUnreadCount > 0 && (
+          <>
+            <ListGroup.Item
+              action
+              onClick={() => {
+                navigate('/my-coach?tab=insights');
+                setIsOpen(false);
+              }}
+              className="bg-light border-0"
+              style={{ cursor: 'pointer' }}
+            >
+              <div className="d-flex align-items-center">
+                <div className="me-2 fs-5">💡</div>
+                <div className="flex-grow-1">
+                  <div className="fw-bold text-primary">
+                    {insightUnreadCount} New Coaching Insight{insightUnreadCount > 1 ? 's' : ''}
+                  </div>
+                  <small className="text-muted">
+                    Click to view all insights from your coach
+                  </small>
+                </div>
+                <small className="text-primary">View →</small>
+              </div>
+            </ListGroup.Item>
+            <div className="border-bottom mx-3"></div>
+          </>
+        )}
+
         {error && (
           <Alert variant="danger" className="m-2 mb-0">
             {error}
@@ -231,7 +286,7 @@ function NotificationBell() {
             <Spinner animation="border" size="sm" />
             <div className="mt-2 text-muted">Loading notifications...</div>
           </div>
-        ) : notifications.length === 0 ? (
+        ) : notifications.length === 0 && insightUnreadCount === 0 ? (
           <div className="text-center py-4 text-muted">
             <div>🔔</div>
             <div className="mt-2">No notifications</div>
@@ -296,7 +351,7 @@ function NotificationBell() {
           </ListGroup>
         )}
 
-        {notifications.length > 0 && (
+        {(notifications.length > 0 || insightUnreadCount > 0) && (
           <div className="px-3 py-2 border-top text-center">
             <Button 
               variant="link" 

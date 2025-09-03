@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Button, Spinner, Badge, Table } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Spinner, Badge, Table, Alert } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useAuth, useRoles } from '../hooks/useAuth';
 import { useIsCoach } from '../hooks/useRoleChecking';
@@ -16,14 +16,29 @@ import {
   getCoachInvitations, 
   getCoachProfile 
 } from '../services/coachService';
+import { useCoachAnalyticsDashboard } from '../hooks/useProgramMonitoring';
+import { useRealtimeCoachDashboard } from '../hooks/useRealtimeCoaching';
+import ProgramMonitoringDashboard from '../components/ProgramMonitoringDashboard';
+import RealtimeActivityFeed from '../components/RealtimeActivityFeed';
+import RealtimeStatusIndicator from '../components/RealtimeStatusIndicator';
 import ErrorMessage from '../components/ErrorMessage';
 import '../styles/Home.css';
 import '../styles/CoachDashboard.css';
+import '../styles/RealtimeComponents.css';
 
 function CoachDashboard() {
   const { user, userProfile } = useAuth();
   const { isCoach: isCoachRole } = useRoles();
   const { hasRole: isCoachVerified, isChecking: isVerifyingRole } = useIsCoach();
+  
+  // Program monitoring hook
+  const {
+    getSummaryStats,
+    getTopPerformingPrograms,
+    getClientsNeedingAttention,
+    getCoachingInsights,
+    loading: monitoringLoading
+  } = useCoachAnalyticsDashboard('90d');
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,6 +54,80 @@ function CoachDashboard() {
     }
   });
 
+  // Real-time coaching updates
+  const {
+    isConnected: realtimeConnected,
+    connectionStatus: realtimeStatus,
+    error: realtimeError,
+    invitations: realtimeInvitations,
+    clientActivity: realtimeActivity,
+    relationships: realtimeRelationships
+  } = useRealtimeCoachDashboard(
+    dashboardData.clients.map(c => c.client_id), 
+    {
+      onInvitationAccepted: (invitation) => {
+        console.log('✅ Real-time: Invitation accepted', invitation);
+        // Refresh dashboard data to show new client
+        loadDashboardData();
+      },
+      onInvitationDeclined: (invitation) => {
+        console.log('❌ Real-time: Invitation declined', invitation);
+      },
+      onWorkoutCompleted: (workout) => {
+        console.log('🏋️ Real-time: Client completed workout', workout);
+        // Update activity stats
+        setDashboardData(prev => ({
+          ...prev,
+          stats: {
+            ...prev.stats,
+            thisWeekActivity: prev.stats.thisWeekActivity + 1
+          }
+        }));
+      },
+      onClientActivity: (activity) => {
+        console.log('👥 Real-time: Client activity', activity);
+      }
+    }
+  );
+
+  // Load dashboard data function (extracted for reuse)
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load coach profile
+      const coachProfile = await getCoachProfile(user.id);
+      
+      // Load clients
+      const clients = await getCoachClients(user.id);
+      
+      // Load pending invitations
+      const invitations = await getCoachInvitations(user.id, 'pending');
+      
+      // Calculate stats
+      const stats = {
+        activeClients: clients.length,
+        pendingInvitations: invitations.length,
+        totalInsights: 0, // Will be implemented when insights are added
+        thisWeekActivity: calculateWeeklyActivity(clients)
+      };
+
+      setDashboardData({
+        clients,
+        invitations,
+        coachProfile,
+        stats
+      });
+
+    } catch (err) {
+      console.error('Failed to load coach dashboard data:', err);
+      setError('Failed to load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Load dashboard data
   useEffect(() => {
     if (!user || isVerifyingRole) return;
@@ -48,43 +137,6 @@ function CoachDashboard() {
       setLoading(false);
       return;
     }
-
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // Load coach profile
-        const coachProfile = await getCoachProfile(user.id);
-        
-        // Load clients
-        const clients = await getCoachClients(user.id);
-        
-        // Load pending invitations
-        const invitations = await getCoachInvitations(user.id, 'pending');
-        
-        // Calculate stats
-        const stats = {
-          activeClients: clients.length,
-          pendingInvitations: invitations.length,
-          totalInsights: 0, // Will be implemented when insights are added
-          thisWeekActivity: calculateWeeklyActivity(clients)
-        };
-
-        setDashboardData({
-          clients,
-          invitations,
-          coachProfile,
-          stats
-        });
-
-      } catch (err) {
-        console.error('Failed to load coach dashboard data:', err);
-        setError('Failed to load dashboard data. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
 
     loadDashboardData();
   }, [user, isCoachRole, isCoachVerified, isVerifyingRole]);
@@ -158,9 +210,18 @@ function CoachDashboard() {
           <h1 className="soft-title dashboard-greeting">
             🎯 Coach Dashboard
           </h1>
-          <p className="soft-text">
-            Welcome back, Coach {userProfile?.name || user?.email}!
-          </p>
+          <div className="d-flex align-items-center">
+            <p className="soft-text mb-0 me-3">
+              Welcome back, Coach {userProfile?.name || user?.email}!
+            </p>
+            <RealtimeStatusIndicator
+              isConnected={realtimeConnected}
+              error={realtimeError}
+              connectionStatus={realtimeStatus}
+              compact={true}
+              showDetails={true}
+            />
+          </div>
         </Col>
         <Col xs="auto">
           <Button 
@@ -173,6 +234,20 @@ function CoachDashboard() {
           </Button>
         </Col>
       </Row>
+
+      {/* Real-time Status Alert */}
+      {realtimeError && (
+        <Row className="mb-3">
+          <Col>
+            <Alert variant="warning" dismissible>
+              <Alert.Heading>Real-time Updates Unavailable</Alert.Heading>
+              <p className="mb-0">
+                Live updates are currently unavailable. You may need to refresh manually to see the latest changes.
+              </p>
+            </Alert>
+          </Col>
+        </Row>
+      )}
 
       {/* Key Metrics */}
       <Row className="g-4 mb-4">
@@ -286,17 +361,14 @@ function CoachDashboard() {
           </Card>
 
           {/* Recent Activity */}
-          <Card className="soft-card widget-card">
-            <Card.Body>
-              <Card.Title className="widget-title">Recent Activity</Card.Title>
-              <div className="py-4 text-center">
-                <p className="soft-text">Activity feed coming soon...</p>
-                <small className="soft-text">
-                  This will show client workout completions, program assignments, and insights.
-                </small>
-              </div>
-            </Card.Body>
-          </Card>
+          <RealtimeActivityFeed
+            activities={realtimeActivity}
+            isConnected={realtimeConnected}
+            error={realtimeError}
+            maxItems={5}
+            showHeader={true}
+            compact={false}
+          />
         </Col>
 
         {/* Right Column - Quick Actions & Pending Items */}
@@ -407,6 +479,164 @@ function CoachDashboard() {
               </Card.Body>
             </Card>
           )}
+        </Col>
+      </Row>
+
+      {/* Program Monitoring Section */}
+      <Row className="g-4 mt-4">
+        <Col>
+          <Card className="soft-card widget-card">
+            <Card.Header>
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0">📊 Program Monitoring</h5>
+                <Button 
+                  as={Link} 
+                  to="/coach/analytics" 
+                  variant="outline-primary" 
+                  size="sm"
+                >
+                  View Full Analytics
+                </Button>
+              </div>
+            </Card.Header>
+            <Card.Body>
+              {monitoringLoading ? (
+                <div className="text-center py-4">
+                  <Spinner animation="border" size="sm" />
+                  <p className="mt-2 mb-0">Loading program analytics...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Stats */}
+                  {getSummaryStats() && (
+                    <Row className="g-3 mb-4">
+                      <Col md={2}>
+                        <div className="text-center">
+                          <h4 className="text-primary mb-0">
+                            {getSummaryStats().overallCompletionRate}%
+                          </h4>
+                          <small className="text-muted">Avg Completion</small>
+                        </div>
+                      </Col>
+                      <Col md={2}>
+                        <div className="text-center">
+                          <h4 className="text-success mb-0">
+                            {getSummaryStats().activePrograms}
+                          </h4>
+                          <small className="text-muted">Active Programs</small>
+                        </div>
+                      </Col>
+                      <Col md={2}>
+                        <div className="text-center">
+                          <h4 className="text-info mb-0">
+                            {getSummaryStats().clientRetentionRate}%
+                          </h4>
+                          <small className="text-muted">Client Retention</small>
+                        </div>
+                      </Col>
+                      <Col md={3}>
+                        <div className="text-center">
+                          <h4 className="text-warning mb-0">
+                            {getClientsNeedingAttention().length}
+                          </h4>
+                          <small className="text-muted">Clients Need Attention</small>
+                        </div>
+                      </Col>
+                      <Col md={3}>
+                        <div className="text-center">
+                          <h4 className="text-secondary mb-0">
+                            {getSummaryStats().highPerformingPrograms}
+                          </h4>
+                          <small className="text-muted">High Performing</small>
+                        </div>
+                      </Col>
+                    </Row>
+                  )}
+
+                  <Row>
+                    {/* Top Performing Programs */}
+                    <Col md={6}>
+                      <h6 className="mb-3">🏆 Top Performing Programs</h6>
+                      {getTopPerformingPrograms(3).length > 0 ? (
+                        <div className="list-group list-group-flush">
+                          {getTopPerformingPrograms(3).map((program, index) => (
+                            <div key={program.id} className="list-group-item border-0 px-0">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                  <strong>{program.name}</strong>
+                                  <br />
+                                  <small className="text-muted">
+                                    {program.clientName} • {program.completionRate}% complete
+                                  </small>
+                                </div>
+                                <Badge bg={program.isActive ? 'success' : 'secondary'}>
+                                  {program.effectivenessScore}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted">No program data available yet.</p>
+                      )}
+                    </Col>
+
+                    {/* Clients Needing Attention */}
+                    <Col md={6}>
+                      <h6 className="mb-3">⚠️ Clients Needing Attention</h6>
+                      {getClientsNeedingAttention().length > 0 ? (
+                        <div className="list-group list-group-flush">
+                          {getClientsNeedingAttention().slice(0, 3).map((client, index) => (
+                            <div key={index} className="list-group-item border-0 px-0">
+                              <div className="d-flex justify-content-between align-items-center">
+                                <div>
+                                  <strong>{client.name}</strong>
+                                  <br />
+                                  <small className="text-muted">
+                                    {client.averageCompletionRate}% avg completion • 
+                                    Last active: {client.lastActivity ? 
+                                      Math.floor((Date.now() - client.lastActivity) / (1000 * 60 * 60 * 24)) + 'd ago' : 
+                                      'Never'
+                                    }
+                                  </small>
+                                </div>
+                                <Badge bg="warning">
+                                  {client.engagementScore}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted">All clients are performing well! 🎉</p>
+                      )}
+                    </Col>
+                  </Row>
+
+                  {/* Coaching Insights */}
+                  {getCoachingInsights().length > 0 && (
+                    <div className="mt-4">
+                      <h6 className="mb-3">💡 Coaching Insights</h6>
+                      {getCoachingInsights().slice(0, 2).map((insight, index) => (
+                        <div 
+                          key={index} 
+                          className={`alert alert-${
+                            insight.type === 'success' ? 'success' :
+                            insight.type === 'improvement' ? 'warning' :
+                            insight.type === 'attention' ? 'danger' : 'info'
+                          } mb-2`}
+                        >
+                          <strong>{insight.title}</strong>
+                          <br />
+                          <small>{insight.message}</small>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
     </Container>

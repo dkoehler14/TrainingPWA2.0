@@ -1,0 +1,327 @@
+/**
+ * Real-time Components Styles
+ * 
+ * Styles for real-time coaching components including activity feeds,
+ * status indicators, and connection displays.
+ */
+
+/* Real-time Status Indicator */
+.realtime-status-indicator {
+  font-size: 0.875rem;
+}
+
+.realtime-status-compact {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.realtime-status-compact:hover {
+  transform: scale(1.05);
+}
+
+/* Activity Feed */
+.activity-feed {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.compact-activity-feed .activity-feed {
+  max-height: 300px;
+}
+
+.activity-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  transition: background-color 0.2s ease;
+}
+
+.activity-item:last-child {
+  border-bottom: none;
+}
+
+.activity-item:hover {
+  background-color: rgba(0, 123, 255, 0.02);
+  border-radius: 0.375rem;
+  margin: 0 -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.activity-icon {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 123, 255, 0.1);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.compact-activity-feed .activity-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.activity-content {
+  min-width: 0;
+}
+
+.activity-title {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.activity-context {
+  margin-bottom: 0.5rem;
+}
+
+.activity-context small {
+  background: rgba(108, 117, 125, 0.1);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  display: inline-block;
+  margin-bottom: 0.25rem;
+}
+
+.activity-badge {
+  font-size: 0.6rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.compact-activity-feed .activity-badge {
+  font-size: 0.55rem;
+  padding: 0.125rem 0.375rem;
+}
+
+/* Real-time Connection Pulse Animation */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.realtime-pulse {
+  animation: pulse 2s infinite;
+}
+
+/* Live Badge Animation */
+@keyframes liveBadge {
+  0% {
+    background-color: #28a745;
+  }
+  50% {
+    background-color: #20c997;
+  }
+  100% {
+    background-color: #28a745;
+  }
+}
+
+.badge.live-badge {
+  animation: liveBadge 3s infinite;
+}
+
+/* Connection Status Colors */
+.connection-status-connected {
+  color: #28a745;
+}
+
+.connection-status-connecting {
+  color: #ffc107;
+}
+
+.connection-status-disconnected {
+  color: #dc3545;
+}
+
+.connection-status-error {
+  color: #dc3545;
+}
+
+/* Activity Feed Scrollbar */
+.activity-feed::-webkit-scrollbar {
+  width: 4px;
+}
+
+.activity-feed::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+}
+
+.activity-feed::-webkit-scrollbar-thumb {
+  background: rgba(0, 123, 255, 0.3);
+  border-radius: 2px;
+}
+
+.activity-feed::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 123, 255, 0.5);
+}
+
+/* Real-time Notification Toast */
+.realtime-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1050;
+  max-width: 350px;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Activity Type Icons */
+.activity-type-workout {
+  background: linear-gradient(135deg, #007bff, #0056b3);
+  color: white;
+}
+
+.activity-type-exercise {
+  background: linear-gradient(135deg, #28a745, #1e7e34);
+  color: white;
+}
+
+.activity-type-program {
+  background: linear-gradient(135deg, #ffc107, #e0a800);
+  color: #333;
+}
+
+.activity-type-insight {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+  color: white;
+}
+
+.activity-type-invitation {
+  background: linear-gradient(135deg, #6f42c1, #5a32a3);
+  color: white;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .activity-item {
+    padding: 0.5rem 0;
+  }
+  
+  .activity-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .activity-title {
+    font-size: 0.875rem;
+  }
+  
+  .realtime-notification {
+    max-width: 300px;
+    right: 10px;
+    top: 10px;
+  }
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+  .activity-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .activity-title {
+    color: #f8f9fa;
+  }
+  
+  .activity-icon {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .activity-context small {
+    background: rgba(255, 255, 255, 0.1);
+    color: #adb5bd;
+  }
+  
+  .activity-feed::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  .activity-feed::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  .activity-feed::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+}
+
+/* Loading States */
+.activity-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #6c757d;
+}
+
+.activity-loading .spinner-border {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.5rem;
+}
+
+/* Empty State */
+.activity-empty {
+  text-align: center;
+  padding: 2rem;
+  color: #6c757d;
+}
+
+.activity-empty-icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+/* Metrics Display */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.metric-item {
+  text-align: center;
+  padding: 1rem;
+  background: rgba(0, 123, 255, 0.05);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 123, 255, 0.1);
+}
+
+.metric-value {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #007bff;
+  margin-bottom: 0.25rem;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}

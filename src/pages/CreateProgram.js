@@ -4,13 +4,18 @@ import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical, GripVertical 
 import { useAuth } from '../hooks/useAuth';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import { useFormPersistence } from '../hooks/useFormPersistence';
+import { useIsCoach } from '../hooks/useRoleChecking';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
 import AutoSaveIndicator from '../components/AutoSaveIndicator';
+import ProgramAssignmentModal from '../components/ProgramAssignmentModal';
 import '../styles/CreateProgram.css';
+import '../styles/ProgramAssignmentModal.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import { createCompleteProgram, getProgramById, updateCompleteProgram, getUserPrograms, getProgramTemplates } from '../services/programService';
 import { getAvailableExercises } from '../services/exerciseService';
+import { getCoachClients } from '../services/coachService';
+import { assignProgramToClient } from '../services/programAssignmentService';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
 import { invalidateProgramCache } from '../api/supabaseCache';
@@ -417,6 +422,20 @@ function CreateProgram({ mode = 'create' }) {
   const [autoSaveTriggered, setAutoSaveTriggered] = useState(false);
   const [activeId, setActiveId] = useState(null); // Track active drag item
 
+  // Coach-specific state variables
+  const { hasRole: isCoach } = useIsCoach();
+  const [coachClients, setCoachClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [coachNotes, setCoachNotes] = useState('');
+  const [clientGoals, setClientGoals] = useState([]);
+  const [programDifficulty, setProgramDifficulty] = useState('intermediate');
+  const [expectedDurationWeeks, setExpectedDurationWeeks] = useState(null);
+  const [newGoal, setNewGoal] = useState('');
+  
+  // Program assignment modal state
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const setsRef = useRef(null);
   const repsRef = useRef(null);
 
@@ -509,7 +528,13 @@ function CreateProgram({ mode = 'create' }) {
     weeks,
     step,
     creationSource,
-    isTemplate
+    isTemplate,
+    // Coach-specific fields
+    selectedClient,
+    coachNotes,
+    clientGoals,
+    programDifficulty,
+    expectedDurationWeeks
   };
 
   const { clearSavedState } = useFormPersistence(
@@ -524,6 +549,12 @@ function CreateProgram({ mode = 'create' }) {
         if (savedState.step !== undefined) setStep(savedState.step);
         if (savedState.creationSource !== undefined) setCreationSource(savedState.creationSource);
         if (savedState.isTemplate !== undefined) setIsTemplate(savedState.isTemplate);
+        // Coach-specific fields
+        if (savedState.selectedClient !== undefined) setSelectedClient(savedState.selectedClient);
+        if (savedState.coachNotes !== undefined) setCoachNotes(savedState.coachNotes);
+        if (savedState.clientGoals !== undefined) setClientGoals(savedState.clientGoals);
+        if (savedState.programDifficulty !== undefined) setProgramDifficulty(savedState.programDifficulty);
+        if (savedState.expectedDurationWeeks !== undefined) setExpectedDurationWeeks(savedState.expectedDurationWeeks);
       }
     },
     {
@@ -582,6 +613,22 @@ function CreateProgram({ mode = 'create' }) {
     fetchExercises();
   }, [user]);
 
+  // Load coach clients if user is a coach
+  useEffect(() => {
+    const fetchCoachClients = async () => {
+      if (!user || !isCoach) return;
+      
+      try {
+        const clients = await getCoachClients(user.id);
+        setCoachClients(clients);
+      } catch (error) {
+        console.error("Error fetching coach clients:", error);
+      }
+    };
+
+    fetchCoachClients();
+  }, [user, isCoach]);
+
   useEffect(() => {
     console.log('CreateProgram mounted:', { mode, programId, isLoading });
   }, []);
@@ -633,6 +680,20 @@ function CreateProgram({ mode = 'create' }) {
 
             setProgramName(programData.name || '');
             setWeightUnit(programData.weight_unit || 'LB');
+            
+            // Load coach-specific fields if they exist
+            if (programData.coach_assigned) {
+              setCoachNotes(programData.coach_notes || '');
+              setClientGoals(programData.client_goals || []);
+              setProgramDifficulty(programData.program_difficulty || 'intermediate');
+              setExpectedDurationWeeks(programData.expected_duration_weeks || null);
+              
+              // If there's an assigned client, find them in the coach's client list
+              if (programData.assigned_to_client && coachClients.length > 0) {
+                const assignedClient = coachClients.find(c => c.client.id === programData.assigned_to_client);
+                setSelectedClient(assignedClient || null);
+              }
+            }
 
             // Create the correct structure for weeks from Supabase data
             console.log('🏗️ Creating weeks structure from Supabase data...');
@@ -990,6 +1051,41 @@ function CreateProgram({ mode = 'create' }) {
     }
   };
 
+  // Coach-specific helper functions
+  const addGoal = () => {
+    if (newGoal.trim() && !clientGoals.includes(newGoal.trim())) {
+      setClientGoals([...clientGoals, newGoal.trim()]);
+      setNewGoal('');
+    }
+  };
+
+  const removeGoal = (index) => {
+    setClientGoals(clientGoals.filter((_, i) => i !== index));
+  };
+
+  // Handle program assignment confirmation
+  const handleAssignmentConfirmation = async (assignmentData) => {
+    try {
+      setIsAssigning(true);
+      
+      // Update local state with assignment data
+      setCoachNotes(assignmentData.coachNotes || '');
+      setClientGoals(assignmentData.clientGoals || []);
+      setExpectedDurationWeeks(assignmentData.expectedDurationWeeks);
+      setProgramDifficulty(assignmentData.programDifficulty || 'intermediate');
+      
+      // Save the program first
+      await saveProgramInternal(true); // Pass true to indicate this is an assignment
+      
+      setShowAssignmentModal(false);
+    } catch (error) {
+      console.error('Assignment confirmation failed:', error);
+      throw error; // Re-throw to be handled by the modal
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
   const applyPreset = (weekIndex, dayIndex, exIndex, preset) => {
     const presets = {
       '3x8': { sets: 3, reps: 8 },
@@ -1029,6 +1125,22 @@ function CreateProgram({ mode = 'create' }) {
       return;
     }
 
+    // If coach is assigning to client, show assignment confirmation modal
+    if (isCoach && selectedClient && mode !== 'edit') {
+      setShowAssignmentModal(true);
+      return;
+    }
+
+    // Coach-specific validation for edit mode
+    if (isCoach && selectedClient && !expectedDurationWeeks) {
+      alert('Please specify the expected duration when assigning a program to a client.');
+      return;
+    }
+
+    await saveProgramInternal(false);
+  };
+
+  const saveProgramInternal = async (isAssignment = false) => {
     setIsSubmitting(true);
     try {
       // Convert weeks structure to Supabase format
@@ -1039,7 +1151,16 @@ function CreateProgram({ mode = 'create' }) {
         days_per_week: weeks[0].days.length,
         user_id: user.id,
         is_template: userRole === 'admin' && isTemplate,
-        is_active: true
+        is_active: true,
+        // Coach-specific fields
+        coach_assigned: isCoach && selectedClient ? true : false,
+        assigned_to_client: selectedClient?.client?.id || null,
+        assigned_at: isCoach && selectedClient ? new Date().toISOString() : null,
+        coach_notes: coachNotes || null,
+        client_goals: clientGoals.length > 0 ? clientGoals : null,
+        expected_duration_weeks: expectedDurationWeeks || null,
+        program_difficulty: programDifficulty,
+        visibility: isCoach && selectedClient ? 'coach_only' : 'private'
       };
 
       // Create workouts data for Supabase
@@ -1075,19 +1196,50 @@ function CreateProgram({ mode = 'create' }) {
         });
       });
 
+      let createdProgram;
+      
       if (mode === 'edit') {
         // For edit mode, use updateCompleteProgram to handle the full workout structure
-        await updateCompleteProgram(programId, programData, workoutsData);
+        createdProgram = await updateCompleteProgram(programId, programData, workoutsData);
         invalidateProgramCache(user.id);
         clearSavedState(); // Clear saved form data
-        alert('Program updated successfully!');
+        
+        if (isAssignment) {
+          alert('Program assigned and updated successfully!');
+        } else {
+          alert('Program updated successfully!');
+        }
         navigate('/programs');
       } else {
         // For create mode, use createCompleteProgram with workouts
-        await createCompleteProgram(programData, workoutsData);
+        createdProgram = await createCompleteProgram(programData, workoutsData);
         invalidateProgramCache(user.id);
         clearSavedState(); // Clear saved form data
-        alert('Program created successfully!');
+        
+        // If this is a coach assignment, trigger the assignment workflow
+        if (isCoach && selectedClient && isAssignment) {
+          try {
+            await assignProgramToClient(
+              createdProgram.id,
+              selectedClient.client.id,
+              user.id,
+              {
+                coachNotes,
+                clientGoals,
+                expectedDurationWeeks,
+                programDifficulty,
+                assignedAt: new Date().toISOString()
+              }
+            );
+            alert('Program created and assigned to client successfully!');
+          } catch (assignmentError) {
+            console.error('Program assignment failed:', assignmentError);
+            alert('Program created successfully, but assignment notification failed. The client can still access the program.');
+          }
+        } else {
+          alert('Program created successfully!');
+        }
+        
         navigate('/programs');
         // Reset form for new program
         setProgramName('');
@@ -1099,6 +1251,11 @@ function CreateProgram({ mode = 'create' }) {
           { days: [{ name: 'Day 4', exercises: [{ exerciseId: '', sets: 3, reps: 8, notes: '' }] }] }
         ]);
         setIsTemplate(false);
+        setSelectedClient(null);
+        setCoachNotes('');
+        setClientGoals([]);
+        setExpectedDurationWeeks(null);
+        setProgramDifficulty('intermediate');
       }
     } catch (error) {
       console.error("Error saving program:", error);
@@ -1458,6 +1615,141 @@ function CreateProgram({ mode = 'create' }) {
               </Form.Group>
             </Col>
           </Row>
+
+          {/* Coach-specific fields */}
+          {isCoach && (
+            <Row className="mb-4">
+              <Col xs={12}>
+                <Card className="coach-assignment-card">
+                  <Card.Header className="bg-primary text-white">
+                    <h6 className="mb-0">Coach Assignment</h6>
+                  </Card.Header>
+                  <Card.Body>
+                    <Row>
+                      <Col xs={12} md={6} className="mb-3">
+                        <Form.Group>
+                          <Form.Label>Assign to Client</Form.Label>
+                          <Form.Select
+                            value={selectedClient?.id || ''}
+                            onChange={(e) => {
+                              const relationshipId = e.target.value;
+                              const relationship = coachClients.find(c => c.id === relationshipId);
+                              setSelectedClient(relationship || null);
+                            }}
+                            className="soft-input"
+                          >
+                            <option value="">Select a client (optional)</option>
+                            {coachClients.map(relationship => (
+                              <option key={relationship.id} value={relationship.id}>
+                                {relationship.client.name} ({relationship.client.email})
+                              </option>
+                            ))}
+                          </Form.Select>
+                          <Form.Text className="text-muted">
+                            Leave empty to create a personal program
+                          </Form.Text>
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={6} className="mb-3">
+                        <Form.Group>
+                          <Form.Label>Program Difficulty</Form.Label>
+                          <Form.Select
+                            value={programDifficulty}
+                            onChange={(e) => setProgramDifficulty(e.target.value)}
+                            className="soft-input"
+                          >
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                    <Row>
+                      <Col xs={12} md={6} className="mb-3">
+                        <Form.Group>
+                          <Form.Label>Expected Duration (weeks)</Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={expectedDurationWeeks || ''}
+                            onChange={(e) => setExpectedDurationWeeks(e.target.value ? parseInt(e.target.value) : null)}
+                            className="soft-input"
+                            placeholder="e.g., 12"
+                            min="1"
+                            max="52"
+                          />
+                          <Form.Text className="text-muted">
+                            How long should the client follow this program?
+                          </Form.Text>
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={6} className="mb-3">
+                        <Form.Group>
+                          <Form.Label>Client Goals</Form.Label>
+                          <div className="d-flex mb-2">
+                            <Form.Control
+                              type="text"
+                              value={newGoal}
+                              onChange={(e) => setNewGoal(e.target.value)}
+                              className="soft-input me-2"
+                              placeholder="Add a goal"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && newGoal.trim()) {
+                                  setClientGoals([...clientGoals, newGoal.trim()]);
+                                  setNewGoal('');
+                                }
+                              }}
+                            />
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => {
+                                if (newGoal.trim()) {
+                                  setClientGoals([...clientGoals, newGoal.trim()]);
+                                  setNewGoal('');
+                                }
+                              }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+                          {clientGoals.length > 0 && (
+                            <div className="d-flex flex-wrap gap-1">
+                              {clientGoals.map((goal, index) => (
+                                <span key={index} className="goal-badge">
+                                  {goal}
+                                  <button
+                                    type="button"
+                                    className="btn-close"
+                                    onClick={() => removeGoal(index)}
+                                  ></button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                    <Row>
+                      <Col xs={12}>
+                        <Form.Group>
+                          <Form.Label>Coach Notes</Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            value={coachNotes}
+                            onChange={(e) => setCoachNotes(e.target.value)}
+                            className="soft-input"
+                            placeholder="Add notes about this program, training focus, or instructions for the client..."
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          )}
           <div className="d-flex justify-content-between align-items-center mb-3 program-misc-input">
             <div className="d-flex flex-wrap week-indicators">
               {weeks && weeks.length > 0 ? (
@@ -1702,6 +1994,20 @@ function CreateProgram({ mode = 'create' }) {
             onExerciseAdded={handleNewExerciseAdded}
             userRole={userRole}
             user={user}
+          />
+
+          {/* Program Assignment Modal */}
+          <ProgramAssignmentModal
+            show={showAssignmentModal}
+            onHide={() => setShowAssignmentModal(false)}
+            program={{
+              name: programName,
+              duration: weeks.length,
+              days_per_week: weeks[0]?.days?.length || 0
+            }}
+            client={selectedClient}
+            onConfirmAssignment={handleAssignmentConfirmation}
+            isLoading={isAssigning}
           />
         </>
       )}

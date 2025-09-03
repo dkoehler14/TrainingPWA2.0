@@ -3934,6 +3934,15 @@ class WorkoutLogService {
         throw error
       }
 
+      // Check for program completion if this is a coach-assigned program
+      try {
+        const { checkProgramCompletion } = await import('./coachProgramMonitoringService')
+        await checkProgramCompletion(userId, programId)
+      } catch (completionError) {
+        // Don't fail the workout save if completion check fails
+        console.warn('Program completion check failed:', completionError)
+      }
+
       console.log('Workout processing triggered successfully:', data)
       return { workoutLogId, processingResult: data }
     }, 'finishWorkout')

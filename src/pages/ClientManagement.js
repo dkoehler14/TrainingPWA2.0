@@ -31,6 +31,7 @@ import {
 import { Link } from 'react-router-dom';
 import { useAuth, useRoles } from '../hooks/useAuth';
 import { useIsCoach } from '../hooks/useRoleChecking';
+import { useRealtimeInvitations } from '../hooks/useRealtimeCoaching';
 import { 
   getCoachClients, 
   getCoachInvitations, 
@@ -69,6 +70,33 @@ function ClientManagement() {
   const [showClientModal, setShowClientModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+
+  // Real-time invitation updates
+  const {
+    isConnected: realtimeConnected,
+    error: realtimeError,
+    invitations: realtimeInvitations
+  } = useRealtimeInvitations(user?.id, {
+    onInvitationAccepted: (invitation) => {
+      console.log('✅ Real-time: Invitation accepted', invitation);
+      // Refresh data to show new client
+      loadData();
+    },
+    onInvitationDeclined: (invitation) => {
+      console.log('❌ Real-time: Invitation declined', invitation);
+      // Update invitations list
+      setInvitations(prev => 
+        prev.map(inv => inv.id === invitation.id ? invitation : inv)
+      );
+    },
+    onInvitationExpired: (invitation) => {
+      console.log('⏰ Real-time: Invitation expired', invitation);
+      // Update invitations list
+      setInvitations(prev => 
+        prev.map(inv => inv.id === invitation.id ? invitation : inv)
+      );
+    }
+  });
 
   // Load data
   useEffect(() => {

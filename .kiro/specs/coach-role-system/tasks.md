@@ -43,18 +43,7 @@ This implementation plan breaks down the coach role system into discrete, manage
 
 - [x] 2. Row Level Security Policies
 
-
-
-
-
-
-
   - [x] 2.1 Create RLS policies for coach profiles table
-
-
-
-
-
 
     - Implement policies allowing coaches, their clients, and admins to view profiles
     - Add policies for coach profile creation and updates
@@ -87,12 +76,7 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 4.1, 4.2, 4.3, 5.3_
 
 - [x] 3. Core Service Layer Implementation
-
-
-
-
   - [x] 3.1 Create CoachService class
-
 
     - Implement coach profile CRUD operations
     - Add client management methods (getCoachClients, getClientDetails)
@@ -102,7 +86,6 @@ This implementation plan breaks down the coach role system into discrete, manage
 
   - [x] 3.2 Create PermissionService class
 
-
     - Implement coach permission checking methods
     - Add client data access validation functions
     - Create relationship status verification methods
@@ -110,20 +93,13 @@ This implementation plan breaks down the coach role system into discrete, manage
 
   - [x] 3.3 Enhance existing services for coach integration
 
-
     - Update programService to handle coach-assigned programs
     - Modify workoutLogService to support coach access
     - Enhance userService with coach role management
     - _Requirements: 5.2, 5.4, 4.1, 1.3_
 
 - [x] 4. Authentication and Role Management
-
-
-
-
-
   - [x] 4.1 Create coach promotion functionality
-
 
     - Implement admin interface for promoting users to coach role
     - Add coach profile creation during promotion process
@@ -132,27 +108,26 @@ This implementation plan breaks down the coach role system into discrete, manage
 
   - [x] 4.2 Implement role-based navigation and access control
 
-
     - Update navigation components to show coach-specific menu items
     - Add role checking hooks and utilities
     - Create protected route components for coach features
     - _Requirements: 8.1, 8.5, 1.2_
 
 - [ ] 5. Coach Dashboard and Management Interface
-  - [ ] 5.1 Create CoachDashboard page component
+  - [x] 5.1 Create CoachDashboard page component
     - Build main dashboard with client overview and statistics
     - Add recent activity feed and quick action buttons
     - Implement client performance summary widgets
     - _Requirements: 8.4, 3.2, 4.2_
 
-  - [ ] 5.2 Create ClientManagement page component
+  - [x] 5.2 Create ClientManagement page component
     - Build active clients table with status indicators
     - Add pending invitations management interface
     - Implement client search and filtering functionality
     - Create client detail view with relationship management
     - _Requirements: 3.2, 3.3, 2.4, 8.1_
 
-  - [ ] 5.3 Create InviteClientModal component
+  - [x] 5.3 Create InviteClientModal component
     - Build invitation form with email and username options
     - Add invitation message customization
     - Implement invitation validation and error handling
@@ -165,7 +140,7 @@ This implementation plan breaks down the coach role system into discrete, manage
     - Add in-app notification system for username invitations
     - _Requirements: 2.1, 2.2, 2.4_
 
-  - [ ] 6.2 Create invitation response handling
+  - [x] 6.2 Create invitation response handling
     - Build InvitationResponse component for accepting/declining
     - Implement invitation acceptance workflow with relationship creation
     - Add invitation status tracking and notifications
@@ -178,14 +153,14 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 2.7, 3.4_
 
 - [ ] 7. Client-Side Coach Integration
-  - [ ] 7.1 Create MyCoach page component
+  - [x] 7.1 Create MyCoach page component
     - Build coach profile display for clients
     - Add assigned programs section with coach attribution
     - Implement coaching insights display and interaction
     - Create data sharing controls interface
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 9.1_
 
-  - [ ] 7.2 Enhance Programs page for coach assignments
+  - [x] 7.2 Enhance Programs page for coach assignments
     - Add coach-assigned programs tab and filtering
     - Implement coach program badges and attribution
     - Create program source indicators (personal vs coach-assigned)
@@ -198,13 +173,13 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 9.1, 9.2, 6.5_
 
 - [ ] 8. Program Assignment and Management
-  - [ ] 8.1 Enhance CreateProgram component for coach assignments
+  - [x] 8.1 Enhance CreateProgram component for coach assignments
     - Add client selection interface for coaches
     - Implement coach notes and goal setting fields
     - Create program difficulty and duration settings
     - _Requirements: 5.1, 5.2, 1.5_
 
-  - [ ] 8.2 Create coach program assignment workflow
+  - [x] 8.2 Create coach program assignment workflow
     - Build program assignment confirmation dialog
     - Implement client notification system for new assignments
     - Add program modification tracking for assigned programs
@@ -217,7 +192,7 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 4.2, 4.3, 5.5_
 
 - [ ] 9. Coaching Insights and Communication
-  - [ ] 9.1 Create CoachingInsights page component
+  - [x] 9.1 Create CoachingInsights page component
     - Build insights creation interface with rich text editor
     - Add insight categorization and priority settings
     - Implement client-specific insight targeting
@@ -236,7 +211,7 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 7.5, 4.3_
 
 - [ ] 10. Real-time Features and Notifications
-  - [ ] 10.1 Implement Supabase real-time subscriptions
+  - [x] 10.1 Implement Supabase real-time subscriptions
     - Set up real-time listeners for coaching insights
     - Add live updates for invitation status changes
     - Create real-time client activity monitoring for coaches

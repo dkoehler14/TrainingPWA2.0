@@ -1,0 +1,283 @@
+/**
+ * Insight Notification Styles
+ * 
+ * Styles for real-time insight notifications including toasts,
+ * notification bell enhancements, and insight status indicators
+ */
+
+/* Toast Notifications */
+.insight-notification-toast {
+  min-width: 350px;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-left: 4px solid;
+}
+
+.insight-notification-toast.border-danger {
+  border-left-color: #dc3545;
+}
+
+.insight-notification-toast.border-warning {
+  border-left-color: #ffc107;
+}
+
+.insight-notification-toast.border-info {
+  border-left-color: #0dcaf0;
+}
+
+.insight-notification-toast.border-primary {
+  border-left-color: #0d6efd;
+}
+
+.insight-notification-toast .toast-header {
+  background-color: rgba(248, 249, 250, 0.95);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.insight-notification-toast .toast-body {
+  padding: 1rem;
+}
+
+/* Notification Bell Enhancements */
+.notification-bell-container {
+  position: relative;
+}
+
+.notification-bell-status-indicator {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+
+.notification-bell-status-indicator.connected {
+  background-color: #28a745;
+}
+
+.notification-bell-status-indicator.disconnected {
+  background-color: #dc3545;
+}
+
+.notification-bell-status-indicator.connecting {
+  background-color: #ffc107;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Insight Status Indicators */
+.insight-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-weight: 500;
+}
+
+.insight-status-indicator.unread {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
+}
+
+.insight-status-indicator.viewed {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #e1bee7;
+}
+
+.insight-status-indicator.responded {
+  background-color: #e8f5e8;
+  color: #2e7d32;
+  border: 1px solid #c8e6c9;
+}
+
+/* Real-time Connection Status */
+.realtime-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 1rem;
+  font-weight: 500;
+}
+
+.realtime-status.connected {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.realtime-status.disconnected {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.realtime-status.connecting {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.realtime-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.realtime-status-dot.connected {
+  background-color: #28a745;
+}
+
+.realtime-status-dot.disconnected {
+  background-color: #dc3545;
+}
+
+.realtime-status-dot.connecting {
+  background-color: #ffc107;
+  animation: pulse 1s infinite;
+}
+
+/* Insight Priority Indicators */
+.insight-priority-high {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+.insight-priority-medium {
+  color: #fd7e14;
+  font-weight: 500;
+}
+
+.insight-priority-low {
+  color: #6c757d;
+  font-weight: 400;
+}
+
+/* Insight Type Icons */
+.insight-type-icon {
+  font-size: 1.25rem;
+  margin-right: 0.5rem;
+}
+
+.insight-type-icon.recommendation::before {
+  content: '💡';
+}
+
+.insight-type-icon.observation::before {
+  content: '👁️';
+}
+
+.insight-type-icon.goal_update::before {
+  content: '🎯';
+}
+
+.insight-type-icon.program_adjustment::before {
+  content: '📋';
+}
+
+/* Notification Dropdown Enhancements */
+.notification-dropdown-insight-section {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.75rem 1rem;
+  margin: 0 -0.5rem;
+}
+
+.notification-dropdown-insight-section:hover {
+  background-color: #e9ecef;
+}
+
+.notification-dropdown-insight-count {
+  font-weight: 600;
+  color: #0d6efd;
+}
+
+/* Responsive Design */
+@media (max-width: 576px) {
+  .insight-notification-toast {
+    min-width: 300px;
+    max-width: 320px;
+  }
+  
+  .insight-notification-toast .toast-body {
+    padding: 0.75rem;
+  }
+  
+  .insight-type-icon {
+    font-size: 1rem;
+    margin-right: 0.25rem;
+  }
+}
+
+/* Animation for new insights */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.insight-notification-toast.new {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Hover effects */
+.insight-notification-toast:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Focus states for accessibility */
+.insight-notification-toast .btn:focus,
+.notification-bell-container .btn:focus {
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+  outline: none;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .insight-notification-toast {
+    border: 2px solid;
+  }
+  
+  .insight-status-indicator {
+    border-width: 2px;
+  }
+  
+  .realtime-status {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .insight-notification-toast.new {
+    animation: none;
+  }
+  
+  .notification-bell-status-indicator.connecting {
+    animation: none;
+  }
+  
+  .realtime-status-dot.connecting {
+    animation: none;
+  }
+}

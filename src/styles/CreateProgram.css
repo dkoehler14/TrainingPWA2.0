@@ -320,3 +320,42 @@ tr {
 .select-exercise-btn {
   margin-bottom: 0 !important;
 }
+
+/* Coach assignment card styling */
+.coach-assignment-card {
+  border: 2px solid #0d6efd;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+}
+
+.coach-assignment-card .card-header {
+  background: linear-gradient(135deg, #0d6efd 0%, #0056d2 100%);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+
+.coach-assignment-card .card-body {
+  padding: 1.5rem;
+}
+
+.goal-badge {
+  background-color: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
+  border-radius: 15px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  margin: 0.125rem;
+}
+
+.goal-badge .btn-close {
+  margin-left: 0.5rem;
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+.goal-badge .btn-close:hover {
+  opacity: 1;
+}

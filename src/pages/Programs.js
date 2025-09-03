@@ -11,6 +11,8 @@ import workoutLogService from '../services/workoutLogService';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
 import { parseWeeklyConfigs } from '../utils/programUtils';
 import { useRealtimePrograms, useRealtimeExerciseLibrary } from '../hooks/useRealtimePrograms';
+import { useClientCoach } from '../hooks/useClientCoach';
+import { getClientAssignedPrograms } from '../services/programService';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
@@ -18,15 +20,25 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 function Programs({ userRole }) {
   const [userPrograms, setUserPrograms] = useState([]);
   const [templatePrograms, setTemplatePrograms] = useState([]);
+  const [coachAssignedPrograms, setCoachAssignedPrograms] = useState([]);
   const [exercises, setExercises] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [showProgramDetails, setShowProgramDetails] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [workoutLogs, setWorkoutLogs] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
+  const [programViewTab, setProgramViewTab] = useState('personal'); // 'personal', 'coach-assigned', 'templates'
   const { user, isAuthenticated } = useAuth();
+  const { hasActiveCoach, coachRelationship } = useClientCoach();
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Handle tab switching when coach status changes
+  useEffect(() => {
+    if (!hasActiveCoach && programViewTab === 'coach-assigned') {
+      setProgramViewTab('personal');
+    }
+  }, [hasActiveCoach, programViewTab]);
   const [isLoading, setIsLoading] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
   const chartContainerRef = useRef(null);
@@ -172,6 +184,33 @@ function Programs({ userRole }) {
             });
             setTemplatePrograms(processedTemplatePrograms);
 
+            // Fetch coach-assigned programs if user has an active coach
+            if (hasActiveCoach && coachRelationship) {
+              try {
+                console.log('🔍 [PROGRAMS_PAGE] Fetching coach-assigned programs:', {
+                  clientId: user.id,
+                  coachId: coachRelationship.coach_id,
+                  timestamp: new Date().toISOString()
+                });
+
+                const coachAssignedData = await getClientAssignedPrograms(user.id, coachRelationship.coach_id);
+                const processedCoachPrograms = safelyProcessPrograms(coachAssignedData, 'coach-assigned programs');
+                
+                console.log('📊 [PROGRAMS_PAGE] Coach-assigned programs processed:', {
+                  originalCount: coachAssignedData.length,
+                  processedCount: processedCoachPrograms.length,
+                  data: processedCoachPrograms
+                });
+
+                setCoachAssignedPrograms(processedCoachPrograms);
+              } catch (coachProgramsError) {
+                console.error('❌ [PROGRAMS_PAGE] Error fetching coach-assigned programs:', coachProgramsError);
+                setCoachAssignedPrograms([]);
+              }
+            } else {
+              setCoachAssignedPrograms([]);
+            }
+
             // Check if any programs have errors
             const allProcessedPrograms = [...processedUserPrograms, ...processedTemplatePrograms];
             const programsWithErrors = allProcessedPrograms.filter(p => p.hasError);
@@ -233,6 +272,24 @@ function Programs({ userRole }) {
 
                 setUserPrograms(processedCachedUserPrograms);
                 setTemplatePrograms(processedCachedTemplatePrograms);
+                
+                // Try to get cached coach-assigned programs if user has a coach
+                if (hasActiveCoach && coachRelationship) {
+                  try {
+                    const cachedCoachPrograms = supabaseCache.get(`coach_assigned_programs_${user.id}_${coachRelationship.coach_id}`);
+                    if (cachedCoachPrograms && Array.isArray(cachedCoachPrograms)) {
+                      const processedCachedCoachPrograms = safelyProcessPrograms(cachedCoachPrograms, 'cached coach-assigned programs');
+                      setCoachAssignedPrograms(processedCachedCoachPrograms);
+                    } else {
+                      setCoachAssignedPrograms([]);
+                    }
+                  } catch (coachCacheError) {
+                    console.error('Failed to load cached coach programs:', coachCacheError);
+                    setCoachAssignedPrograms([]);
+                  }
+                } else {
+                  setCoachAssignedPrograms([]);
+                }
 
                 // Set warning message instead of error
                 setProgramsError('Showing cached data. Some information may be outdated. Please refresh to get latest data.');
@@ -240,7 +297,8 @@ function Programs({ userRole }) {
 
                 console.log('✅ [PROGRAMS_PAGE] Successfully used cached data as fallback:', {
                   userPrograms: processedCachedUserPrograms.length,
-                  templatePrograms: processedCachedTemplatePrograms.length
+                  templatePrograms: processedCachedTemplatePrograms.length,
+                  coachAssignedPrograms: coachAssignedPrograms.length
                 });
               }
             } catch (fallbackError) {
@@ -349,6 +407,23 @@ function Programs({ userRole }) {
                 const templateProgramsData = cachedPrograms.filter(p => p.is_template);
                 setUserPrograms(safelyProcessPrograms(userProgramsData, 'fallback user programs'));
                 setTemplatePrograms(safelyProcessPrograms(templateProgramsData, 'fallback template programs'));
+                
+                // Try to get cached coach-assigned programs
+                if (hasActiveCoach && coachRelationship) {
+                  try {
+                    const cachedCoachPrograms = supabaseCache.get(`coach_assigned_programs_${user.id}_${coachRelationship.coach_id}`);
+                    if (cachedCoachPrograms && Array.isArray(cachedCoachPrograms)) {
+                      setCoachAssignedPrograms(safelyProcessPrograms(cachedCoachPrograms, 'fallback coach-assigned programs'));
+                    } else {
+                      setCoachAssignedPrograms([]);
+                    }
+                  } catch (coachCacheError) {
+                    setCoachAssignedPrograms([]);
+                  }
+                } else {
+                  setCoachAssignedPrograms([]);
+                }
+                
                 setProgramsError('Showing cached program data. Please refresh for latest information.');
               }
 
@@ -382,7 +457,7 @@ function Programs({ userRole }) {
       }
     };
     fetchData();
-  }, [user, setRealtimePrograms, setRealtimeExercises]);
+  }, [user, setRealtimePrograms, setRealtimeExercises, hasActiveCoach, coachRelationship]);
 
   const getExerciseName = (exerciseId) => {
     return exercises.find(ex => ex.id === exerciseId)?.name || 'Unknown';
@@ -834,7 +909,7 @@ function Programs({ userRole }) {
     navigate(`/edit-program/${programId}`);
   };
 
-  const renderActionButtons = (program, isTemplate) => {
+  const renderActionButtons = (program, isTemplate, isCoachAssigned = false) => {
     const hasWorkoutData = !program.hasError && program.weeklyConfigs && program.weeklyConfigs.length > 0;
 
     if (isMobile) {
@@ -849,61 +924,78 @@ function Programs({ userRole }) {
           >
             <FileText className="me-1" /> Details
           </Button>
-          {/* Allow edit for admin on template programs */}
-          {(!isTemplate || userRole === 'admin') ? (
+          {/* Coach-assigned programs have limited actions */}
+          {isCoachAssigned ? (
             <>
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => handleEditProgram(program.id)}
-                className="w-100"
-              >
-                <Pencil className="me-1" /> Edit
-              </Button>
-              {!isTemplate && !program.is_current && hasWorkoutData && (
-                  <Button
-                    variant="outline-success"
-                    size="sm"
-                    onClick={() => handleSetCurrentProgram(program.id)}
-                    className="w-100"
-                    title="Set this program as your current active program"
-                  >
-                    <Clock className="me-1" /> Set Current
-                  </Button>
-              )}
-              {!isTemplate && (
+              {!program.is_current && hasWorkoutData && (
                 <Button
-                  variant="outline-danger"
+                  variant="outline-success"
                   size="sm"
-                  onClick={() => handleDeleteProgram(program.id)}
-                  disabled={isDeleting}
+                  onClick={() => handleSetCurrentProgram(program.id)}
                   className="w-100"
+                  title="Set this coach-assigned program as your current active program"
                 >
-                  <Trash className="me-1" /> Delete
-                </Button>
-              )}
-              {isTemplate && (
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  onClick={() => adoptProgram(program)}
-                  className="w-100"
-                  disabled={program.hasError}
-                  title={program.hasError ? 'Cannot adopt - program has errors' : ''}
-                >
-                  <Copy className="me-1" /> Adopt
+                  <Clock className="me-1" /> Set Current
                 </Button>
               )}
             </>
           ) : (
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={() => adoptProgram(program)}
-              className="w-100"
-            >
-              <Copy className="me-1" /> Adopt
-            </Button>
+            /* Allow edit for admin on template programs */
+            (!isTemplate || userRole === 'admin') ? (
+              <>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => handleEditProgram(program.id)}
+                  className="w-100"
+                >
+                  <Pencil className="me-1" /> Edit
+                </Button>
+                {!isTemplate && !program.is_current && hasWorkoutData && (
+                    <Button
+                      variant="outline-success"
+                      size="sm"
+                      onClick={() => handleSetCurrentProgram(program.id)}
+                      className="w-100"
+                      title="Set this program as your current active program"
+                    >
+                      <Clock className="me-1" /> Set Current
+                    </Button>
+                )}
+                {!isTemplate && (
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    onClick={() => handleDeleteProgram(program.id)}
+                    disabled={isDeleting}
+                    className="w-100"
+                  >
+                    <Trash className="me-1" /> Delete
+                  </Button>
+                )}
+                {isTemplate && (
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => adoptProgram(program)}
+                    className="w-100"
+                    disabled={program.hasError}
+                    title={program.hasError ? 'Cannot adopt - program has errors' : ''}
+                  >
+                    <Copy className="me-1" /> Adopt
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => adoptProgram(program)}
+                className="w-100"
+              >
+                <Copy className="me-1" /> Adopt
+              </Button>
+            )
           )}
         </div>
       );
@@ -919,93 +1011,143 @@ function Programs({ userRole }) {
         >
           <FileText className="me-1" /> Details
         </Button>
-        {/* Allow edit for admin on template programs */}
-        {(!isTemplate || userRole === 'admin') ? (
+        {/* Coach-assigned programs have limited actions */}
+        {isCoachAssigned ? (
           <>
-            <Button
-              variant="outline-secondary"
-              size="sm"
-              onClick={() => handleEditProgram(program.id)}
-            >
-              <Pencil className="me-1" /> Edit
-            </Button>
-            {!isTemplate && !program.is_current && hasWorkoutData && (
-                <Button
-                  variant="outline-success"
-                  size="sm"
-                  onClick={() => handleSetCurrentProgram(program.id)}
-                  title="Set this program as your current active program"
-                >
-                  <Clock className="me-1" /> Set Current
-                </Button>
-            )}
-            {!isTemplate && (
+            {!program.is_current && hasWorkoutData && (
               <Button
-                variant="outline-danger"
+                variant="outline-success"
                 size="sm"
-                onClick={() => handleDeleteProgram(program.id)}
-                disabled={isDeleting}
+                onClick={() => handleSetCurrentProgram(program.id)}
+                title="Set this coach-assigned program as your current active program"
               >
-                <Trash className="me-1" /> Delete
-              </Button>
-            )}
-            {isTemplate && (
-              <Button
-                variant="outline-secondary"
-                size="sm"
-                onClick={() => adoptProgram(program)}
-                disabled={program.hasError}
-                title={program.hasError ? 'Cannot adopt - program has errors' : ''}
-              >
-                <Copy className="me-1" /> Adopt
+                <Clock className="me-1" /> Set Current
               </Button>
             )}
           </>
         ) : (
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            onClick={() => adoptProgram(program)}
-            disabled={program.hasError}
-            title={program.hasError ? 'Cannot adopt - program has errors' : ''}
-          >
-            <Copy className="me-1" /> Adopt
-          </Button>
+          /* Allow edit for admin on template programs */
+          (!isTemplate || userRole === 'admin') ? (
+            <>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => handleEditProgram(program.id)}
+              >
+                <Pencil className="me-1" /> Edit
+              </Button>
+              {!isTemplate && !program.is_current && hasWorkoutData && (
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    onClick={() => handleSetCurrentProgram(program.id)}
+                    title="Set this program as your current active program"
+                  >
+                    <Clock className="me-1" /> Set Current
+                  </Button>
+              )}
+              {!isTemplate && (
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => handleDeleteProgram(program.id)}
+                  disabled={isDeleting}
+                >
+                  <Trash className="me-1" /> Delete
+                </Button>
+              )}
+              {isTemplate && (
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => adoptProgram(program)}
+                  disabled={program.hasError}
+                  title={program.hasError ? 'Cannot adopt - program has errors' : ''}
+                >
+                  <Copy className="me-1" /> Adopt
+                </Button>
+              )}
+            </>
+          ) : (
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => adoptProgram(program)}
+              disabled={program.hasError}
+              title={program.hasError ? 'Cannot adopt - program has errors' : ''}
+            >
+              <Copy className="me-1" /> Adopt
+            </Button>
+          )
         )}
       </div>
     );
   };
 
-  const renderProgramCard = (program, isTemplate = false) => {
+  const renderProgramCard = (program, isTemplate = false, isCoachAssigned = false) => {
     return (
-      <Card key={program.id} className={`mb-3 program-card ${program.hasError ? 'border-warning' : ''} ${program.is_current && !isTemplate ? 'border-primary current-program' : ''}`}>
+      <Card key={program.id} className={`mb-3 program-card ${program.hasError ? 'border-warning' : ''} ${program.is_current && !isTemplate ? 'border-primary current-program' : ''} ${isCoachAssigned ? 'border-success' : ''}`}>
         <Card.Body>
           <div className="d-flex justify-content-between align-items-start">
             <div className="flex-grow-1">
-              <Card.Title className="d-flex align-items-center">
+              <Card.Title className="d-flex align-items-center flex-wrap">
                 {program.name}
                 {program.is_current && !isTemplate && (
                   <Badge bg="primary" className="ms-2" title="This is your current active program">
                     Current
                   </Badge>
                 )}
-                {/* {program.hasError && (
-                  <Badge bg="warning" className="ms-2" title={program.errorMessage}>
-                    ⚠️ Issue
+                {isCoachAssigned && (
+                  <Badge bg="success" className="ms-2" title="Assigned by your coach">
+                    Coach Assigned
                   </Badge>
                 )}
-                {program.hasWarning && (
-                  <Badge bg="secondary" className="ms-2" title={program.warningMessage}>
-                    ⚠️ Warning
+                {isTemplate && (
+                  <Badge bg="secondary" className="ms-2" title="Community template program">
+                    Template
                   </Badge>
-                )} */}
+                )}
+                {!isTemplate && !isCoachAssigned && (
+                  <Badge bg="info" className="ms-2" title="Your personal program">
+                    Personal
+                  </Badge>
+                )}
               </Card.Title>
               <Card.Subtitle className="text-muted mb-2">
                 {program.duration} weeks | {program.days_per_week} days/week
                 {program.is_current && !isTemplate && (
                   <span className="text-primary ms-2">• Active Program</span>
                 )}
+                {isCoachAssigned && program.coach && (
+                  <span className="text-success ms-2">• By {program.coach.name}</span>
+                )}
               </Card.Subtitle>
+              
+              {/* Coach assignment details */}
+              {isCoachAssigned && (
+                <div className="mb-2">
+                  {program.coach_notes && (
+                    <small className="text-muted d-block">
+                      <strong>Coach Notes:</strong> {program.coach_notes}
+                    </small>
+                  )}
+                  {program.client_goals && program.client_goals.length > 0 && (
+                    <small className="text-muted d-block">
+                      <strong>Goals:</strong> {program.client_goals.join(', ')}
+                    </small>
+                  )}
+                  {program.program_difficulty && (
+                    <small className="text-muted d-block">
+                      <strong>Difficulty:</strong> {program.program_difficulty.charAt(0).toUpperCase() + program.program_difficulty.slice(1)}
+                    </small>
+                  )}
+                  {program.assigned_at && (
+                    <small className="text-muted d-block">
+                      <strong>Assigned:</strong> {new Date(program.assigned_at).toLocaleDateString()}
+                    </small>
+                  )}
+                </div>
+              )}
 
               {/* Show error/warning messages */}
               {/* {program.hasError && (
@@ -1036,7 +1178,7 @@ function Programs({ userRole }) {
           </div>
 
           <div className="d-flex justify-content-between align-items-center mt-3">
-            {renderActionButtons(program, isTemplate)}
+            {renderActionButtons(program, isTemplate, isCoachAssigned)}
           </div>
         </Card.Body>
       </Card>
@@ -2355,84 +2497,126 @@ function Programs({ userRole }) {
                 </div>
               ) : !error ? (
                 <>
-                  {userPrograms.length === 0 && !programsError ? (
-                    <div className="text-center p-4">
-                      <p className="text-muted mb-3">
-                        You haven't created any programs yet.
-                        Get started by creating a new workout program!
-                      </p>
-                      <Button
-                        variant="primary"
-                        size="lg"
-                        onClick={() => navigate('/create-program')}
-                      >
-                        <PlusCircle className="me-2" /> Create First Program
-                      </Button>
-                    </div>
-                  ) : (
+                  {/* Program View Tabs */}
+                  <div className="mb-4">
+                    <ul className="nav nav-tabs">
+                      <li className="nav-item">
+                        <button
+                          className={`nav-link ${programViewTab === 'personal' ? 'active' : ''}`}
+                          onClick={() => setProgramViewTab('personal')}
+                        >
+                          Personal Programs ({userPrograms.length})
+                        </button>
+                      </li>
+                      {hasActiveCoach && (
+                        <li className="nav-item">
+                          <button
+                            className={`nav-link ${programViewTab === 'coach-assigned' ? 'active' : ''}`}
+                            onClick={() => setProgramViewTab('coach-assigned')}
+                          >
+                            Coach Assigned ({coachAssignedPrograms.length})
+                          </button>
+                        </li>
+                      )}
+                      <li className="nav-item">
+                        <button
+                          className={`nav-link ${programViewTab === 'templates' ? 'active' : ''}`}
+                          onClick={() => setProgramViewTab('templates')}
+                        >
+                          Templates ({templatePrograms.length})
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Personal Programs Tab */}
+                  {programViewTab === 'personal' && (
                     <>
-                      {/* Show programs with error handling */}
-                      {userPrograms.length > 0 && (
+                      {userPrograms.length === 0 && !programsError ? (
+                        <div className="text-center p-4">
+                          <p className="text-muted mb-3">
+                            You haven't created any programs yet.
+                            Get started by creating a new workout program!
+                          </p>
+                          <Button
+                            variant="primary"
+                            size="lg"
+                            onClick={() => navigate('/create-program')}
+                          >
+                            <PlusCircle className="me-2" /> Create First Program
+                          </Button>
+                        </div>
+                      ) : (
                         <>
                           <div className="mb-3">
-                            {/* <h2 className="soft-subtitle section-title mb-3">Your Programs</h2> */}
-                            {/* Show summary of program issues if any */}
-                            {/* {(() => {
-                            const programsWithErrors = userPrograms.filter(p => p.hasError);
-                            const programsWithWarnings = userPrograms.filter(p => p.hasWarning && !p.hasError);
-                            
-                            if (programsWithErrors.length > 0 || programsWithWarnings.length > 0) {
-                              return (
-                                <Alert variant="warning" className="mb-3">
-                                  <small>
-                                    {programsWithErrors.length > 0 && (
-                                      <div>
-                                        <strong>{programsWithErrors.length}</strong> program{programsWithErrors.length !== 1 ? 's' : ''} 
-                                        {programsWithErrors.length === 1 ? ' has' : ' have'} issues and may need attention.
-                                      </div>
-                                    )}
-                                    {programsWithWarnings.length > 0 && (
-                                      <div>
-                                        <strong>{programsWithWarnings.length}</strong> program{programsWithWarnings.length !== 1 ? 's' : ''} 
-                                        {programsWithWarnings.length === 1 ? ' has' : ' have'} warnings.
-                                      </div>
-                                    )}
-                                  </small>
-                                </Alert>
-                              );
-                            }
-                            return null;
-                          })()} */}
+                            <h3 className="soft-subtitle section-title mb-3">Your Personal Programs</h3>
+                            <p className="text-muted">Programs you've created yourself</p>
                           </div>
-                          {userPrograms.map(program => renderProgramCard(program))}
+                          {userPrograms.map(program => renderProgramCard(program, false, false))}
                         </>
                       )}
                     </>
                   )}
 
-                  <h2 className="soft-subtitle section-title mt-5 mb-3">Template Programs</h2>
-                  {templatePrograms.length === 0 ? (
-                    <div className="text-center p-4">
-                      <p className="text-muted">No template programs available.</p>
-                    </div>
-                  ) : (
+                  {/* Coach Assigned Programs Tab */}
+                  {programViewTab === 'coach-assigned' && hasActiveCoach && (
                     <>
-                      {/* Show template program issues summary if any */}
-                      {(() => {
-                        const templatesWithErrors = templatePrograms.filter(p => p.hasError);
-                        if (templatesWithErrors.length > 0) {
-                          return (
-                            <Alert variant="info" className="mb-3">
-                              <small>
-                                <strong>{templatesWithErrors.length}</strong> template program{templatesWithErrors.length !== 1 ? 's' : ''}
-                                {templatesWithErrors.length === 1 ? ' has' : ' have'} issues and cannot be adopted.
-                              </small>
-                            </Alert>
-                          );
-                        }
-                        return null;
-                      })()}
-                      {templatePrograms.map(program => renderProgramCard(program, true))}
+                      {coachAssignedPrograms.length === 0 ? (
+                        <div className="text-center p-4">
+                          <p className="text-muted mb-3">
+                            No programs assigned by your coach yet.
+                          </p>
+                          {coachRelationship && (
+                            <small className="text-muted">
+                              Your coach: {coachRelationship.coach?.name || 'Unknown'}
+                            </small>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-3">
+                            <h3 className="soft-subtitle section-title mb-3">Coach Assigned Programs</h3>
+                            <p className="text-muted">
+                              Programs assigned by your coach{coachRelationship?.coach?.name ? ` (${coachRelationship.coach.name})` : ''}
+                            </p>
+                          </div>
+                          {coachAssignedPrograms.map(program => renderProgramCard(program, false, true))}
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {/* Templates Tab */}
+                  {programViewTab === 'templates' && (
+                    <>
+                      {templatePrograms.length === 0 ? (
+                        <div className="text-center p-4">
+                          <p className="text-muted">No template programs available.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-3">
+                            <h3 className="soft-subtitle section-title mb-3">Template Programs</h3>
+                            <p className="text-muted">Community-shared programs you can adopt</p>
+                          </div>
+                          {/* Show template program issues summary if any */}
+                          {(() => {
+                            const templatesWithErrors = templatePrograms.filter(p => p.hasError);
+                            if (templatesWithErrors.length > 0) {
+                              return (
+                                <Alert variant="info" className="mb-3">
+                                  <small>
+                                    <strong>{templatesWithErrors.length}</strong> template program{templatesWithErrors.length !== 1 ? 's' : ''}
+                                    {templatesWithErrors.length === 1 ? ' has' : ' have'} issues and cannot be adopted.
+                                  </small>
+                                </Alert>
+                              );
+                            }
+                            return null;
+                          })()}
+                          {templatePrograms.map(program => renderProgramCard(program, true, false))}
+                        </>
+                      )}
                     </>
                   )}
                 </>

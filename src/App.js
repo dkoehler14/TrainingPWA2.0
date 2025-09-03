@@ -17,7 +17,10 @@ import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
 import CoachDashboard from './pages/CoachDashboard';
+import CoachAnalytics from './pages/CoachAnalytics';
 import ClientManagement from './pages/ClientManagement';
+import CoachingInsights from './pages/CoachingInsights';
+import MyCoach from './pages/MyCoach';
 import InvitationResponse from './pages/InvitationResponse';
 import CacheDemo from './components/CacheDemo';
 import { CoachRoute, AdminRoute } from './components/ProtectedRoute';
@@ -32,6 +35,7 @@ import {
   serviceStatusLogger
 } from './utils/developmentDebugger';
 import DevelopmentDebugPanel from './components/DevelopmentDebugPanel';
+import InsightNotificationToast from './components/InsightNotificationToast';
 import { useAuth, useRoles } from './hooks/useAuth';
 
 function App() {
@@ -177,6 +181,17 @@ function AppContent() {
             <ClientManagement />
           </CoachRoute>
         } />
+        <Route path="/coach/analytics" element={
+          <CoachRoute>
+            <CoachAnalytics />
+          </CoachRoute>
+        } />
+        <Route path="/coach/insights" element={
+          <CoachRoute>
+            <CoachingInsights />
+          </CoachRoute>
+        } />
+        <Route path="/my-coach" element={user ? <MyCoach /> : <Navigate to="/auth" />} />
         <Route path="/invitation/:invitationCode" element={<InvitationResponse />} />
         <Route path="/admin" element={
           <AdminRoute>
@@ -213,6 +228,7 @@ function AppContent() {
         })()} />
       </Routes>
       <DevelopmentDebugPanel />
+      <InsightNotificationToast />
     </Router>
   );
 }
