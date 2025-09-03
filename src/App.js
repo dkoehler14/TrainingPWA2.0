@@ -140,7 +140,8 @@ function AppContent() {
   }, [user, cacheInitialized, isReady]);
 
   // Only show loading on initial app load, not on tab switches
-  if (!isInitialized) {
+  // Wait for both auth initialization AND profile loading to complete
+  if (!isReady) {
     return (
       <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
         <div className="text-center">

@@ -36,8 +36,26 @@ function ProtectedRoute({
     requireCompleteProfile: requireProfile
   });
 
+  // Debug logging
+  console.log('🔒 ProtectedRoute Debug:', {
+    requiredRoles,
+    redirectTo,
+    protection: {
+      hasAccess: protection.hasAccess,
+      isLoading: protection.isLoading,
+      needsAuthentication: protection.needsAuthentication,
+      needsProfile: protection.needsProfile,
+      needsRole: protection.needsRole,
+      userRoles: protection.userRoles,
+      requiredRoles: protection.requiredRoles,
+      user: protection.user ? { id: protection.user.id, email: protection.user.email } : null,
+      userProfile: protection.userProfile ? { id: protection.userProfile.id, roles: protection.userProfile.roles } : null
+    }
+  });
+
   // Show loading state
   if (protection.isLoading) {
+    console.log('🔄 ProtectedRoute: Showing loading state');
     return loadingComponent || (
       <Container fluid className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
         <div className="text-center">
@@ -50,13 +68,22 @@ function ProtectedRoute({
 
   // Handle different denial reasons
   if (!protection.hasAccess) {
+    console.log('❌ ProtectedRoute: Access denied, reason:', {
+      needsAuthentication: protection.needsAuthentication,
+      needsProfile: protection.needsProfile,
+      needsRole: protection.needsRole,
+      redirectTo
+    });
+
     // Redirect to auth if not authenticated
     if (protection.needsAuthentication) {
+      console.log('🔐 ProtectedRoute: Redirecting to /auth');
       return <Navigate to="/auth" replace />;
     }
 
     // Show unauthorized message for role issues
     if (protection.needsRole) {
+      console.log('🚫 ProtectedRoute: Showing unauthorized message for role issue');
       return unauthorizedComponent || (
         <Container fluid className="soft-container">
           <Row className="justify-content-center">
@@ -78,10 +105,12 @@ function ProtectedRoute({
     }
 
     // Default redirect for other cases
+    console.log('🏠 ProtectedRoute: Default redirect to', redirectTo);
     return <Navigate to={redirectTo} replace />;
   }
 
   // Render protected content
+  console.log('✅ ProtectedRoute: Access granted, rendering content');
   return children;
 }
 

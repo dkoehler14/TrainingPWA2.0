@@ -93,23 +93,29 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const loadProfile = async () => {
       if (!authUser) {
+        console.log('👤 AuthContext: No auth user, clearing profile')
         setUserProfile(null)
+        setProfileLoading(false)
         return
       }
 
       // Don't reload if we already have the profile for this user
       if (userProfile && userProfile.id === authUser.id) {
+        console.log('👤 AuthContext: Profile already loaded for user', authUser.id)
+        setProfileLoading(false)
         return
       }
 
+      console.log('👤 AuthContext: Loading profile for user', authUser.id)
       setProfileLoading(true)
       setError(null)
 
       try {
         const profile = await getUserProfile(authUser.id)
+        console.log('👤 AuthContext: Profile loaded:', profile ? { id: profile.id, roles: profile.roles, name: profile.name } : null)
         setUserProfile(profile)
       } catch (error) {
-        console.error('Error loading user profile:', error)
+        console.error('❌ AuthContext: Error loading user profile:', error)
         setError(handleSupabaseError(error))
       } finally {
         setProfileLoading(false)
@@ -401,6 +407,7 @@ export const AuthProvider = ({ children }) => {
     // Get roles from userProfile (database) first
     if (userProfile?.roles && Array.isArray(userProfile.roles)) {
       const roles = userProfile.roles
+      console.log('👤 AuthContext: User roles from profile:', roles)
       // Priority order for primary role: admin > coach > moderator > user
       if (roles.includes('admin')) return 'admin'
       if (roles.includes('coach')) return 'coach'
@@ -412,10 +419,12 @@ export const AuthProvider = ({ children }) => {
     // Fallback to auth metadata (for backwards compatibility)
     const metadataRole = authUser?.user_metadata?.role
     if (metadataRole) {
+      console.log('👤 AuthContext: User role from metadata:', metadataRole)
       return metadataRole
     }
 
     // Default role
+    console.log('👤 AuthContext: No roles found, defaulting to user')
     return 'user'
   }, [authUser?.user_metadata?.role, userProfile?.roles])
 
@@ -423,7 +432,12 @@ export const AuthProvider = ({ children }) => {
   const isProfileLoading = profileLoading
 
   // Check if system is ready (memoized for stability)
-  const isReady = useMemo(() => isInitialized && !authLoading && !profileLoading, [isInitialized, authLoading, profileLoading])
+  // For authenticated users, we need the profile to be loaded
+  const isReady = useMemo(() => {
+    if (!isInitialized || authLoading) return false
+    if (isAuthenticated && !userProfile && !profileLoading) return false
+    return !profileLoading
+  }, [isInitialized, authLoading, profileLoading, isAuthenticated, userProfile])
 
   // Get session expiry information
   const getSessionInfo = useCallback(() => {

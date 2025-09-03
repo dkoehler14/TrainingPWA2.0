@@ -39,7 +39,10 @@ export function useClientCoach() {
       setError(null);
 
       // Get active coach relationship
-      const { data: relationship, error: relationshipError } = await supabase
+      console.log('🔍 DEBUG: Loading coach relationship data');
+      console.log('🔍 DEBUG: User ID for relationship query:', user.id);
+
+      const relationshipQuery = supabase
         .from('coach_client_relationships')
         .select(`
           *,
@@ -60,8 +63,31 @@ export function useClientCoach() {
         .eq('status', 'active')
         .single();
 
-      if (relationshipError && relationshipError.code !== 'PGRST116') {
-        throw handleSupabaseError(relationshipError, 'loadCoachData');
+      console.log('🔍 DEBUG: Relationship query URL:', relationshipQuery.url);
+
+      const { data: relationship, error: relationshipError } = await relationshipQuery;
+
+      console.log('🔍 DEBUG: Relationship query response:', { data: relationship, error: relationshipError });
+
+      if (relationshipError) {
+        console.error('❌ DEBUG: Relationship query error:', relationshipError);
+        console.error('❌ DEBUG: Error code:', relationshipError.code);
+        console.error('❌ DEBUG: Error message:', relationshipError.message);
+
+        if (relationshipError.code === '406' || relationshipError.message?.includes('406')) {
+          console.error('🚨 DEBUG: 406 Not Acceptable error in relationship query!');
+          console.error('🚨 DEBUG: This may be caused by:');
+          console.error('🚨 DEBUG: 1. Missing or incorrect authentication');
+          console.error('🚨 DEBUG: 2. Content-Type header issues');
+          console.error('🚨 DEBUG: 3. Accept header mismatch');
+          console.error('🚨 DEBUG: 4. RLS policy blocking access');
+        }
+
+        if (relationshipError.code !== 'PGRST116') {
+          throw handleSupabaseError(relationshipError, 'loadCoachData');
+        }
+      } else {
+        console.log('✅ DEBUG: Successfully loaded relationship data');
       }
 
       if (relationship) {
@@ -270,20 +296,50 @@ export function useHasActiveCoach() {
 
     const checkForCoach = async () => {
       try {
-        const { data, error } = await supabase
+        console.log('🔍 DEBUG: Checking for active coach relationship');
+        console.log('🔍 DEBUG: User ID:', user.id);
+        console.log('🔍 DEBUG: User authenticated:', !!user);
+
+        // Log the exact query being made
+        const query = supabase
           .from('coach_client_relationships')
           .select('id')
           .eq('client_id', user.id)
           .eq('status', 'active')
           .single();
 
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error checking for coach:', error);
+        console.log('🔍 DEBUG: Supabase query URL:', query.url);
+        console.log('🔍 DEBUG: Supabase headers:', query.headers);
+
+        const { data, error } = await query;
+
+        console.log('🔍 DEBUG: Query response data:', data);
+        console.log('🔍 DEBUG: Query response error:', error);
+
+        if (error) {
+          console.error('❌ DEBUG: Error checking for coach:', error);
+          console.error('❌ DEBUG: Error code:', error.code);
+          console.error('❌ DEBUG: Error message:', error.message);
+          console.error('❌ DEBUG: Error details:', error.details);
+          console.error('❌ DEBUG: Error hint:', error.hint);
+
+          // Log additional context for 406 errors
+          if (error.code === '406' || error.message?.includes('406')) {
+            console.error('🚨 DEBUG: 406 Not Acceptable error detected!');
+            console.error('🚨 DEBUG: This usually indicates:');
+            console.error('🚨 DEBUG: 1. Content-Type header mismatch');
+            console.error('🚨 DEBUG: 2. Accept header issues');
+            console.error('🚨 DEBUG: 3. Authentication problems');
+            console.error('🚨 DEBUG: 4. Query parameter format issues');
+          }
+        } else {
+          console.log('✅ DEBUG: Successfully checked for coach, result:', !!data);
         }
 
         setHasCoach(!!data);
       } catch (err) {
-        console.error('Failed to check for coach:', err);
+        console.error('💥 DEBUG: Exception in checkForCoach:', err);
+        console.error('💥 DEBUG: Exception stack:', err.stack);
         setHasCoach(false);
       } finally {
         setIsChecking(false);

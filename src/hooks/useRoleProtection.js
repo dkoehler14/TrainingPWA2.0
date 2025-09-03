@@ -16,7 +16,7 @@ import { useAuth, useRoles } from './useAuth';
 export function useRoleProtection(requiredRoles, options = {}) {
   const { user, userProfile, loading, isAuthenticated } = useAuth();
   const { userRoles, hasRole, hasAnyRole } = useRoles();
-  
+
   const {
     requireAuthentication = true,
     requireCompleteProfile = true,
@@ -40,6 +40,27 @@ export function useRoleProtection(requiredRoles, options = {}) {
   const needsAuthentication = requireAuthentication && !isAuthenticated;
   const needsProfile = requireCompleteProfile && isAuthenticated && !userProfile;
   const needsRole = isAuthenticated && isProfileValid && !hasRequiredRole && !hasFallbackAccess;
+
+  // Debug logging
+  console.log('🛡️ useRoleProtection Debug:', {
+    requiredRoles: rolesArray,
+    options,
+    checks: {
+      isAuthenticated,
+      userProfile: userProfile ? { id: userProfile.id, roles: userProfile.roles, name: userProfile.name } : null,
+      userRoles,
+      isAuthenticationValid,
+      isProfileValid,
+      hasRequiredRole,
+      hasFallbackAccess,
+      hasAccess,
+      isLoading,
+      needsAuthentication,
+      needsProfile,
+      needsRole
+    },
+    user: user ? { id: user.id, email: user.email } : null
+  });
 
   // Get specific denial reason
   const getDenialReason = () => {
