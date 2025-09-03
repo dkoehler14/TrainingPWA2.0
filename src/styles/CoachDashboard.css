@@ -1,0 +1,267 @@
+/* Coach Dashboard Specific Styles */
+
+.coach-dashboard-container {
+  padding: var(--spacing-xl) var(--spacing-lg);
+}
+
+/* Client Table Styles */
+.coach-dashboard-container .table {
+  background-color: var(--card-background);
+  border-radius: var(--card-border-radius-sm);
+}
+
+.coach-dashboard-container .table th {
+  background-color: var(--background-secondary);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  border: none;
+  padding: var(--spacing-md);
+}
+
+.coach-dashboard-container .table td {
+  border: none;
+  padding: var(--spacing-md);
+  vertical-align: middle;
+}
+
+.coach-dashboard-container .table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.coach-dashboard-container .table tbody tr:last-child {
+  border-bottom: none;
+}
+
+/* Client Info Styles */
+.client-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.client-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.client-email {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* Activity Feed Styles */
+.activity-feed-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.activity-feed-item:last-child {
+  border-bottom: none;
+}
+
+.activity-content {
+  flex: 1;
+}
+
+.activity-title {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.activity-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.activity-time {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary-light);
+  white-space: nowrap;
+  margin-left: var(--spacing-md);
+}
+
+/* Quick Actions Grid */
+.quick-actions-grid {
+  display: grid;
+  gap: var(--spacing-sm);
+}
+
+.quick-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-md);
+  text-align: left;
+  border-radius: var(--button-border-radius);
+  transition: all 0.2s ease;
+}
+
+.quick-action-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--card-shadow);
+}
+
+.quick-action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Profile Summary Styles */
+.profile-specializations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+.profile-bio {
+  margin-top: var(--spacing-sm);
+  line-height: 1.5;
+}
+
+/* Pending Invitations Styles */
+.pending-invitation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pending-invitation-item:last-child {
+  border-bottom: none;
+}
+
+.invitation-details {
+  flex: 1;
+}
+
+.invitation-email {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.invitation-date {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+/* Empty State Styles */
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-2xl) var(--spacing-lg);
+}
+
+.empty-state-icon {
+  font-size: var(--font-size-4xl);
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-description {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-lg);
+}
+
+/* Stats Cards Enhancement */
+.coach-stats-card {
+  text-align: center;
+  transition: transform 0.2s ease;
+}
+
+.coach-stats-card:hover {
+  transform: translateY(-2px);
+}
+
+.stats-icon {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--spacing-sm);
+  opacity: 0.8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .coach-dashboard-container {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+  
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .coach-dashboard-container .table {
+    font-size: var(--font-size-sm);
+  }
+  
+  .coach-dashboard-container .table th,
+  .coach-dashboard-container .table td {
+    padding: var(--spacing-sm);
+  }
+  
+  .activity-feed-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .activity-time {
+    margin-left: 0;
+    margin-top: var(--spacing-xs);
+  }
+}
+
+@media (max-width: 576px) {
+  .pending-invitation-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+  
+  .profile-specializations {
+    justify-content: center;
+  }
+}
+
+/* Loading State */
+.coach-dashboard-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.coach-dashboard-loading .spinner-border {
+  color: var(--gradient-primary);
+  width: 3rem;
+  height: 3rem;
+}
+
+.coach-dashboard-loading p {
+  margin-top: var(--spacing-md);
+  color: var(--text-secondary);
+}
+
+/* Access Denied State */
+.access-denied-card {
+  max-width: 500px;
+  margin: var(--spacing-3xl) auto;
+  text-align: center;
+}
+
+.access-denied-icon {
+  font-size: var(--font-size-4xl);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-lg);
+}

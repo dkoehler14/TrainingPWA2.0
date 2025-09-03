@@ -1,0 +1,742 @@
+/* Client Management Page Styles */
+
+.client-management-container {
+  padding: var(--spacing-xl) var(--spacing-lg);
+}
+
+/* Client Info Styles */
+.client-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.client-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-base);
+}
+
+.client-email {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+/* Table Enhancements */
+.client-management-container .table {
+  background-color: var(--card-background);
+  border-radius: var(--card-border-radius-sm);
+}
+
+.client-management-container .table th {
+  background-color: var(--background-secondary);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+  border: none;
+  padding: var(--spacing-md);
+  white-space: nowrap;
+}
+
+.client-management-container .table td {
+  border: none;
+  padding: var(--spacing-md);
+  vertical-align: middle;
+}
+
+.client-management-container .table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.2s ease;
+}
+
+.client-management-container .table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.client-management-container .table tbody tr:hover {
+  background-color: var(--background-secondary);
+}
+
+/* Action Buttons */
+.action-buttons {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.action-buttons .btn {
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--button-border-radius-sm);
+  transition: all 0.2s ease;
+}
+
+.action-buttons .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-buttons .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Search and Filter Section */
+.search-filter-section {
+  background-color: var(--card-background);
+  border-radius: var(--card-border-radius);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  box-shadow: var(--card-shadow);
+}
+
+.search-filter-section .input-group-text {
+  background-color: var(--background-secondary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.search-filter-section .form-control,
+.search-filter-section .form-select {
+  border-color: var(--border-color);
+  background-color: var(--input-background);
+  color: var(--text-primary);
+}
+
+.search-filter-section .form-control:focus,
+.search-filter-section .form-select:focus {
+  border-color: var(--gradient-primary);
+  box-shadow: 0 0 0 0.2rem rgba(var(--gradient-primary-rgb), 0.25);
+}
+
+/* Status Badges */
+.status-badge {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--badge-border-radius);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Empty State Styles */
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-3xl) var(--spacing-lg);
+  color: var(--text-secondary);
+}
+
+.empty-state-icon {
+  font-size: var(--font-size-4xl);
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.empty-state-description {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+  line-height: 1.6;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Tab Enhancements */
+.nav-tabs {
+  border-bottom: 2px solid var(--border-color);
+  margin-bottom: var(--spacing-lg);
+}
+
+.nav-tabs .nav-link {
+  color: var(--text-secondary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--spacing-md) var(--spacing-lg);
+  font-weight: var(--font-weight-medium);
+  transition: all 0.2s ease;
+}
+
+.nav-tabs .nav-link:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+.nav-tabs .nav-link.active {
+  color: var(--gradient-primary);
+  border-bottom-color: var(--gradient-primary);
+  background-color: transparent;
+}
+
+/* Modal Enhancements */
+.modal-content {
+  border-radius: var(--card-border-radius);
+  border: none;
+  box-shadow: var(--modal-shadow);
+}
+
+.modal-header {
+  background-color: var(--background-secondary);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: var(--card-border-radius) var(--card-border-radius) 0 0;
+}
+
+.modal-title {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.modal-body {
+  background-color: var(--card-background);
+  color: var(--text-primary);
+}
+
+.modal-footer {
+  background-color: var(--background-secondary);
+  border-top: 1px solid var(--border-color);
+  border-radius: 0 0 var(--card-border-radius) var(--card-border-radius);
+}
+
+/* Client Detail Modal Specific */
+.client-detail-section h6 {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: var(--spacing-xs);
+}
+
+.client-detail-info {
+  line-height: 1.6;
+  margin-bottom: var(--spacing-md);
+}
+
+.client-detail-info strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.client-goals-badges,
+.client-equipment-badges,
+.client-injuries-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-xs);
+}
+
+/* Invitation Table Specific */
+.invitation-message-preview {
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--spacing-xs);
+}
+
+.invitation-expires-warning {
+  color: var(--danger-color);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Loading States */
+.loading-spinner-inline {
+  width: 1rem;
+  height: 1rem;
+  border-width: 2px;
+}
+
+/* Sort Dropdown */
+.sort-dropdown .dropdown-toggle {
+  font-size: var(--font-size-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.sort-dropdown .dropdown-menu {
+  font-size: var(--font-size-sm);
+}
+
+.sort-dropdown .dropdown-item {
+  padding: var(--spacing-sm) var(--spacing-md);
+  transition: background-color 0.2s ease;
+}
+
+.sort-dropdown .dropdown-item:hover {
+  background-color: var(--background-secondary);
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+  .client-management-container {
+    padding: var(--spacing-lg) var(--spacing-md);
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+  }
+  
+  .action-buttons .btn {
+    width: 100%;
+    margin-bottom: var(--spacing-xs);
+  }
+}
+
+@media (max-width: 768px) {
+  .client-management-container .table {
+    font-size: var(--font-size-sm);
+  }
+  
+  .client-management-container .table th,
+  .client-management-container .table td {
+    padding: var(--spacing-sm);
+  }
+  
+  .client-name {
+    font-size: var(--font-size-sm);
+  }
+  
+  .client-email {
+    font-size: var(--font-size-xs);
+  }
+  
+  .empty-state {
+    padding: var(--spacing-xl) var(--spacing-md);
+  }
+  
+  .empty-state-icon {
+    font-size: var(--font-size-3xl);
+  }
+  
+  .search-filter-section {
+    padding: var(--spacing-md);
+  }
+}
+
+@media (max-width: 576px) {
+  .nav-tabs .nav-link {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+  }
+  
+  .modal-dialog {
+    margin: var(--spacing-md);
+  }
+  
+  .client-detail-section h6 {
+    font-size: var(--font-size-base);
+  }
+  
+  .client-goals-badges,
+  .client-equipment-badges,
+  .client-injuries-badges {
+    justify-content: center;
+  }
+}
+
+/* Accessibility Enhancements */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+  outline: 2px solid var(--gradient-primary);
+  outline-offset: 2px;
+}
+
+.table tbody tr:focus-within {
+  background-color: var(--background-secondary);
+  outline: 2px solid var(--gradient-primary);
+  outline-offset: -2px;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.loading-row {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Invite Client Modal Styles */
+.invitation-preview {
+  background-color: var(--background-secondary) !important;
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-border-radius-sm);
+}
+
+.invitation-preview .bg-white {
+  background-color: var(--card-background) !important;
+  border: 1px solid var(--border-color);
+}
+
+.invitation-preview strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.invitation-preview .badge {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+/* Tab enhancements for invite modal */
+.modal .nav-tabs {
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: var(--spacing-md);
+}
+
+.modal .nav-tabs .nav-link {
+  color: var(--text-secondary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+}
+
+.modal .nav-tabs .nav-link:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-color);
+}
+
+.modal .nav-tabs .nav-link.active {
+  color: var(--gradient-primary);
+  border-bottom-color: var(--gradient-primary);
+  background-color: transparent;
+}
+
+/* Form enhancements for invite modal */
+.modal .form-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.modal .input-group-text {
+  background-color: var(--background-secondary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.modal .form-control,
+.modal .form-select {
+  border-color: var(--border-color);
+  background-color: var(--input-background);
+  color: var(--text-primary);
+}
+
+.modal .form-control:focus,
+.modal .form-select:focus {
+  border-color: var(--gradient-primary);
+  box-shadow: 0 0 0 0.2rem rgba(var(--gradient-primary-rgb), 0.25);
+}
+
+.modal .form-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* Character counter styling */
+.modal .form-text.text-warning {
+  color: var(--warning-color) !important;
+  font-weight: var(--font-weight-medium);
+}
+
+/* Spinner in button */
+.modal .spinner-border-sm {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-width: 0.125rem;
+}
+
+/* Print Styles */
+@media print {
+  .client-management-container {
+    padding: 0;
+  }
+  
+  .search-filter-section,
+  .action-buttons,
+  .modal {
+    display: none !important;
+  }
+  
+  .table {
+    border: 1px solid #000;
+  }
+  
+  .table th,
+  .table td {
+    border: 1px solid #000;
+    padding: var(--spacing-sm);
+  }
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+  .client-management-container .table tbody tr:hover {
+    background-color: var(--text-primary);
+    color: var(--card-background);
+  }
+  
+  .status-badge {
+    border: 2px solid currentColor;
+  }
+  
+  .btn {
+    border-width: 2px;
+  }
+}
+
+/* Invitation Management Specific Styles */
+.invitation-stats-cards {
+  margin-bottom: var(--spacing-lg);
+}
+
+.invitation-stats-cards .card {
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.invitation-stats-cards .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.invitation-stats-cards .card-body {
+  padding: var(--spacing-md);
+}
+
+.invitation-stats-cards h4 {
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.invitation-stats-cards small {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Expiration Status Styling */
+.expiration-status {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.expiration-status.text-danger {
+  color: var(--danger-color) !important;
+}
+
+.expiration-status.text-success {
+  color: var(--success-color) !important;
+}
+
+.expiration-status.text-warning {
+  color: var(--warning-color) !important;
+}
+
+/* Invitation Action Buttons */
+.invitation-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.invitation-actions .btn {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--button-border-radius-sm);
+  white-space: nowrap;
+}
+
+.invitation-actions .btn-outline-primary:hover {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.invitation-actions .btn-outline-warning:hover {
+  background-color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+.invitation-actions .btn-outline-danger:hover {
+  background-color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+/* Invitation Status Indicators */
+.invitation-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+}
+
+.invitation-status-indicator.viewed {
+  color: var(--info-color);
+}
+
+.invitation-status-indicator.sent {
+  color: var(--text-secondary);
+}
+
+/* Invitation Message Preview */
+.invitation-message-preview {
+  font-style: italic;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--spacing-xs);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Invitation Table Enhancements */
+.invitation-table .table td {
+  vertical-align: middle;
+}
+
+.invitation-table .recipient-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.invitation-table .recipient-email {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.invitation-table .invitation-preview {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.invitation-table .method-badge {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.invitation-table .expiration-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.invitation-table .expiration-date {
+  font-weight: var(--font-weight-medium);
+}
+
+.invitation-table .expiration-countdown {
+  font-size: var(--font-size-xs);
+}
+
+/* Tooltip Enhancements */
+.tooltip-inner {
+  background-color: var(--tooltip-background);
+  color: var(--tooltip-color);
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--button-border-radius-sm);
+}
+
+.tooltip.bs-tooltip-top .tooltip-arrow::before {
+  border-top-color: var(--tooltip-background);
+}
+
+.tooltip.bs-tooltip-bottom .tooltip-arrow::before {
+  border-bottom-color: var(--tooltip-background);
+}
+
+.tooltip.bs-tooltip-start .tooltip-arrow::before {
+  border-left-color: var(--tooltip-background);
+}
+
+.tooltip.bs-tooltip-end .tooltip-arrow::before {
+  border-right-color: var(--tooltip-background);
+}
+
+/* Responsive Enhancements for Invitation Management */
+@media (max-width: 768px) {
+  .invitation-stats-cards {
+    margin-bottom: var(--spacing-md);
+  }
+  
+  .invitation-stats-cards .col-md-3 {
+    margin-bottom: var(--spacing-sm);
+  }
+  
+  .invitation-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .invitation-actions .btn {
+    width: 100%;
+    margin-bottom: var(--spacing-xs);
+  }
+  
+  .invitation-message-preview {
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: initial;
+  }
+}
+
+@media (max-width: 576px) {
+  .invitation-table .table {
+    font-size: var(--font-size-sm);
+  }
+  
+  .invitation-table .table th,
+  .invitation-table .table td {
+    padding: var(--spacing-sm);
+  }
+  
+  .invitation-stats-cards h4 {
+    font-size: var(--font-size-lg);
+  }
+  
+  .invitation-stats-cards small {
+    font-size: var(--font-size-xs);
+  }
+}
+
+/* Loading State for Invitation Actions */
+.invitation-actions .btn .spinner-border {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-width: 0.1rem;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  .action-buttons .btn:hover:not(:disabled) {
+    transform: none;
+  }
+  
+  .client-management-container .table tbody tr {
+    transition: none;
+  }
+  
+  .nav-tabs .nav-link {
+    transition: none;
+  }
+  
+  .invitation-stats-cards .card:hover {
+    transform: none;
+  }
+}

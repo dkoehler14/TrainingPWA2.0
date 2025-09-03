@@ -17,6 +17,8 @@ import ProgressCoach from './pages/ProgressCoach';
 import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
 import CoachDashboard from './pages/CoachDashboard';
+import ClientManagement from './pages/ClientManagement';
+import InvitationResponse from './pages/InvitationResponse';
 import CacheDemo from './components/CacheDemo';
 import { CoachRoute, AdminRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -170,6 +172,12 @@ function AppContent() {
             <CoachDashboard />
           </CoachRoute>
         } />
+        <Route path="/coach/clients" element={
+          <CoachRoute>
+            <ClientManagement />
+          </CoachRoute>
+        } />
+        <Route path="/invitation/:invitationCode" element={<InvitationResponse />} />
         <Route path="/admin" element={
           <AdminRoute>
             <Admin />

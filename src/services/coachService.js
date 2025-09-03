@@ -191,6 +191,22 @@ export const sendInvitation = async (invitationData) => {
   return executeSupabaseOperation(async () => {
     const invitationCode = generateInvitationCode()
     
+    // If inviting by username, look up the user ID
+    let targetUserId = invitationData.targetUserId
+    if (invitationData.targetUsername && !targetUserId) {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('name', invitationData.targetUsername)
+        .single()
+      
+      if (userError || !userData) {
+        throw new Error(`User with username "${invitationData.targetUsername}" not found`)
+      }
+      
+      targetUserId = userData.id
+    }
+    
     const { data, error } = await supabase
       .from('client_invitations')
       .insert({
@@ -198,7 +214,7 @@ export const sendInvitation = async (invitationData) => {
         coach_email: invitationData.coachEmail,
         coach_name: invitationData.coachName,
         target_email: invitationData.targetEmail || null,
-        target_user_id: invitationData.targetUserId || null,
+        target_user_id: targetUserId || null,
         invitation_code: invitationCode,
         message: invitationData.message || null,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
@@ -210,13 +226,29 @@ export const sendInvitation = async (invitationData) => {
       throw handleSupabaseError(error, 'sendInvitation')
     }
 
-    // If email invitation, trigger email sending
+    // Handle different invitation methods
     if (invitationData.targetEmail) {
+      // Email invitation - trigger email sending
       try {
         await sendInvitationEmail(data)
       } catch (emailError) {
         console.error('Failed to send invitation email:', emailError)
-        // Don't fail the invitation creation if email fails
+        // Update invitation with email error
+        await supabase
+          .from('client_invitations')
+          .update({ 
+            email_error: emailError.message,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.id)
+      }
+    } else if (targetUserId) {
+      // Username invitation - create in-app notification
+      try {
+        await createInAppNotification(data, targetUserId)
+      } catch (notificationError) {
+        console.error('Failed to create in-app notification:', notificationError)
+        // Don't fail the invitation creation if notification fails
       }
     }
 
@@ -259,11 +291,42 @@ export const getCoachInvitations = async (coachId, status = null) => {
  */
 export const acceptInvitation = async (invitationId) => {
   return executeSupabaseOperation(async () => {
+    // First get invitation details for notification
+    const { data: invitation, error: invitationError } = await supabase
+      .from('client_invitations')
+      .select('coach_id, coach_name, target_email')
+      .eq('id', invitationId)
+      .single()
+
+    if (invitationError) {
+      throw handleSupabaseError(invitationError, 'acceptInvitation')
+    }
+
     const { data, error } = await supabase
       .rpc('accept_coaching_invitation', { invitation_id: invitationId })
 
     if (error) {
       throw handleSupabaseError(error, 'acceptInvitation')
+    }
+
+    // Create notification for coach about accepted invitation
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: invitation.coach_id,
+          type: 'coaching_invitation',
+          title: '✅ Invitation Accepted',
+          message: `Your coaching invitation has been accepted! You now have a new client.`,
+          related_id: invitationId,
+          related_type: 'client_invitation',
+          action_url: '/coach/clients',
+          action_text: 'View Clients',
+          priority: 'high'
+        })
+    } catch (notificationError) {
+      console.error('Failed to create acceptance notification:', notificationError)
+      // Don't fail the invitation acceptance if notification fails
     }
 
     return data
@@ -277,6 +340,17 @@ export const acceptInvitation = async (invitationId) => {
  */
 export const declineInvitation = async (invitationId) => {
   return executeSupabaseOperation(async () => {
+    // First get invitation details for notification
+    const { data: invitation, error: invitationError } = await supabase
+      .from('client_invitations')
+      .select('coach_id, coach_name, target_email')
+      .eq('id', invitationId)
+      .single()
+
+    if (invitationError) {
+      throw handleSupabaseError(invitationError, 'declineInvitation')
+    }
+
     const { data, error } = await supabase
       .from('client_invitations')
       .update({
@@ -291,7 +365,154 @@ export const declineInvitation = async (invitationId) => {
       throw handleSupabaseError(error, 'declineInvitation')
     }
 
+    // Create notification for coach about declined invitation
+    try {
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: invitation.coach_id,
+          type: 'coaching_invitation',
+          title: '❌ Invitation Declined',
+          message: `Your coaching invitation was declined.`,
+          related_id: invitationId,
+          related_type: 'client_invitation',
+          action_url: '/coach/invitations',
+          action_text: 'View Invitations',
+          priority: 'normal'
+        })
+    } catch (notificationError) {
+      console.error('Failed to create decline notification:', notificationError)
+      // Don't fail the invitation decline if notification fails
+    }
+
     return data
+  })
+}
+
+/**
+ * Resend a coaching invitation
+ * @param {string} invitationId - Invitation ID
+ * @returns {Promise<Object>} Updated invitation
+ */
+export const resendInvitation = async (invitationId) => {
+  return executeSupabaseOperation(async () => {
+    // Get the existing invitation
+    const { data: invitation, error: getError } = await supabase
+      .from('client_invitations')
+      .select('*')
+      .eq('id', invitationId)
+      .single()
+
+    if (getError) {
+      throw handleSupabaseError(getError, 'resendInvitation')
+    }
+
+    // Check if invitation can be resent (must be pending or expired)
+    if (!['pending', 'expired'].includes(invitation.status)) {
+      throw new Error('Only pending or expired invitations can be resent')
+    }
+
+    // Generate new invitation code and extend expiration
+    const newInvitationCode = generateInvitationCode()
+    const newExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    // Update the invitation
+    const { data, error } = await supabase
+      .from('client_invitations')
+      .update({
+        invitation_code: newInvitationCode,
+        expires_at: newExpiresAt,
+        status: 'pending',
+        updated_at: new Date().toISOString(),
+        // Clear any previous response data
+        responded_at: null,
+        viewed_at: null
+      })
+      .eq('id', invitationId)
+      .select()
+      .single()
+
+    if (error) {
+      throw handleSupabaseError(error, 'resendInvitation')
+    }
+
+    // Resend the invitation using the same method as original
+    if (invitation.target_email) {
+      // Email invitation - trigger email sending
+      try {
+        await sendInvitationEmail(data)
+      } catch (emailError) {
+        console.error('Failed to resend invitation email:', emailError)
+        // Update invitation with email error
+        await supabase
+          .from('client_invitations')
+          .update({ 
+            email_error: emailError.message,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.id)
+      }
+    } else if (invitation.target_user_id) {
+      // Username invitation - create new in-app notification
+      try {
+        await createInAppNotification(data, invitation.target_user_id)
+      } catch (notificationError) {
+        console.error('Failed to create resend notification:', notificationError)
+        // Don't fail the invitation resend if notification fails
+      }
+    }
+
+    return data
+  })
+}
+
+/**
+ * Cancel a pending invitation
+ * @param {string} invitationId - Invitation ID
+ * @returns {Promise<Object>} Updated invitation
+ */
+export const cancelInvitation = async (invitationId) => {
+  return executeSupabaseOperation(async () => {
+    const { data, error } = await supabase
+      .from('client_invitations')
+      .update({
+        status: 'cancelled',
+        responded_at: new Date().toISOString()
+      })
+      .eq('id', invitationId)
+      .eq('status', 'pending') // Only allow cancelling pending invitations
+      .select()
+      .single()
+
+    if (error) {
+      throw handleSupabaseError(error, 'cancelInvitation')
+    }
+
+    return data
+  })
+}
+
+/**
+ * Expire old invitations (utility function for cleanup)
+ * @returns {Promise<number>} Number of expired invitations
+ */
+export const expireOldInvitations = async () => {
+  return executeSupabaseOperation(async () => {
+    const { data, error } = await supabase
+      .from('client_invitations')
+      .update({
+        status: 'expired',
+        updated_at: new Date().toISOString()
+      })
+      .eq('status', 'pending')
+      .lt('expires_at', new Date().toISOString())
+      .select('id')
+
+    if (error) {
+      throw handleSupabaseError(error, 'expireOldInvitations')
+    }
+
+    return data ? data.length : 0
   })
 }
 
@@ -445,6 +666,34 @@ const sendInvitationEmail = async (invitation) => {
 
   if (error) {
     throw new Error(`Failed to send invitation email: ${error.message}`)
+  }
+}
+
+/**
+ * Create in-app notification for username-based invitations
+ * @param {Object} invitation - Invitation data
+ * @param {string} targetUserId - Target user ID
+ */
+const createInAppNotification = async (invitation, targetUserId) => {
+  const { error } = await supabase
+    .from('notifications')
+    .insert({
+      user_id: targetUserId,
+      type: 'coaching_invitation',
+      title: `🏋️ Coaching Invitation from ${invitation.coach_name}`,
+      message: invitation.message 
+        ? `${invitation.coach_name} has invited you to be their client: "${invitation.message}"`
+        : `${invitation.coach_name} has invited you to be their client on FitTrack Pro. Accept to get personalized workout programs and coaching insights!`,
+      related_id: invitation.id,
+      related_type: 'client_invitation',
+      action_url: `/invitation/${invitation.invitation_code}`,
+      action_text: 'View Invitation',
+      priority: 'high',
+      expires_at: invitation.expires_at
+    })
+
+  if (error) {
+    throw new Error(`Failed to create in-app notification: ${error.message}`)
   }
 }
 

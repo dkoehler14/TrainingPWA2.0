@@ -3,6 +3,7 @@ import { Nav, Navbar, Button, Container } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
 import { useSimpleNavigationPermissions } from '../hooks/useSimpleRoleCheck';
 import { useTheme } from '../context/ThemeContext';
+import NotificationBell from './NotificationBell';
 import '../styles/NavBar.css';
 
 function NavBar({ user, userRole, isReady }) {
@@ -56,9 +57,11 @@ function NavBar({ user, userRole, isReady }) {
             {user && showCreateProgram && <Nav.Link href="/create-program" className="nav-link">Create Program</Nav.Link>}
             {user && <Nav.Link href="/profile" className="nav-link">Profile</Nav.Link>}
             {isReady && showCoachNav && <Nav.Link href="/coach-dashboard" className="nav-link">Coach Dashboard</Nav.Link>}
+            {isReady && showCoachNav && <Nav.Link href="/coach/clients" className="nav-link">Client Management</Nav.Link>}
             {isReady && showAdminNav && <Nav.Link href="/admin" className="nav-link">Admin</Nav.Link>}
           </Nav>
           <Nav className="d-flex align-items-center">
+            {user && <NotificationBell />}
             <Button
               variant={darkMode ? 'light' : 'dark'}
               onClick={toggleDarkMode}
