@@ -5,7 +5,7 @@
  * with the AuthContext and provides additional utilities for authentication management.
  */
 
-import { useContext } from 'react'
+import { useContext, useMemo } from 'react'
 import { AuthContext } from '../context/AuthContext'
 
 /**
@@ -205,7 +205,7 @@ export function useRoles() {
   const isCoach = () => hasRole('coach')
   const isUser = () => hasRole('user')
   
-  return {
+  return useMemo(() => ({
     userRole: getUserRole(),
     userRoles: getUserRoles(),
     hasRole,
@@ -215,7 +215,7 @@ export function useRoles() {
     isModerator,
     isCoach,
     isUser
-  }
+  }), [userProfile?.roles, user?.user_metadata?.role])
 }
 
 /**

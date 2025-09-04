@@ -70,7 +70,7 @@ function CoachAnalytics() {
         <Col xs="auto">
           <Button 
             as={Link} 
-            to="/coach/dashboard" 
+            to="/coach-dashboard" 
             variant="outline-primary"
           >
             ← Back to Dashboard

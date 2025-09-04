@@ -6,7 +6,7 @@
  * and quick action buttons for coaching tasks.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Container, Row, Col, Card, Button, Spinner, Badge, Table, Alert } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { useAuth, useRoles } from '../hooks/useAuth';
@@ -22,6 +22,8 @@ import ProgramMonitoringDashboard from '../components/ProgramMonitoringDashboard
 import RealtimeActivityFeed from '../components/RealtimeActivityFeed';
 import RealtimeStatusIndicator from '../components/RealtimeStatusIndicator';
 import ErrorMessage from '../components/ErrorMessage';
+import CoachProfileEditModal from '../components/CoachProfileEditModal';
+import InviteClientModal from '../components/InviteClientModal';
 import '../styles/Home.css';
 import '../styles/CoachDashboard.css';
 import '../styles/RealtimeComponents.css';
@@ -42,6 +44,8 @@ function CoachDashboard() {
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     clients: [],
     invitations: [],
@@ -54,57 +58,21 @@ function CoachDashboard() {
     }
   });
 
-  // Real-time coaching updates
-  const {
-    isConnected: realtimeConnected,
-    connectionStatus: realtimeStatus,
-    error: realtimeError,
-    invitations: realtimeInvitations,
-    clientActivity: realtimeActivity,
-    relationships: realtimeRelationships
-  } = useRealtimeCoachDashboard(
-    dashboardData.clients.map(c => c.client_id), 
-    {
-      onInvitationAccepted: (invitation) => {
-        console.log('✅ Real-time: Invitation accepted', invitation);
-        // Refresh dashboard data to show new client
-        loadDashboardData();
-      },
-      onInvitationDeclined: (invitation) => {
-        console.log('❌ Real-time: Invitation declined', invitation);
-      },
-      onWorkoutCompleted: (workout) => {
-        console.log('🏋️ Real-time: Client completed workout', workout);
-        // Update activity stats
-        setDashboardData(prev => ({
-          ...prev,
-          stats: {
-            ...prev.stats,
-            thisWeekActivity: prev.stats.thisWeekActivity + 1
-          }
-        }));
-      },
-      onClientActivity: (activity) => {
-        console.log('👥 Real-time: Client activity', activity);
-      }
-    }
-  );
-
   // Load dashboard data function (extracted for reuse)
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       // Load coach profile
       const coachProfile = await getCoachProfile(user.id);
-      
+
       // Load clients
       const clients = await getCoachClients(user.id);
-      
+
       // Load pending invitations
       const invitations = await getCoachInvitations(user.id, 'pending');
-      
+
       // Calculate stats
       const stats = {
         activeClients: clients.length,
@@ -126,12 +94,65 @@ function CoachDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id]);
+
+  // Memoize client IDs to prevent unnecessary re-renders
+  const clientIds = useMemo(() =>
+    dashboardData.clients.map(c => c.client_id),
+    [dashboardData.clients]
+  );
+
+  // Memoize callback functions to prevent unnecessary re-renders
+  const handleInvitationAccepted = useCallback((invitation) => {
+    console.log('✅ Real-time: Invitation accepted', invitation);
+    // Refresh dashboard data to show new client
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const handleInvitationDeclined = useCallback((invitation) => {
+    console.log('❌ Real-time: Invitation declined', invitation);
+  }, []);
+
+  const handleWorkoutCompleted = useCallback((workout) => {
+    console.log('🏋️ Real-time: Client completed workout', workout);
+    // Update activity stats
+    setDashboardData(prev => ({
+      ...prev,
+      stats: {
+        ...prev.stats,
+        thisWeekActivity: prev.stats.thisWeekActivity + 1
+      }
+    }));
+  }, []);
+
+  const handleClientActivity = useCallback((activity) => {
+    console.log('👥 Real-time: Client activity', activity);
+  }, []);
+
+  // Real-time coaching updates
+  const {
+    isConnected: realtimeConnected,
+    connectionStatus: realtimeStatus,
+    error: realtimeError,
+    invitations: realtimeInvitations,
+    clientActivity: realtimeActivity,
+    relationships: realtimeRelationships
+  } = useRealtimeCoachDashboard(
+    clientIds,
+    {
+      onInvitationAccepted: handleInvitationAccepted,
+      onInvitationDeclined: handleInvitationDeclined,
+      onWorkoutCompleted: handleWorkoutCompleted,
+      onClientActivity: handleClientActivity
+    }
+  );
+
+
 
   // Load dashboard data
   useEffect(() => {
     if (!user || isVerifyingRole) return;
-    
+
     // Only load data if user is verified as coach
     if (!isCoachRole && !isCoachVerified) {
       setLoading(false);
@@ -139,7 +160,7 @@ function CoachDashboard() {
     }
 
     loadDashboardData();
-  }, [user, isCoachRole, isCoachVerified, isVerifyingRole]);
+  }, [user, isCoachRole, isCoachVerified, isVerifyingRole, loadDashboardData]);
 
   // Calculate weekly activity from clients
   const calculateWeeklyActivity = (clients) => {
@@ -224,11 +245,9 @@ function CoachDashboard() {
           </div>
         </Col>
         <Col xs="auto">
-          <Button 
-            as={Link} 
-            to="/coach/invite-client" 
+          <Button
+            onClick={() => setShowInviteModal(true)}
             className="soft-button gradient cta-button"
-            disabled // Will be enabled when invite modal is implemented
           >
             📧 Invite Client
           </Button>
@@ -349,9 +368,9 @@ function CoachDashboard() {
               ) : (
                 <div className="text-center py-4">
                   <p className="soft-text">No active clients yet.</p>
-                  <Button 
+                  <Button
+                    onClick={() => setShowInviteModal(true)}
                     variant="primary"
-                    disabled // Will be enabled when invite modal is implemented
                   >
                     Send Your First Invitation
                   </Button>
@@ -378,9 +397,9 @@ function CoachDashboard() {
             <Card.Body>
               <Card.Title className="widget-title">Quick Actions</Card.Title>
               <div className="d-grid gap-2">
-                <Button 
+                <Button
+                  onClick={() => setShowInviteModal(true)}
                   variant="outline-primary"
-                  disabled // Will be enabled when invite modal is implemented
                 >
                   📧 Invite New Client
                 </Button>
@@ -469,10 +488,10 @@ function CoachDashboard() {
                     </div>
                   )}
                 </div>
-                <Button 
-                  variant="outline-secondary" 
+                <Button
+                  variant="outline-secondary"
                   size="sm"
-                  disabled // Will be enabled when profile editing is implemented
+                  onClick={() => setShowEditModal(true)}
                 >
                   Edit Profile
                 </Button>
@@ -639,6 +658,21 @@ function CoachDashboard() {
           </Card>
         </Col>
       </Row>
+
+      {/* Coach Profile Edit Modal */}
+        <CoachProfileEditModal
+          show={showEditModal}
+          onHide={() => setShowEditModal(false)}
+          userId={user?.id}
+          onProfileUpdated={loadDashboardData}
+        />
+  
+        {/* Invite Client Modal */}
+        <InviteClientModal
+          show={showInviteModal}
+          onHide={() => setShowInviteModal(false)}
+          onInvitationSent={loadDashboardData}
+        />
     </Container>
   );
 }

@@ -50,13 +50,6 @@ export function useClientCoach() {
             id,
             name,
             email
-          ),
-          coach_profile:coach_profiles!coach_id(
-            specializations,
-            certifications,
-            bio,
-            phone,
-            website
           )
         `)
         .eq('client_id', user.id)
@@ -81,9 +74,13 @@ export function useClientCoach() {
           console.error('🚨 DEBUG: 2. Content-Type header issues');
           console.error('🚨 DEBUG: 3. Accept header mismatch');
           console.error('🚨 DEBUG: 4. RLS policy blocking access');
+          throw handleSupabaseError(relationshipError, 'loadCoachData');
         }
 
-        if (relationshipError.code !== 'PGRST116') {
+        // PGRST116 is expected when user has no active coach - don't treat as error
+        if (relationshipError.code === 'PGRST116') {
+          console.log('ℹ️ DEBUG: No active coach relationship found (this is normal)');
+        } else {
           throw handleSupabaseError(relationshipError, 'loadCoachData');
         }
       } else {
@@ -92,8 +89,26 @@ export function useClientCoach() {
 
       if (relationship) {
         setCoachRelationship(relationship);
-        setCoachProfile(relationship.coach_profile);
         setHasActiveCoach(true);
+
+        // Load coach profile data separately
+        try {
+          const { data: profileData, error: profileError } = await supabase
+            .from('coach_profiles')
+            .select('specializations, certifications, bio, phone, website')
+            .eq('user_id', relationship.coach_id)
+            .single();
+
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.error('Error fetching coach profile:', profileError);
+            setCoachProfile(null);
+          } else {
+            setCoachProfile(profileData);
+          }
+        } catch (profileErr) {
+          console.error('Exception fetching coach profile:', profileErr);
+          setCoachProfile(null);
+        }
 
         // Load assigned programs
         await loadAssignedPrograms(relationship.coach_id);
@@ -317,26 +332,61 @@ export function useHasActiveCoach() {
         console.log('🔍 DEBUG: Query response error:', error);
 
         if (error) {
+          // PGRST116 is expected when user has no active coach - don't treat as error
+          if (error.code === 'PGRST116') {
+            console.log('ℹ️ DEBUG: No active coach relationship found (this is normal)');
+            setHasCoach(false);
+            return;
+          }
+
+          // Handle 406 Not Acceptable errors specifically
+          if (error.code === '406' || error.message?.includes('406')) {
+            console.error('🚨 DEBUG: 406 Not Acceptable error detected!');
+            console.error('🚨 DEBUG: This usually indicates content negotiation issues');
+            console.error('🚨 DEBUG: Possible causes:');
+            console.error('🚨 DEBUG: 1. Authentication/session issues');
+            console.error('🚨 DEBUG: 2. RLS policy blocking access');
+            console.error('🚨 DEBUG: 3. Supabase client configuration problems');
+
+            // Set to false but don't throw - allow graceful degradation
+            setHasCoach(false);
+            return;
+          }
+
+          // Handle 406 Not Acceptable errors specifically
+          if (error.code === '406' || error.message?.includes('406')) {
+            console.error('🚨 DEBUG: 406 Not Acceptable error detected!');
+            console.error('🚨 DEBUG: This usually indicates content negotiation issues');
+            console.error('🚨 DEBUG: Possible causes:');
+            console.error('🚨 DEBUG: 1. Authentication/session issues');
+            console.error('🚨 DEBUG: 2. RLS policy blocking access');
+            console.error('🚨 DEBUG: 3. Supabase client configuration problems');
+
+            // Try to get current session info for debugging
+            supabase.auth.getSession().then(({ data: sessionData, error: sessionError }) => {
+              console.log('🚨 DEBUG: Current session status:', {
+                hasSession: !!sessionData.session,
+                sessionError: sessionError?.message
+              });
+            });
+
+            // Set to false but don't throw - allow graceful degradation
+            setHasCoach(false);
+            return;
+          }
+
+          // Handle other actual errors
           console.error('❌ DEBUG: Error checking for coach:', error);
           console.error('❌ DEBUG: Error code:', error.code);
           console.error('❌ DEBUG: Error message:', error.message);
           console.error('❌ DEBUG: Error details:', error.details);
           console.error('❌ DEBUG: Error hint:', error.hint);
 
-          // Log additional context for 406 errors
-          if (error.code === '406' || error.message?.includes('406')) {
-            console.error('🚨 DEBUG: 406 Not Acceptable error detected!');
-            console.error('🚨 DEBUG: This usually indicates:');
-            console.error('🚨 DEBUG: 1. Content-Type header mismatch');
-            console.error('🚨 DEBUG: 2. Accept header issues');
-            console.error('🚨 DEBUG: 3. Authentication problems');
-            console.error('🚨 DEBUG: 4. Query parameter format issues');
-          }
+          setHasCoach(false);
         } else {
           console.log('✅ DEBUG: Successfully checked for coach, result:', !!data);
+          setHasCoach(!!data);
         }
-
-        setHasCoach(!!data);
       } catch (err) {
         console.error('💥 DEBUG: Exception in checkForCoach:', err);
         console.error('💥 DEBUG: Exception stack:', err.stack);

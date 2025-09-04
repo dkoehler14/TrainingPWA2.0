@@ -10,7 +10,7 @@
  * Requirements: 7.2, 2.6, 4.2
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useAuth } from './useAuth'
 import { isRealtimeDisabled } from '../config/supabase'
 import realtimeCoachingManager, { 
@@ -230,12 +230,16 @@ export function useRealtimeCoachDashboard(clientIds = [], options = {}) {
     return () => clearInterval(interval)
   }, [isConnected])
 
+  // Memoize return values to prevent unnecessary re-renders
+  const memoizedConnectionStatus = useMemo(() => connectionStatus, [connectionStatus])
+  const memoizedMetrics = useMemo(() => metrics, [metrics])
+
   return {
     // Connection state
     isConnected,
-    connectionStatus,
+    connectionStatus: memoizedConnectionStatus,
     error,
-    metrics,
+    metrics: memoizedMetrics,
 
     // Data
     invitations,
