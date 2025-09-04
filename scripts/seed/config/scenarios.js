@@ -16,6 +16,7 @@ const USER_SCENARIOS = {
     description: 'New to weightlifting, learning basic movements',
     email: 'beginner@test.com',
     password: 'test123',
+    role: 'user',
     profile: {
       name: 'Alex Beginner',
       experienceLevel: 'beginner',
@@ -60,6 +61,7 @@ const USER_SCENARIOS = {
     description: 'Experienced with basics, working on progression',
     email: 'intermediate@test.com',
     password: 'test123',
+    role: 'user',
     profile: {
       name: 'Jordan Intermediate',
       experienceLevel: 'intermediate',
@@ -104,6 +106,8 @@ const USER_SCENARIOS = {
     description: 'Competitive powerlifter with extensive experience',
     email: 'advanced@test.com',
     password: 'test123',
+    role: 'coach',
+    clients: ['beginner', 'intermediate'], // Defines relationships
     profile: {
       name: 'Casey Advanced',
       experienceLevel: 'advanced',
@@ -148,6 +152,7 @@ const USER_SCENARIOS = {
     description: 'Experienced lifter returning after a break',
     email: 'returning@test.com',
     password: 'test123',
+    role: 'user',
     profile: {
       name: 'Sam Returning',
       experienceLevel: 'intermediate',
@@ -192,6 +197,7 @@ const USER_SCENARIOS = {
     description: 'Lifter working around injury limitations',
     email: 'recovery@test.com',
     password: 'test123',
+    role: 'user',
     profile: {
       name: 'Taylor Recovery',
       experienceLevel: 'intermediate',
@@ -236,6 +242,7 @@ const USER_SCENARIOS = {
     description: 'Time-constrained professional seeking efficiency',
     email: 'professional@test.com',
     password: 'test123',
+    role: 'user',
     profile: {
       name: 'Morgan Professional',
       experienceLevel: 'intermediate',

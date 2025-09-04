@@ -45,6 +45,9 @@ async function seedDatabase(options = {}) {
 
     // Step 5: Create historical workout data if requested
     let workoutLogs = [];
+    // Step 4: Create relationships and invitations
+    await seedRelationshipsAndInvitations(supabase, users, { verbose });
+
     if (includeHistoricalData) {
       workoutLogs = await seedHistoricalWorkouts(supabase, users, programs, {
         verbose,
@@ -711,6 +714,80 @@ function getWorkoutTemplatesForProgram(program) {
 
     default:
       return [];
+  }
+}
+
+/**
+ * Seed coach-client relationships and invitations
+ */
+async function seedRelationshipsAndInvitations(supabase, users, options = {}) {
+  const { verbose = false } = options;
+
+  if (verbose) {
+    logProgress('Creating coach-client relationships and invitations...', 'info');
+  }
+
+  const relationshipsToInsert = [];
+  const invitationsToInsert = [];
+
+  const coaches = users.filter(u => u.scenarioName === 'Advanced User'); // Assuming advanced user is the coach
+
+  for (const coach of coaches) {
+    const clients = users.filter(u => u.scenarioName !== 'Advanced User');
+
+    for (let i = 0; i < clients.length; i++) {
+      const client = clients[i];
+
+      // Create an active relationship for the first client
+      if (i === 0) {
+        relationshipsToInsert.push({
+          coach_id: coach.id,
+          client_id: client.id,
+          status: 'active',
+          accepted_at: new Date().toISOString(),
+          invitation_method: 'email',
+          client_goals: client.goals
+        });
+        if (verbose) {
+          logProgress(`  ✅ Creating active relationship: ${coach.name} -> ${client.name}`, 'info');
+        }
+      }
+      // Create a pending invitation for the second client
+      else if (i === 1) {
+        invitationsToInsert.push({
+          coach_id: coach.id,
+          coach_email: coach.email,
+          coach_name: coach.name,
+          target_email: client.email,
+          status: 'pending',
+          invitation_code: `test-code-${client.id.substring(0, 8)}`,
+          message: `Hi ${client.name}, I'd like to invite you to be my client!`
+        });
+        if (verbose) {
+          logProgress(`  ✅ Creating pending invitation: ${coach.name} -> ${client.name}`, 'info');
+        }
+      }
+    }
+  }
+
+  // Insert relationships
+  if (relationshipsToInsert.length > 0) {
+    const { error: relError } = await supabase.from('coach_client_relationships').upsert(relationshipsToInsert);
+    if (relError) {
+      console.warn(`Warning: Could not create relationships: ${relError.message}`);
+    } else if (verbose) {
+      logProgress(`    Successfully created ${relationshipsToInsert.length} relationships`, 'success');
+    }
+  }
+
+  // Insert invitations
+  if (invitationsToInsert.length > 0) {
+    const { error: invError } = await supabase.from('client_invitations').upsert(invitationsToInsert);
+    if (invError) {
+      console.warn(`Warning: Could not create invitations: ${invError.message}`);
+    } else if (verbose) {
+      logProgress(`    Successfully created ${invitationsToInsert.length} invitations`, 'success');
+    }
   }
 }
 

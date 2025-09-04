@@ -15,7 +15,7 @@ function getSupabaseClient() {
 }
 
 async function createTestUser(supabase, userConfig, verbose = false) {
-  const { email, password, profile } = userConfig;
+  const { email, password, profile, role } = userConfig;
 
   try {
     // Check if user already exists and clean up if needed
@@ -73,6 +73,7 @@ async function createTestUser(supabase, userConfig, verbose = false) {
     const userProfile = {
       id: authUser.user.id, // Use the auth user's ID directly as primary key
       email,
+      roles: role,
       ...profile
     };
 
@@ -107,6 +108,65 @@ async function createTestUser(supabase, userConfig, verbose = false) {
   } catch (error) {
     console.error(`Error creating user ${email}:`, error.message);
     throw error;
+  }
+}
+
+async function seedCoachClientData(supabase, users, verbose = false) {
+  if (verbose) {
+    console.log('  Creating coach-client relationships and invitations...');
+  }
+
+  const coach = users.find(u => u.email === 'coach@example.com');
+  const beginner = users.find(u => u.email === 'beginner@example.com');
+  const intermediate = users.find(u => u.email === 'intermediate@example.com');
+
+  if (!coach || !beginner || !intermediate) {
+    console.warn('Warning: Could not find coach or client users to create relationships.');
+    return { relationships: 0, invitations: 0 };
+  }
+
+  const relationshipsToInsert = [];
+  const invitationsToInsert = [];
+
+  // Create an active relationship for the beginner user
+  relationshipsToInsert.push({
+    coach_id: coach.id,
+    client_id: beginner.id,
+    status: 'active',
+    accepted_at: new Date().toISOString(),
+    invitation_method: 'email',
+    client_goals: beginner.goals
+  });
+
+  // Create a pending invitation for the intermediate user
+  invitationsToInsert.push({
+    coach_id: coach.id,
+    coach_email: coach.email,
+    coach_name: coach.name,
+    target_email: intermediate.email,
+    status: 'pending',
+    invitation_code: `test-code-${intermediate.id.substring(0, 8)}`,
+    message: `Hi ${intermediate.name}, I'd like to invite you to be my client!`
+  });
+
+  // Insert relationships
+  if (relationshipsToInsert.length > 0) {
+    const { error: relError } = await supabase.from('coach_client_relationships').upsert(relationshipsToInsert);
+    if (relError) {
+      console.warn(`Warning: Could not create relationships: ${relError.message}`);
+    } else if (verbose) {
+      console.log(`    ✅ Created ${relationshipsToInsert.length} coach-client relationships`);
+    }
+  }
+
+  // Insert invitations
+  if (invitationsToInsert.length > 0) {
+    const { error: invError } = await supabase.from('client_invitations').upsert(invitationsToInsert);
+    if (invError) {
+      console.warn(`Warning: Could not create invitations: ${invError.message}`);
+    } else if (verbose) {
+      console.log(`    ✅ Created ${invitationsToInsert.length} client invitations`);
+    }
   }
 }
 
@@ -240,9 +300,28 @@ async function seedSupabaseAll(options = {}) {
         }
       },
       {
+        email: 'coach@example.com',
+        password: 'coach123',
+        role: ['coach', 'user'],
+        profile: {
+          name: 'Coach User',
+          experience_level: 'advanced',
+          preferred_units: 'LB',
+          age: 35,
+          weight_lbs: 190.0,
+          height_feet: 6,
+          height_inches: 1,
+          goals: ['Coaching', 'Strength Maintenance'],
+          available_equipment: ['Full Gym Access'],
+          injuries: [],
+          preferences: {},
+          settings: {}
+        }
+      },
+      {
         email: 'admin@example.com',
         password: 'admin123',
-        role: ['admin'],
+        role: ['admin', 'coach'],
         profile: {
           name: 'Admin User',
           experience_level: 'intermediate',
@@ -269,11 +348,34 @@ async function seedSupabaseAll(options = {}) {
       try {
         const user = await createTestUser(supabase, userConfig, verbose);
         createdUsers.push(user);
+
+        // If the user is a coach, create a coach_profile
+        if (userConfig.role && userConfig.role.includes('coach')) {
+          const coachProfileData = {
+            user_id: user.id,
+            is_active: true,
+            specializations: ['Strength Training', 'Powerlifting'],
+            bio: `Experienced ${user.experience_level} coach specializing in strength and performance.`,
+            client_limit: 10
+          };
+          const { error: coachProfileError } = await supabase
+            .from('coach_profiles')
+            .upsert(coachProfileData);
+
+          if (coachProfileError) {
+            console.warn(`Warning: Could not create coach profile for ${user.name}: ${coachProfileError.message}`);
+          } else if (verbose) {
+            console.log(`    ✅ Created coach profile for ${user.name}`);
+          }
+        }
       } catch (error) {
         console.error(`Failed to create user ${userConfig.email}:`, error.message);
         // Continue with other users even if one fails
       }
     }
+
+    // Seed coach-client relationships and invitations
+    await seedCoachClientData(supabase, createdUsers, verbose);
 
     if (createdUsers.length === 0) {
       throw new Error('No users were created successfully');
