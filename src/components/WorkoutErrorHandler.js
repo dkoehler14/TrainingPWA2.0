@@ -347,7 +347,7 @@ export function OperationProgress({
         return <CheckCircle className="me-2 text-success" />;
       case 'failed':
         return <XCircle className="me-2 text-danger" />;
-      case 'cancelled':
+      case 'canceled':
         return <XCircle className="me-2 text-warning" />;
       default:
         return <InfoCircle className="me-2" />;
@@ -359,7 +359,7 @@ export function OperationProgress({
       case 'completed':
         return 'success';
       case 'failed':
-      case 'cancelled':
+      case 'canceled':
         return 'danger';
       default:
         return 'primary';

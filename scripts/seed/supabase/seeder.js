@@ -170,6 +170,164 @@ async function seedCoachClientData(supabase, users, verbose = false) {
   }
 }
 
+/**
+ * Parses a rep value which can be a number or a string like '8-10' or '12+'.
+ * @param {string|number} repValue - The rep value to parse.
+ * @returns {number} A specific integer rep count.
+ */
+function parseReps(repValue) {
+  if (typeof repValue === 'number') {
+    return repValue;
+  }
+  if (typeof repValue !== 'string') {
+    return 8; // Default fallback for unexpected types
+  }
+
+  // Handle '12+' format
+  if (repValue.includes('+')) {
+    return parseInt(repValue.replace('+', ''), 10) || 12;
+  }
+
+  // Handle '8-10' format
+  if (repValue.includes('-')) {
+    const [min, max] = repValue.split('-').map(n => parseInt(n.trim(), 10));
+    if (!isNaN(min) && !isNaN(max)) {
+      // Return a random number in the range
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+  }
+
+  // Handle simple number string '8' or fallback
+  return parseInt(repValue, 10) || 8;
+}
+
+/**
+ * Seeds historical workout data for each user based on their program.
+ * Simulates progressive overload for realism.
+ */
+async function seedHistoricalWorkouts(supabase, users, programs, exercises, options = {}) {
+  const { verbose = false, weeksBack = 8 } = options;
+  if (verbose) {
+    console.log(`  Generating historical workout data for the past ${weeksBack} weeks...`);
+  }
+
+  const allWorkoutLogs = [];
+  const allWorkoutLogExercises = [];
+
+  for (const user of users) {
+    const userProgram = programs.find(p => p.program.user_id === user.id);
+    if (!userProgram) continue;
+ 
+    const sampleData = getSampleProgramData(user.experience_level);
+    const programDuration = sampleData.program.duration || 4; // Default to 4 weeks if not specified
+    const progression = {}; // Track weight progression for each exercise
+ 
+    for (let week = 0; week < weeksBack; week++) {
+      const historicalWeekIndex = week + 1;
+      // Cycle through the program's weeks to get the right template
+      const templateWeekNumber = (week % programDuration) + 1;
+      const workoutsForThisWeek = sampleData.workouts.filter(w => w.week_number === templateWeekNumber);
+ 
+      const daysAgo = (weeksBack - week - 1) * 7;
+
+      for (const workoutTemplate of workoutsForThisWeek) {
+        // Skip some workouts to make history more realistic
+        if (Math.random() > 0.9) continue;
+
+        const workoutDate = new Date();
+        workoutDate.setDate(workoutDate.getDate() - daysAgo - (7 - workoutTemplate.day_number));
+
+        // Use a temporary ID to link exercises to logs before insertion
+        const tempLogId = `temp-log-${user.id}-${historicalWeekIndex}-${workoutTemplate.day_number}`;
+
+        const workoutLog = {
+          user_id: user.id,
+          program_id: userProgram.program.id,
+          week_index: historicalWeekIndex, // Use the historical week, not template week
+          day_index: workoutTemplate.day_number,
+          name: workoutTemplate.name,
+          type: 'program_workout',
+          date: workoutDate.toISOString().split('T')[0],
+          completed_date: workoutDate.toISOString(),
+          is_finished: true,
+          is_draft: false,
+          weight_unit: user.preferred_units || 'LB',
+          duration: 45 + Math.floor(Math.random() * 30) // 45-75 mins
+        };
+        allWorkoutLogs.push({ ...workoutLog, temp_id: tempLogId }); // Add temp_id for mapping
+
+        for (const [index, exerciseTemplate] of workoutTemplate.exercises.entries()) {
+          const exerciseId = exerciseTemplate.exercise_id;
+
+          // Initialize or get current weight for the exercise
+          if (!progression[exerciseId]) {
+            progression[exerciseId] = 135; // Default starting weight
+          }
+
+          const currentWeight = progression[exerciseId] - (weeksBack - week - 1) * 5; // Decrease weight for past workouts
+
+          const sets = exerciseTemplate.sets;
+          const reps = [];
+          const weights = [];
+          const completed = [];
+
+          for (let i = 0; i < sets; i++) {
+            reps.push(parseReps(exerciseTemplate.reps));
+            weights.push(currentWeight);
+            completed.push(true);
+          }
+
+          allWorkoutLogExercises.push({
+            workout_log_id: tempLogId, // Link using temporary ID
+            exercise_id: exerciseId,
+            sets: sets,
+            reps: reps,
+            weights: weights,
+            completed: completed,
+            order_index: index
+          });
+        }
+      }
+    }
+  }
+
+  // Insert workout logs
+  const { data: insertedLogs, error: logsError } = await supabase
+    .from('workout_logs')
+    .insert(allWorkoutLogs.map(({ temp_id, ...log }) => log)) // Remove temp_id before insert
+    .select('id, user_id, program_id, week_index, day_index');
+
+  if (logsError) throw new Error(`Failed to insert workout logs: ${logsError.message}`);
+
+  // Create a map from the unique key to the new database ID
+  const logIdMap = new Map();
+  insertedLogs.forEach(log => {
+    const key = `${log.user_id}-${log.program_id}-${log.week_index}-${log.day_index}`;
+    logIdMap.set(key, log.id);
+  });
+
+  // Map workout log IDs to exercises
+  const exercisesWithLogIds = allWorkoutLogExercises.map(ex => {
+    // Recreate the unique key from the original log data to find the new ID
+    const originalLog = allWorkoutLogs.find(l => l.temp_id === ex.workout_log_id);
+    if (!originalLog) return null;
+    const key = `${originalLog.user_id}-${originalLog.program_id}-${originalLog.week_index}-${originalLog.day_index}`;
+    const realLogId = logIdMap.get(key);
+    if (!realLogId) return null;
+    const { workout_log_id, ...restOfEx } = ex;
+    return { ...restOfEx, workout_log_id: realLogId };
+  }).filter(ex => ex);
+
+  // Insert workout log exercises
+  const { error: exercisesError } = await supabase
+    .from('workout_log_exercises')
+    .insert(exercisesWithLogIds);
+
+  if (exercisesError) throw new Error(`Failed to insert workout log exercises: ${exercisesError.message}`);
+
+  if (verbose) console.log(`    ✅ Created ${insertedLogs.length} workout logs and ${exercisesWithLogIds.length} log exercises.`);
+}
+
 async function seedSupabaseAll(options = {}) {
   const { scenarios = 'basic', verbose = false, includeHistoricalData = true } = options;
   const startTime = Date.now();
@@ -374,13 +532,6 @@ async function seedSupabaseAll(options = {}) {
       }
     }
 
-    // Seed coach-client relationships and invitations
-    await seedCoachClientData(supabase, createdUsers, verbose);
-
-    if (createdUsers.length === 0) {
-      throw new Error('No users were created successfully');
-    }
-
     if (verbose) {
       console.log(`    ✅ Created ${createdUsers.length} test users`);
     }
@@ -493,6 +644,18 @@ async function seedSupabaseAll(options = {}) {
 
     if (verbose) {
       console.log(`    ✅ Created ${createdPrograms.length} complete programs`);
+    }
+
+    // Seed coach-client relationships and invitations
+    await seedCoachClientData(supabase, createdUsers, verbose);
+
+    // Seed historical workout data if requested
+    if (includeHistoricalData) {
+      await seedHistoricalWorkouts(supabase, createdUsers, createdPrograms, exercises, { verbose });
+    }
+
+    if (createdUsers.length === 0) {
+      throw new Error('No users were created successfully');
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);

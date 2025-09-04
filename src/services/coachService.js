@@ -157,8 +157,9 @@ export const getClientDetails = async (coachId, clientId) => {
         experience_level,
         preferred_units,
         age,
-        weight,
-        height,
+        weight_lbs,
+        height_feet,
+        height_inches,
         goals,
         available_equipment,
         injuries,
@@ -476,7 +477,7 @@ export const cancelInvitation = async (invitationId) => {
     const { data, error } = await supabase
       .from('client_invitations')
       .update({
-        status: 'cancelled',
+        status: 'canceled',
         responded_at: new Date().toISOString()
       })
       .eq('id', invitationId)

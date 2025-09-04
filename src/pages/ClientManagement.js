@@ -297,7 +297,7 @@ function ClientManagement() {
     }
   };
 
-  // Handle invitation cancellation
+  // Handle invitation cancelation
   const handleCancelInvitation = async (invitationId) => {
     if (!window.confirm('Are you sure you want to cancel this invitation? This action cannot be undone.')) {
       return;
@@ -342,7 +342,7 @@ function ClientManagement() {
       case 'terminated': return 'danger';
       case 'expired': return 'dark';
       case 'declined': return 'danger';
-      case 'cancelled': return 'secondary';
+      case 'canceled': return 'secondary';
       case 'accepted': return 'success';
       default: return 'secondary';
     }
@@ -488,7 +488,7 @@ function ClientManagement() {
                     <option value="expired">Expired</option>
                     <option value="accepted">Accepted</option>
                     <option value="declined">Declined</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="canceled">Canceled</option>
                   </>
                 )}
               </Form.Select>
@@ -665,9 +665,9 @@ function ClientManagement() {
                 <Card className="soft-card text-center">
                   <Card.Body className="py-3">
                     <h4 className="text-secondary mb-1">
-                      {invitations.filter(inv => ['declined', 'cancelled'].includes(inv.status)).length}
+                      {invitations.filter(inv => ['declined', 'canceled'].includes(inv.status)).length}
                     </h4>
-                    <small className="text-muted">Declined/Cancelled</small>
+                    <small className="text-muted">Declined/Canceled</small>
                   </Card.Body>
                 </Card>
               </Col>
@@ -785,7 +785,7 @@ function ClientManagement() {
                                 </Button>
                               </OverlayTrigger>
                             )}
-                            {['accepted', 'declined', 'cancelled'].includes(invitation.status) && (
+                            {['accepted', 'declined', 'canceled'].includes(invitation.status) && (
                               <Button
                                 variant="outline-secondary"
                                 size="sm"
@@ -793,7 +793,7 @@ function ClientManagement() {
                               >
                                 {invitation.status === 'accepted' ? '✅ Accepted' : 
                                  invitation.status === 'declined' ? '❌ Declined' : 
-                                 invitation.status === 'cancelled' ? '🚫 Cancelled' : 'N/A'}
+                                 invitation.status === 'canceled' ? '🚫 Canceled' : 'N/A'}
                               </Button>
                             )}
                             {invitation.status === 'pending' && (

@@ -53,7 +53,7 @@ CREATE TABLE client_invitations (
     invitation_code VARCHAR(50) UNIQUE NOT NULL,
     message TEXT,
     
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'expired')),
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'canceled')),
     expires_at TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '7 days'),
     responded_at TIMESTAMP WITH TIME ZONE,
     

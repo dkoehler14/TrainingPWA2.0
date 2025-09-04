@@ -134,7 +134,7 @@ This implementation plan breaks down the coach role system into discrete, manage
     - _Requirements: 2.1, 2.2, 2.3_
 
 - [ ] 6. Client Invitation System
-  - [ ] 6.1 Implement invitation creation and sending
+  - [x] 6.1 Implement invitation creation and sending
     - Create invitation generation with unique codes
     - Build email invitation functionality using Supabase Edge Functions
     - Add in-app notification system for username invitations
