@@ -191,23 +191,22 @@ export const getClientDetails = async (coachId, clientId) => {
 export const sendInvitation = async (invitationData) => {
   return executeSupabaseOperation(async () => {
     const invitationCode = generateInvitationCode()
-    
-    // If inviting by username, look up the user ID
-    let targetUserId = invitationData.targetUserId
-    if (invitationData.targetUsername && !targetUserId) {
+
+    // Check if the email belongs to an existing user
+    let targetUserId = null
+    if (invitationData.targetEmail) {
       const { data: userData, error: userError } = await supabase
         .from('users')
         .select('id')
-        .eq('name', invitationData.targetUsername)
+        .eq('email', invitationData.targetEmail)
         .single()
-      
-      if (userError || !userData) {
-        throw new Error(`User with username "${invitationData.targetUsername}" not found`)
+
+      if (!userError && userData) {
+        targetUserId = userData.id
       }
-      
-      targetUserId = userData.id
+      // If user not found, that's fine - we'll still send the email invitation
     }
-    
+
     const { data, error } = await supabase
       .from('client_invitations')
       .insert({
@@ -227,24 +226,23 @@ export const sendInvitation = async (invitationData) => {
       throw handleSupabaseError(error, 'sendInvitation')
     }
 
-    // Handle different invitation methods
-    if (invitationData.targetEmail) {
-      // Email invitation - trigger email sending
-      try {
-        await sendInvitationEmail(data)
-      } catch (emailError) {
-        console.error('Failed to send invitation email:', emailError)
-        // Update invitation with email error
-        await supabase
-          .from('client_invitations')
-          .update({ 
-            email_error: emailError.message,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', data.id)
-      }
-    } else if (targetUserId) {
-      // Username invitation - create in-app notification
+    // Always send email invitation
+    try {
+      await sendInvitationEmail(data)
+    } catch (emailError) {
+      console.error('Failed to send invitation email:', emailError)
+      // Update invitation with email error
+      await supabase
+        .from('client_invitations')
+        .update({
+          email_error: emailError.message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', data.id)
+    }
+
+    // If the email belongs to an existing user, also send in-app notification
+    if (targetUserId) {
       try {
         await createInAppNotification(data, targetUserId)
       } catch (notificationError) {
@@ -437,24 +435,23 @@ export const resendInvitation = async (invitationId) => {
       throw handleSupabaseError(error, 'resendInvitation')
     }
 
-    // Resend the invitation using the same method as original
-    if (invitation.target_email) {
-      // Email invitation - trigger email sending
-      try {
-        await sendInvitationEmail(data)
-      } catch (emailError) {
-        console.error('Failed to resend invitation email:', emailError)
-        // Update invitation with email error
-        await supabase
-          .from('client_invitations')
-          .update({ 
-            email_error: emailError.message,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', data.id)
-      }
-    } else if (invitation.target_user_id) {
-      // Username invitation - create new in-app notification
+    // Always resend email invitation
+    try {
+      await sendInvitationEmail(data)
+    } catch (emailError) {
+      console.error('Failed to resend invitation email:', emailError)
+      // Update invitation with email error
+      await supabase
+        .from('client_invitations')
+        .update({
+          email_error: emailError.message,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', data.id)
+    }
+
+    // If the invitation has a target_user_id (existing user), also resend in-app notification
+    if (invitation.target_user_id) {
       try {
         await createInAppNotification(data, invitation.target_user_id)
       } catch (notificationError) {

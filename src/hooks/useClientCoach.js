@@ -140,8 +140,9 @@ export function useClientCoach() {
           *,
           program_workouts(
             id,
-            day_of_week,
-            workout_name
+            week_number,
+            day_number,
+            name
           )
         `)
         .eq('assigned_to_client', user.id)

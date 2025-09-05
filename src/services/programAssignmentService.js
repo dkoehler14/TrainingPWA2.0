@@ -39,19 +39,8 @@ export const assignProgramToClient = async (programId, clientId, coachId, assign
     const client = clientResult.data
     const coach = coachResult.data
 
-    // Update program with coach assignment
-    const updateData = {
-      coach_assigned: true,
-      assigned_to_client: clientId,
-      assigned_at: assignmentData.assignedAt || new Date().toISOString(),
-      coach_notes: assignmentData.coachNotes || null,
-      client_goals: assignmentData.clientGoals || [],
-      expected_duration_weeks: assignmentData.expectedDurationWeeks,
-      program_difficulty: assignmentData.programDifficulty || 'intermediate',
-      visibility: 'coach_only'
-    }
-
-    const updatedProgram = await updateCoachAssignment(programId, updateData)
+    // The program is already assigned. This service now only handles post-assignment tasks.
+    const updatedProgram = programResult.data; // Use the program data we already fetched.
 
     // Create notification for client
     await createClientAssignmentNotification(

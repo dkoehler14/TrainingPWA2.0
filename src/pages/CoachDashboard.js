@@ -14,7 +14,8 @@ import { useIsCoach } from '../hooks/useRoleChecking';
 import { 
   getCoachClients, 
   getCoachInvitations, 
-  getCoachProfile 
+  getCoachProfile,
+  getClientDetails
 } from '../services/coachService';
 import { useCoachAnalyticsDashboard } from '../hooks/useProgramMonitoring';
 import { useRealtimeCoachDashboard } from '../hooks/useRealtimeCoaching';
@@ -24,6 +25,7 @@ import RealtimeStatusIndicator from '../components/RealtimeStatusIndicator';
 import ErrorMessage from '../components/ErrorMessage';
 import CoachProfileEditModal from '../components/CoachProfileEditModal';
 import InviteClientModal from '../components/InviteClientModal';
+import ClientDetailModal from '../components/ClientDetailModal';
 import '../styles/Home.css';
 import '../styles/CoachDashboard.css';
 import '../styles/RealtimeComponents.css';
@@ -46,6 +48,9 @@ function CoachDashboard() {
   const [error, setError] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     clients: [],
     invitations: [],
@@ -161,6 +166,21 @@ function CoachDashboard() {
 
     loadDashboardData();
   }, [user, isCoachRole, isCoachVerified, isVerifyingRole, loadDashboardData]);
+
+  // Handle client detail view
+  const handleViewClient = async (relationship) => {
+    try {
+      setActionLoading(`view-${relationship.id}`);
+      const clientDetails = await getClientDetails(user.id, relationship.client_id);
+      setSelectedClient({ ...clientDetails, relationship });
+      setShowClientModal(true);
+    } catch (err) {
+      console.error('Failed to load client details:', err);
+      setError('Failed to load client details. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   // Calculate weekly activity from clients
   const calculateWeeklyActivity = (clients) => {
@@ -356,9 +376,10 @@ function CoachDashboard() {
                           <Button 
                             variant="outline-primary" 
                             size="sm"
-                            disabled // Will be enabled when client details are implemented
+                            onClick={() => handleViewClient(relationship)}
+                            disabled={actionLoading === `view-${relationship.id}`}
                           >
-                            View
+                            {actionLoading === `view-${relationship.id}` ? <Spinner as="span" animation="border" size="sm" /> : 'View'}
                           </Button>
                         </td>
                       </tr>
@@ -672,6 +693,13 @@ function CoachDashboard() {
           show={showInviteModal}
           onHide={() => setShowInviteModal(false)}
           onInvitationSent={loadDashboardData}
+        />
+
+        {/* Client Detail Modal */}
+        <ClientDetailModal
+          show={showClientModal}
+          onHide={() => setShowClientModal(false)}
+          client={selectedClient}
         />
     </Container>
   );

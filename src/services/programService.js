@@ -1730,6 +1730,19 @@ export const getClientAssignedPrograms = async (clientId, coachId = null) => {
           id,
           name,
           email
+        ),
+        program_workouts (
+          *,
+          program_exercises (
+            *,
+            exercises (
+              id,
+              name,
+              primary_muscle_group,
+              exercise_type,
+              instructions
+            )
+          )
         )
       `)
       .eq('assigned_to_client', clientId)
@@ -1743,7 +1756,31 @@ export const getClientAssignedPrograms = async (clientId, coachId = null) => {
     const { data, error } = await query
 
     if (error) throw error
-    return data || []
+    
+    // Transform each program to include weekly_configs
+    const transformedPrograms = (data || []).map((program) => {
+      // Sort workouts by week and day before transformation
+      if (program.program_workouts) {
+        program.program_workouts.sort((a, b) => {
+          if (a.week_number !== b.week_number) {
+            return a.week_number - b.week_number
+          }
+          return a.day_number - b.day_number
+        })
+
+        // Sort exercises within each workout by order_index
+        program.program_workouts.forEach((workout) => {
+          if (workout.program_exercises) {
+            workout.program_exercises.sort((a, b) => a.order_index - b.order_index)
+          }
+        })
+      }
+
+      // Apply transformation to convert normalized data to weekly_configs format
+      return transformSupabaseProgramToWeeklyConfigs(program);
+    })
+
+    return transformedPrograms
   }, 'getClientAssignedPrograms')
 }
 
@@ -1756,10 +1793,7 @@ export const getClientAssignedPrograms = async (clientId, coachId = null) => {
 export const updateCoachAssignment = async (programId, updates) => {
   return executeSupabaseOperation(async () => {
     const updateData = {
-      coach_notes: updates.notes,
-      client_goals: updates.goals,
-      expected_duration_weeks: updates.expectedDurationWeeks,
-      program_difficulty: updates.difficulty,
+      ...updates,
       updated_at: new Date().toISOString()
     }
 
@@ -1774,7 +1808,6 @@ export const updateCoachAssignment = async (programId, updates) => {
       .from('programs')
       .update(updateData)
       .eq('id', programId)
-      .eq('coach_assigned', true)
       .select()
       .single()
 

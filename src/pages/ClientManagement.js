@@ -20,7 +20,6 @@ import {
   Form, 
   InputGroup, 
   Spinner, 
-  Modal,
   Tabs,
   Tab,
   Alert,
@@ -44,6 +43,7 @@ import {
 } from '../services/coachService';
 import ErrorMessage from '../components/ErrorMessage';
 import InviteClientModal from '../components/InviteClientModal';
+import ClientDetailModal from '../components/ClientDetailModal';
 import '../styles/Home.css';
 import '../styles/ClientManagement.css';
 
@@ -836,128 +836,13 @@ function ClientManagement() {
         </Tab>
       </Tabs>
 
-      {/* Client Detail Modal */}
-      <Modal 
-        show={showClientModal} 
+      <ClientDetailModal
+        show={showClientModal}
         onHide={() => setShowClientModal(false)}
-        size="lg"
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            Client Details: {selectedClient?.name || 'N/A'}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedClient && (
-            <Row>
-              <Col md={6}>
-                <h6>Personal Information</h6>
-                <div className="mb-3">
-                  <strong>Name:</strong> {selectedClient.name || 'N/A'}<br />
-                  <strong>Email:</strong> {selectedClient.email}<br />
-                  <strong>Experience Level:</strong> {selectedClient.experience_level || 'Not specified'}<br />
-                  <strong>Preferred Units:</strong> {selectedClient.preferred_units || 'Not specified'}<br />
-                  {selectedClient.age && <><strong>Age:</strong> {selectedClient.age}<br /></>}
-                  {selectedClient.weight && <><strong>Weight:</strong> {selectedClient.weight}<br /></>}
-                  {selectedClient.height && <><strong>Height:</strong> {selectedClient.height}<br /></>}
-                </div>
-
-                {selectedClient.goals && selectedClient.goals.length > 0 && (
-                  <div className="mb-3">
-                    <h6>Goals</h6>
-                    {selectedClient.goals.map((goal, index) => (
-                      <Badge key={index} bg="primary" className="me-1 mb-1">
-                        {goal}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {selectedClient.available_equipment && selectedClient.available_equipment.length > 0 && (
-                  <div className="mb-3">
-                    <h6>Available Equipment</h6>
-                    {selectedClient.available_equipment.map((equipment, index) => (
-                      <Badge key={index} bg="secondary" className="me-1 mb-1">
-                        {equipment}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </Col>
-              <Col md={6}>
-                <h6>Coaching Relationship</h6>
-                <div className="mb-3">
-                  <strong>Status:</strong>{' '}
-                  <Badge bg={getStatusBadgeVariant(selectedClient.relationship?.status)}>
-                    {selectedClient.relationship?.status}
-                  </Badge><br />
-                  <strong>Joined:</strong> {formatDate(selectedClient.relationship?.accepted_at || selectedClient.relationship?.created_at)}<br />
-                  <strong>Invitation Method:</strong> {selectedClient.relationship?.invitation_method || 'N/A'}<br />
-                </div>
-
-                {selectedClient.relationship?.coach_notes && (
-                  <div className="mb-3">
-                    <h6>Coach Notes</h6>
-                    <p className="text-muted">{selectedClient.relationship.coach_notes}</p>
-                  </div>
-                )}
-
-                {selectedClient.relationship?.client_goals && selectedClient.relationship.client_goals.length > 0 && (
-                  <div className="mb-3">
-                    <h6>Coaching Goals</h6>
-                    {selectedClient.relationship.client_goals.map((goal, index) => (
-                      <Badge key={index} bg="success" className="me-1 mb-1">
-                        {goal}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-
-                {selectedClient.injuries && selectedClient.injuries.length > 0 && (
-                  <div className="mb-3">
-                    <h6>Injuries/Limitations</h6>
-                    {selectedClient.injuries.map((injury, index) => (
-                      <Badge key={index} bg="warning" className="me-1 mb-1">
-                        {injury}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </Col>
-            </Row>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="outline-success"
-            as={Link}
-            to={`/create-program?clientId=${selectedClient?.id}`}
-            disabled // Will be enabled when program assignment is implemented
-          >
-            📋 Create Program
-          </Button>
-          <Button
-            variant="outline-primary"
-            disabled // Will be enabled when insights are implemented
-          >
-            💡 Create Insight
-          </Button>
-          <Button
-            variant="outline-danger"
-            onClick={() => handleTerminateRelationship(selectedClient?.relationship?.id)}
-            disabled={actionLoading === `terminate-${selectedClient?.relationship?.id}`}
-          >
-            {actionLoading === `terminate-${selectedClient?.relationship?.id}` ? (
-              <Spinner animation="border" size="sm" />
-            ) : (
-              '🚫 Terminate Relationship'
-            )}
-          </Button>
-          <Button variant="secondary" onClick={() => setShowClientModal(false)}>
-            Close
-          </Button>
-        </Modal.Footer>
-      </Modal>
+        client={selectedClient}
+        onTerminate={handleTerminateRelationship}
+        actionLoading={actionLoading}
+      />
 
       {/* Invite Client Modal */}
       <InviteClientModal

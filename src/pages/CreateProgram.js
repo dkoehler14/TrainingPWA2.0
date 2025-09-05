@@ -1220,7 +1220,7 @@ function CreateProgram({ mode = 'create' }) {
         if (isCoach && selectedClient && isAssignment) {
           try {
             await assignProgramToClient(
-              createdProgram.id,
+              createdProgram.program.id,
               selectedClient.client.id,
               user.id,
               {
@@ -1234,7 +1234,8 @@ function CreateProgram({ mode = 'create' }) {
             alert('Program created and assigned to client successfully!');
           } catch (assignmentError) {
             console.error('Program assignment failed:', assignmentError);
-            alert('Program created successfully, but assignment notification failed. The client can still access the program.');
+            // The program was created, but the assignment failed.
+            alert('Program created, but assignment failed. You can find the program in your list and assign it manually.');
           }
         } else {
           alert('Program created successfully!');

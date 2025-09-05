@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Modal, 
-  Form, 
-  Button, 
-  Alert, 
-  InputGroup, 
-  Tab, 
-  Tabs,
+import {
+  Modal,
+  Form,
+  Button,
+  Alert,
+  InputGroup,
   Card,
   Badge
 } from 'react-bootstrap';
@@ -25,10 +23,8 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
   const { user, userProfile } = useAuth();
   
   // Form state
-  const [invitationMethod, setInvitationMethod] = useState('email');
   const [formData, setFormData] = useState({
     targetEmail: '',
-    targetUsername: '',
     message: ''
   });
   
@@ -47,10 +43,8 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
   const resetForm = () => {
     setFormData({
       targetEmail: '',
-      targetUsername: '',
       message: ''
     });
-    setInvitationMethod('email');
     setError('');
     setValidationErrors({});
     setIsSubmitting(false);
@@ -62,27 +56,14 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
     return emailRegex.test(email);
   };
 
-  const validateUsername = (username) => {
-    // Username should be at least 3 characters, alphanumeric with underscores/hyphens
-    const usernameRegex = /^[a-zA-Z0-9_-]{3,30}$/;
-    return usernameRegex.test(username);
-  };
 
   const validateForm = () => {
     const errors = {};
 
-    if (invitationMethod === 'email') {
-      if (!formData.targetEmail.trim()) {
-        errors.targetEmail = 'Email address is required';
-      } else if (!validateEmail(formData.targetEmail.trim())) {
-        errors.targetEmail = 'Please enter a valid email address';
-      }
-    } else {
-      if (!formData.targetUsername.trim()) {
-        errors.targetUsername = 'Username is required';
-      } else if (!validateUsername(formData.targetUsername.trim())) {
-        errors.targetUsername = 'Username must be 3-30 characters, letters, numbers, underscores, or hyphens only';
-      }
+    if (!formData.targetEmail.trim()) {
+      errors.targetEmail = 'Email address is required';
+    } else if (!validateEmail(formData.targetEmail.trim())) {
+      errors.targetEmail = 'Please enter a valid email address';
     }
 
     // Message validation (optional but with limits)
@@ -113,15 +94,9 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
         coachId: user.id,
         coachEmail: user.email,
         coachName: userProfile?.name || user.email,
+        targetEmail: formData.targetEmail.trim(),
         message: formData.message.trim() || null
       };
-
-      // Add target based on method
-      if (invitationMethod === 'email') {
-        invitationData.targetEmail = formData.targetEmail.trim();
-      } else {
-        invitationData.targetUsername = formData.targetUsername.trim();
-      }
 
       // Send invitation
       const result = await sendInvitation(invitationData);
@@ -141,8 +116,6 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
       // Handle specific error cases
       if (err.message?.includes('already exists') || err.message?.includes('duplicate')) {
         setError('An invitation has already been sent to this recipient or they are already your client.');
-      } else if (err.message?.includes('not found') && invitationMethod === 'username') {
-        setError('Username not found. Please check the username and try again.');
       } else if (err.message?.includes('invalid email')) {
         setError('The email address appears to be invalid. Please check and try again.');
       } else if (err.message?.includes('limit exceeded')) {
@@ -200,67 +173,31 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
             </Alert>
           )}
 
-          {/* Invitation Method Selection */}
+          {/* Email Address Input */}
           <Card className="soft-card mb-4">
             <Card.Body>
-              <h6 className="mb-3">How would you like to send the invitation?</h6>
-              <Tabs
-                activeKey={invitationMethod}
-                onSelect={(k) => setInvitationMethod(k)}
-                className="mb-3"
-              >
-                <Tab eventKey="email" title="📧 Email Address">
-                  <div className="mt-3">
-                    <Form.Group>
-                      <Form.Label>Client's Email Address</Form.Label>
-                      <InputGroup>
-                        <InputGroup.Text>@</InputGroup.Text>
-                        <Form.Control
-                          type="email"
-                          placeholder="client@example.com"
-                          value={formData.targetEmail}
-                          onChange={(e) => handleInputChange('targetEmail', e.target.value)}
-                          isInvalid={!!validationErrors.targetEmail}
-                          disabled={isSubmitting}
-                          autoFocus={invitationMethod === 'email'}
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.targetEmail}
-                        </Form.Control.Feedback>
-                      </InputGroup>
-                      <Form.Text className="text-muted">
-                        An invitation email will be sent to this address with a link to accept your coaching invitation.
-                      </Form.Text>
-                    </Form.Group>
-                  </div>
-                </Tab>
-                
-                <Tab eventKey="username" title="👤 Username">
-                  <div className="mt-3">
-                    <Form.Group>
-                      <Form.Label>Client's Username</Form.Label>
-                      <InputGroup>
-                        <InputGroup.Text>@</InputGroup.Text>
-                        <Form.Control
-                          type="text"
-                          placeholder="username"
-                          value={formData.targetUsername}
-                          onChange={(e) => handleInputChange('targetUsername', e.target.value)}
-                          isInvalid={!!validationErrors.targetUsername}
-                          disabled={isSubmitting}
-                          autoFocus={invitationMethod === 'username'}
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.targetUsername}
-                        </Form.Control.Feedback>
-                      </InputGroup>
-                      <Form.Text className="text-muted">
-                        An in-app notification will be sent to this user with your coaching invitation.
-                      </Form.Text>
-                    </Form.Group>
-                  </div>
-                </Tab>
-              </Tabs>
+              <h6 className="mb-3">Client's Email Address</h6>
+              <Form.Group>
+                <Form.Label>Client's Email Address</Form.Label>
+                <InputGroup>
+                  <InputGroup.Text>@</InputGroup.Text>
+                  <Form.Control
+                    type="email"
+                    placeholder="client@example.com"
+                    value={formData.targetEmail}
+                    onChange={(e) => handleInputChange('targetEmail', e.target.value)}
+                    isInvalid={!!validationErrors.targetEmail}
+                    disabled={isSubmitting}
+                    autoFocus
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {validationErrors.targetEmail}
+                  </Form.Control.Feedback>
+                </InputGroup>
+                <Form.Text className="text-muted">
+                  An invitation email will be sent to this address. If the email belongs to an existing user, they'll also receive an in-app notification.
+                </Form.Text>
+              </Form.Group>
             </Card.Body>
           </Card>
 
@@ -305,18 +242,14 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
           </Card>
 
           {/* Preview Section */}
-          {(formData.targetEmail || formData.targetUsername) && (
+          {formData.targetEmail && (
             <Card className="soft-card mt-4">
               <Card.Body>
                 <h6 className="mb-3">Invitation Preview</h6>
                 <div className="invitation-preview p-3 bg-light rounded">
                   <div className="mb-2">
                     <strong>To:</strong>{' '}
-                    {invitationMethod === 'email' ? (
-                      <Badge bg="primary">{formData.targetEmail}</Badge>
-                    ) : (
-                      <Badge bg="info">@{formData.targetUsername}</Badge>
-                    )}
+                    <Badge bg="primary">{formData.targetEmail}</Badge>
                   </div>
                   <div className="mb-2">
                     <strong>From:</strong> {userProfile?.name || user.email}
@@ -324,7 +257,7 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
                   <div className="mb-2">
                     <strong>Method:</strong>{' '}
                     <Badge bg="secondary">
-                      {invitationMethod === 'email' ? 'Email' : 'In-app notification'}
+                      Email Invitation
                     </Badge>
                   </div>
                   {formData.message && (
@@ -350,7 +283,7 @@ function InviteClientModal({ show, onHide, onInvitationSent }) {
           <Button
             type="submit"
             variant="primary"
-            disabled={isSubmitting || (!formData.targetEmail && !formData.targetUsername)}
+            disabled={isSubmitting || !formData.targetEmail}
           >
             {isSubmitting ? (
               <>

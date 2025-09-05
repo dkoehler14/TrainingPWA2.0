@@ -69,9 +69,9 @@ BEGIN
     
     -- Create relationship
     INSERT INTO coach_client_relationships (
-        coach_id, 
-        client_id, 
-        status, 
+        coach_id,
+        client_id,
+        status,
         accepted_at,
         invitation_method,
         invitation_message
@@ -80,7 +80,7 @@ BEGIN
         auth.uid(),
         'active',
         NOW(),
-        invitation_record.invitation_method,
+        'email',
         invitation_record.message
     ) RETURNING id INTO relationship_id;
     
