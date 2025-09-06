@@ -51,16 +51,16 @@ const useQuickWorkoutHistory = () => {
         };
       });
 
-      // Validate workout data structure
-      const validWorkouts = transformedWorkouts.filter(workout => {
+      // Filter for quick workouts and validate data structure
+      const quickWorkouts = transformedWorkouts.filter(workout => {
         if (!workout || typeof workout !== 'object') {
           console.warn('Invalid workout data structure:', workout);
           return false;
         }
-        return true;
+        return workout.type === 'quick_workout';
       });
 
-      setWorkouts(validWorkouts);
+      setWorkouts(quickWorkouts);
       
       // Reset retry count on successful fetch
       if (isRetry) {

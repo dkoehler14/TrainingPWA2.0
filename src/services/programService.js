@@ -42,6 +42,7 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
           .from('programs')
           .select(`
             *,
+            client:users!assigned_to_client(id, name, email),
             program_workouts (
               *,
               program_exercises (

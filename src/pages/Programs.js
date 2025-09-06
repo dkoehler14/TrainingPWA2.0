@@ -21,13 +21,14 @@ function Programs({ userRole }) {
   const [userPrograms, setUserPrograms] = useState([]);
   const [templatePrograms, setTemplatePrograms] = useState([]);
   const [coachAssignedPrograms, setCoachAssignedPrograms] = useState([]);
+  const [coachClientPrograms, setCoachClientPrograms] = useState([]); // Programs assigned by the coach to clients
   const [exercises, setExercises] = useState([]);
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [showProgramDetails, setShowProgramDetails] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [workoutLogs, setWorkoutLogs] = useState({});
   const [activeTab, setActiveTab] = useState('overview');
-  const [programViewTab, setProgramViewTab] = useState('personal'); // 'personal', 'coach-assigned', 'templates'
+  const [programViewTab, setProgramViewTab] = useState('personal'); // 'personal', 'coach-assigned', 'client-programs', 'templates'
   const { user, isAuthenticated } = useAuth();
   const { hasActiveCoach, coachRelationship } = useClientCoach();
   const navigate = useNavigate();
@@ -136,7 +137,8 @@ function Programs({ userRole }) {
               data: allProgramsData
             });
 
-            const userProgramsData = allProgramsData.filter(p => !p.is_template);
+            const userProgramsData = allProgramsData.filter(p => !p.is_template && !p.coach_assigned);
+            const coachClientProgramsData = allProgramsData.filter(p => !p.is_template && p.coach_assigned);
             const templateProgramsData = allProgramsData.filter(p => p.is_template);
 
             // DEBUGGING: Log the exact data structure returned by the service
@@ -169,6 +171,18 @@ function Programs({ userRole }) {
               programIds: processedUserPrograms.map(p => ({ id: p.id, name: p.name, hasError: p.hasError }))
             });
             setUserPrograms(processedUserPrograms);
+
+            // Process coach's client programs
+            const processedCoachClientPrograms = safelyProcessPrograms(coachClientProgramsData, 'coach client programs');
+            console.log('🔄 [PROGRAMS_PAGE] Coach client programs processed:', {
+              originalCount: coachClientProgramsData.length,
+              processedCount: processedCoachClientPrograms.length,
+              data: processedCoachClientPrograms
+            });
+            console.log('📊 [PROGRAMS_PAGE] Setting coach client programs state:', {
+              programCount: processedCoachClientPrograms.length
+            });
+            setCoachClientPrograms(processedCoachClientPrograms);
 
             // Process template programs
             const processedTemplatePrograms = safelyProcessPrograms(templateProgramsData, 'template programs');
@@ -212,7 +226,7 @@ function Programs({ userRole }) {
             }
 
             // Check if any programs have errors
-            const allProcessedPrograms = [...processedUserPrograms, ...processedTemplatePrograms];
+            const allProcessedPrograms = [...processedUserPrograms, ...processedCoachClientPrograms, ...processedTemplatePrograms];
             const programsWithErrors = allProcessedPrograms.filter(p => p.hasError);
             const programsWithWarnings = allProcessedPrograms.filter(p => p.hasWarning && !p.hasError);
 
@@ -951,7 +965,7 @@ function Programs({ userRole }) {
                 >
                   <Pencil className="me-1" /> Edit
                 </Button>
-                {!isTemplate && !program.is_current && hasWorkoutData && (
+                {!isTemplate && !program.coach_assigned && !program.is_current && hasWorkoutData && (
                     <Button
                       variant="outline-success"
                       size="sm"
@@ -1036,7 +1050,7 @@ function Programs({ userRole }) {
               >
                 <Pencil className="me-1" /> Edit
               </Button>
-              {!isTemplate && !program.is_current && hasWorkoutData && (
+              {!isTemplate && !program.coach_assigned && !program.is_current && hasWorkoutData && (
                   <Button
                     variant="outline-success"
                     size="sm"
@@ -1102,12 +1116,17 @@ function Programs({ userRole }) {
                     Coach Assigned
                   </Badge>
                 )}
+                {program.coach_assigned && !isCoachAssigned && (
+                  <Badge bg="dark" className="ms-2" title={program.client ? `Assigned to ${program.client.name}` : 'Assigned to a client'}>
+                    Client Program
+                  </Badge>
+                )}
                 {isTemplate && (
                   <Badge bg="secondary" className="ms-2" title="Community template program">
                     Template
                   </Badge>
                 )}
-                {!isTemplate && !isCoachAssigned && (
+                {!isTemplate && !program.coach_assigned && (
                   <Badge bg="info" className="ms-2" title="Your personal program">
                     Personal
                   </Badge>
@@ -1121,11 +1140,17 @@ function Programs({ userRole }) {
                 {isCoachAssigned && program.coach && (
                   <span className="text-success ms-2">• By {program.coach.name}</span>
                 )}
+                {program.coach_assigned && !isCoachAssigned && program.client && (
+                  <span className="text-info ms-2">• For {program.client.name}</span>
+                )}
               </Card.Subtitle>
               
               {/* Coach assignment details */}
-              {isCoachAssigned && (
+              {program.coach_assigned && (
                 <div className="mb-2">
+                  {!isCoachAssigned && program.client && (
+                    <small className="text-muted d-block"><strong>Assigned to:</strong> {program.client.name}</small>
+                  )}
                   {program.coach_notes && (
                     <small className="text-muted d-block">
                       <strong>Coach Notes:</strong> {program.coach_notes}
@@ -2508,6 +2533,16 @@ function Programs({ userRole }) {
                           Personal Programs ({userPrograms.length})
                         </button>
                       </li>
+                      {userRole === 'coach' && (
+                        <li className="nav-item">
+                          <button
+                            className={`nav-link ${programViewTab === 'client-programs' ? 'active' : ''}`}
+                            onClick={() => setProgramViewTab('client-programs')}
+                          >
+                            Client Programs ({coachClientPrograms.length})
+                          </button>
+                        </li>
+                      )}
                       {hasActiveCoach && (
                         <li className="nav-item">
                           <button
@@ -2553,6 +2588,36 @@ function Programs({ userRole }) {
                             <p className="text-muted">Programs you've created yourself</p>
                           </div>
                           {userPrograms.map(program => renderProgramCard(program, false, false))}
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {/* Coach's Client Programs Tab */}
+                  {programViewTab === 'client-programs' && userRole === 'coach' && (
+                    <>
+                      {coachClientPrograms.length === 0 ? (
+                        <div className="text-center p-4">
+                          <p className="text-muted mb-3">
+                            You haven't assigned any programs to clients yet.
+                          </p>
+                          <Button
+                            variant="primary"
+                            size="lg"
+                            onClick={() => navigate('/create-program')}
+                          >
+                            <PlusCircle className="me-2" /> Create a Client Program
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-3">
+                            <h3 className="soft-subtitle section-title mb-3">Client Programs</h3>
+                            <p className="text-muted">
+                              Programs you have created and assigned to your clients.
+                            </p>
+                          </div>
+                          {coachClientPrograms.map(program => renderProgramCard(program, false, false))}
                         </>
                       )}
                     </>
