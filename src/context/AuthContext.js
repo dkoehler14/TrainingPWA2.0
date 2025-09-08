@@ -451,6 +451,22 @@ export const AuthProvider = ({ children }) => {
     }
   }, [session])
 
+  // Refresh the current session
+  const refreshUserSession = async () => {
+    try {
+      setError(null)
+      const { data, error } = await supabase.auth.refreshSession()
+      if (error) throw error
+
+      // The onAuthStateChange listener will handle setting the new session state
+      return data.session
+    } catch (error) {
+      const handledError = handleSupabaseError(error)
+      setError(handledError)
+      throw handledError
+    }
+  }
+
   const value = {
     // Auth state
     user: authUser,
@@ -475,6 +491,7 @@ export const AuthProvider = ({ children }) => {
     updatePassword: updateUserPassword,
     updateEmail: updateUserEmail,
     verifyOtp: verifyOtpCode,
+    refreshSession: refreshUserSession,
 
     // Profile methods
     updateProfile,

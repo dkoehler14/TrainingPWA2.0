@@ -7,7 +7,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAuth } from './useAuth'
-import { sessionManager } from '../config/supabaseAuth'
 
 /**
  * Hook for session management and monitoring
@@ -21,7 +20,7 @@ export function useSessionManagement(options = {}) {
     onSessionRefreshed = null
   } = options
 
-  const { session, isAuthenticated } = useAuth()
+  const { session, isAuthenticated, refreshSession: refreshAuthSession } = useAuth()
   const [sessionInfo, setSessionInfo] = useState(null)
   const [timeUntilExpiry, setTimeUntilExpiry] = useState(null)
   const [showWarning, setShowWarning] = useState(false)
@@ -50,6 +49,22 @@ export function useSessionManagement(options = {}) {
     }
   }, [session, isAuthenticated, warningThreshold])
 
+  // Handle session refresh. This wraps the context's refresh function
+  // to add UI logic like hiding warnings.
+  const refreshSession = useCallback(async () => {
+    try {
+      const newSession = await refreshAuthSession()
+      if (newSession && onSessionRefreshed) {
+        onSessionRefreshed(newSession)
+      }
+      setShowWarning(false)
+      warningShownRef.current = false
+      return newSession
+    } catch (error) {
+      console.error('Failed to refresh session:', error)
+      throw error
+    }
+  }, [onSessionRefreshed, refreshAuthSession])
   // Update session info periodically
   useEffect(() => {
     if (!isAuthenticated) {
@@ -86,7 +101,7 @@ export function useSessionManagement(options = {}) {
           setShowWarning(true)
           warningShownRef.current = true
           if (onSessionWarning) {
-            onSessionWarning(info)
+            onSessionWarning(info, refreshSession)
           }
         } else if (!info.needsWarning && warningShownRef.current) {
           setShowWarning(false)
@@ -107,24 +122,7 @@ export function useSessionManagement(options = {}) {
         intervalRef.current = null
       }
     }
-  }, [isAuthenticated, calculateSessionInfo, onSessionWarning, onSessionExpired])
-
-  // Handle session refresh
-  const refreshSession = useCallback(async () => {
-    try {
-      const newSession = await sessionManager.refreshSession()
-      if (newSession && onSessionRefreshed) {
-        onSessionRefreshed(newSession)
-      }
-      setShowWarning(false)
-      warningShownRef.current = false
-      return newSession
-    } catch (error) {
-      console.error('Failed to refresh session:', error)
-      throw error
-    }
-  }, [onSessionRefreshed])
-
+  }, [isAuthenticated, calculateSessionInfo, onSessionWarning, onSessionExpired, refreshSession])
   // Dismiss warning
   const dismissWarning = useCallback(() => {
     setShowWarning(false)
@@ -245,41 +243,41 @@ export function useAutoSessionRefresh(options = {}) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const refreshTimeoutRef = useRef(null)
 
-  const handleSessionRefresh = useCallback(async (sessionInfo) => {
+  const handleSessionRefresh = useCallback(async (sessionInfo, refreshSession) => {
     if (isRefreshing || refreshAttempts >= maxRetries) {
       return
     }
 
     if (sessionInfo.timeLeft <= refreshThreshold) {
       setIsRefreshing(true)
-      
+
       try {
-        const newSession = await sessionManager.refreshSession()
+        const newSession = await refreshSession()
         setRefreshAttempts(0)
-        
+
         if (onRefreshSuccess) {
           onRefreshSuccess(newSession)
         }
-        
+
         console.log('Session refreshed automatically')
+        setIsRefreshing(false) // Reset on success
       } catch (error) {
         const newAttempts = refreshAttempts + 1
         setRefreshAttempts(newAttempts)
-        
+
         if (onRefreshError) {
           onRefreshError(error, newAttempts)
         }
-        
+
         console.error(`Session refresh failed (attempt ${newAttempts}/${maxRetries}):`, error)
-        
+
         // Retry after delay if we haven't exceeded max retries
         if (newAttempts < maxRetries) {
           refreshTimeoutRef.current = setTimeout(() => {
-            setIsRefreshing(false)
+            setIsRefreshing(false) // Allow another attempt
           }, retryDelay * newAttempts) // Exponential backoff
-        }
-      } finally {
-        if (refreshAttempts >= maxRetries - 1) {
+        } else {
+          // Max retries reached, stop trying
           setIsRefreshing(false)
         }
       }
@@ -289,7 +287,6 @@ export function useAutoSessionRefresh(options = {}) {
   const { sessionInfo } = useSessionManagement({
     onSessionWarning: handleSessionRefresh
   })
-
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {

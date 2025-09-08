@@ -5,7 +5,7 @@
  * with the AuthContext and provides additional utilities for authentication management.
  */
 
-import { useContext, useMemo } from 'react'
+import { useContext, useMemo, useCallback } from 'react'
 import { AuthContext } from '../context/AuthContext'
 
 /**
@@ -109,24 +109,20 @@ export function useUserProfile() {
  * Provides session-related utilities
  */
 export function useSession() {
-  const { session, user, isAuthenticated } = useAuth()
-  
-  const getAccessToken = () => session?.access_token
-  const getRefreshToken = () => session?.refresh_token
-  const getExpiresAt = () => session?.expires_at ? new Date(session.expires_at * 1000) : null
-  const isExpired = () => {
-    const expiresAt = getExpiresAt()
-    return expiresAt ? expiresAt <= new Date() : true
-  }
-  
+  const { session, user, isAuthenticated, getSessionInfo } = useAuth()
+
+  // Leverage the memoized function from the context to avoid re-calculation
+  const sessionInfo = useMemo(() => getSessionInfo(), [getSessionInfo])
+
   return {
     session,
     user,
     isAuthenticated,
-    getAccessToken,
-    getRefreshToken,
-    getExpiresAt,
-    isExpired
+    // Provide stable functions to access session details
+    getAccessToken: useCallback(() => sessionInfo?.accessToken, [sessionInfo]),
+    getRefreshToken: useCallback(() => sessionInfo?.refreshToken, [sessionInfo]),
+    getExpiresAt: useCallback(() => sessionInfo?.expiresAt, [sessionInfo]),
+    isExpired: useCallback(() => sessionInfo?.isExpired ?? true, [sessionInfo])
   }
 }
 
