@@ -267,8 +267,8 @@ function Programs({ userRole }) {
               // Import cache service for fallback
               const { supabaseCache } = await import('../api/supabaseCache');
 
-              // Try to get cached all programs data
-              const cachedAllPrograms = supabaseCache.get(`user_programs_all_${user.id}`);
+              // Try to get cached all programs data (now includes coach-assigned)
+              const cachedAllPrograms = supabaseCache.get(`user_programs_all_including_coach_assigned_${user.id}`);
 
               if (cachedAllPrograms && Array.isArray(cachedAllPrograms)) {
                 console.log('✅ [PROGRAMS_PAGE] Found cached programs data:', {
@@ -409,7 +409,7 @@ function Programs({ userRole }) {
             console.log('🔄 [PROGRAMS_PAGE] Final fallback attempt...');
             const { supabaseCache } = await import('../api/supabaseCache');
 
-            const cachedPrograms = supabaseCache.get(`user_programs_all_${user.id}`);
+            const cachedPrograms = supabaseCache.get(`user_programs_all_including_coach_assigned_${user.id}`);
             const cachedExercises = supabaseCache.get(`exercises_user_${user.id}`) ||
               supabaseCache.get(`exercises_global`);
 
@@ -766,10 +766,12 @@ function Programs({ userRole }) {
 
       // Refresh programs list using optimized single call to ensure data consistency
       const allPrograms = await getUserPrograms(user.id);
-      const updatedUserPrograms = safelyProcessPrograms(allPrograms.filter(p => !p.is_template), 'updated user programs');
+      const updatedUserPrograms = safelyProcessPrograms(allPrograms.filter(p => !p.is_template && !p.coach_assigned), 'updated user programs');
+      const updatedCoachAssignedPrograms = safelyProcessPrograms(allPrograms.filter(p => p.coach_assigned), 'updated coach-assigned programs');
       const updatedTemplatePrograms = safelyProcessPrograms(allPrograms.filter(p => p.is_template), 'updated template programs');
 
       setUserPrograms(updatedUserPrograms);
+      setCoachAssignedPrograms(updatedCoachAssignedPrograms);
       setTemplatePrograms(updatedTemplatePrograms);
 
       // Show success message with program name

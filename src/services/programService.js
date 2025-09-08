@@ -27,9 +27,9 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
     const filters = { ...additionalFilters };
     delete filters.isTemplate;
 
-    // Create cache key for unified cache approach
+    // Create cache key for unified cache approach (now includes both regular and coach-assigned programs)
     const filterKey = Object.keys(filters).sort().map(key => `${key}:${filters[key]}`).join('_')
-    const cacheKey = `user_programs_all_${userId}${filterKey ? '_' + filterKey : ''}`
+    const cacheKey = `user_programs_all_including_coach_assigned_${userId}${filterKey ? '_' + filterKey : ''}`
 
 
 
@@ -57,7 +57,7 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
               )
             )
           `)
-          .eq('user_id', userId)
+          .or(`user_id.eq.${userId},assigned_to_client.eq.${userId}`)
           .order('created_at', { ascending: false })
 
         // Apply non-template filters
@@ -121,25 +121,27 @@ const getAllUserPrograms = async (userId, additionalFilters = {}) => {
         userId: userId,
         tags: ['programs', 'user', 'all_programs'],
         onCacheHit: (cachedData) => {
-          console.log('🎯 [CACHE_HIT] Cache hit for getAllUserPrograms:', {
+          console.log('🎯 [CACHE_HIT] Cache hit for getAllUserPrograms (including coach-assigned):', {
             cacheKey,
             userId,
             filters,
             programCount: cachedData?.length || 0,
             templatePrograms: cachedData?.filter(p => p.is_template).length || 0,
-            userPrograms: cachedData?.filter(p => !p.is_template).length || 0,
+            userPrograms: cachedData?.filter(p => !p.is_template && !p.coach_assigned).length || 0,
+            coachAssignedPrograms: cachedData?.filter(p => p.coach_assigned).length || 0,
             ttl: PROGRAM_CACHE_TTL
           });
         },
         onCacheSet: (data) => {
 
-          console.log('💾 [CACHE_SET] Data cached for getAllUserPrograms:', {
+          console.log('💾 [CACHE_SET] Data cached for getAllUserPrograms (including coach-assigned):', {
             cacheKey,
             userId,
             filters,
             programCount: data?.length || 0,
             templatePrograms: data?.filter(p => p.is_template).length || 0,
-            userPrograms: data?.filter(p => !p.is_template).length || 0,
+            userPrograms: data?.filter(p => !p.is_template && !p.coach_assigned).length || 0,
+            coachAssignedPrograms: data?.filter(p => p.coach_assigned).length || 0,
             ttl: PROGRAM_CACHE_TTL
           });
         }
@@ -165,11 +167,11 @@ export const getUserPrograms = async (userId, filters = {}) => {
       return result;
     }
 
-    // For backward compatibility, check if we can use cached all-programs data
+    // For backward compatibility, check if we can use cached all-programs data (now includes coach-assigned)
     const nonTemplateFilters = { ...filters };
     delete nonTemplateFilters.isTemplate;
     const allProgramsFilterKey = Object.keys(nonTemplateFilters).sort().map(key => `${key}:${nonTemplateFilters[key]}`).join('_');
-    const allProgramsCacheKey = `user_programs_all_${userId}${allProgramsFilterKey ? '_' + allProgramsFilterKey : ''}`;
+    const allProgramsCacheKey = `user_programs_all_including_coach_assigned_${userId}${allProgramsFilterKey ? '_' + allProgramsFilterKey : ''}`;
 
     const cachedAllPrograms = supabaseCache.get(allProgramsCacheKey);
 
@@ -1280,8 +1282,52 @@ const rollbackProgramUpdate = async (programId, backupData, completedSteps) => {
  */
 export const setCurrentProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
-    // First, unset any existing current program for this user
-    const { error: unsetError } = await supabase
+    console.log('🔍 [setCurrentProgram] Starting operation:', {
+      programId,
+      userId,
+      timestamp: new Date().toISOString()
+    })
+
+    // First, get the program to determine ownership
+    const { data: programData, error: fetchError } = await supabase
+      .from('programs')
+      .select('user_id, assigned_to_client, coach_assigned, name')
+      .eq('id', programId)
+      .single()
+
+    if (fetchError) {
+      console.error('❌ [setCurrentProgram] Error fetching program for current status update:', {
+        programId,
+        userId,
+        error: fetchError.message,
+        code: fetchError.code,
+        details: fetchError.details,
+        hint: fetchError.hint
+      })
+      throw fetchError
+    }
+
+    console.log('✅ [setCurrentProgram] Program found:', {
+      programId,
+      programName: programData.name,
+      user_id: programData.user_id,
+      assigned_to_client: programData.assigned_to_client,
+      coach_assigned: programData.coach_assigned
+    })
+
+    // Determine the correct user ID to use for filtering
+    // For coach-assigned programs, the user_id is the coach's ID, but we need to filter by assigned_to_client
+    const isCoachAssigned = programData.coach_assigned
+    const filterUserId = isCoachAssigned ? programData.assigned_to_client : programData.user_id
+
+    // First, unset any existing current programs for this user (both regular and coach-assigned)
+    console.log('🔄 [setCurrentProgram] Unsetting previous current programs:', {
+      userId,
+      isCoachAssigned
+    })
+
+    // Unset regular programs for this user
+    const { error: unsetRegularError } = await supabase
       .from('programs')
       .update({
         is_current: false,
@@ -1290,22 +1336,112 @@ export const setCurrentProgram = async (programId, userId) => {
       .eq('user_id', userId)
       .eq('is_current', true)
 
+    if (unsetRegularError) {
+      console.error('❌ [setCurrentProgram] Error unsetting regular current programs:', unsetRegularError)
+    }
+
+    // Unset coach-assigned programs for this user
+    const { error: unsetCoachError } = await supabase
+      .from('programs')
+      .update({
+        is_current: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('assigned_to_client', userId)
+      .eq('is_current', true)
+
+    if (unsetCoachError) {
+      console.error('❌ [setCurrentProgram] Error unsetting coach-assigned current programs:', unsetCoachError)
+    }
+
+    const unsetError = unsetRegularError || unsetCoachError
+
     if (unsetError) {
-      console.error('Error unsetting previous current program:', unsetError)
+      console.error('❌ [setCurrentProgram] Error unsetting previous current program:', {
+        userId,
+        filterField: isCoachAssigned ? 'assigned_to_client' : 'user_id',
+        error: unsetError.message,
+        code: unsetError.code,
+        details: unsetError.details,
+        hint: unsetError.hint
+      })
       throw unsetError
     }
 
+    console.log('✅ [setCurrentProgram] Previous current programs unset successfully')
+
     // Then set the new program as current
-    const { data, error } = await supabase
-      .from('programs')
-      .update({
-        is_current: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', programId)
-      .eq('user_id', userId)
-      .select()
-      .single()
+    console.log('🔄 [setCurrentProgram] Updating program to current:', {
+      programId,
+      userId,
+      filterUserId,
+      isCoachAssigned
+    })
+
+    // For coach-assigned programs, we need to use a different approach since clients can't directly update them
+    // We'll use a stored procedure or RPC function that can bypass RLS restrictions
+    let data, error;
+
+    if (isCoachAssigned) {
+      console.log('🔄 [setCurrentProgram] Using RPC for coach-assigned program:', { programId, userId })
+
+      const { data: rpcData, error: rpcError } = await supabase
+        .rpc('set_client_current_program', {
+          p_program_id: programId,
+          p_user_id: userId
+        })
+
+      data = rpcData
+      error = rpcError
+
+      if (error) {
+        console.error('❌ [setCurrentProgram] RPC error for coach-assigned program:', {
+          programId,
+          userId,
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+      } else {
+        console.log('✅ [setCurrentProgram] RPC successful for coach-assigned program:', {
+          programId,
+          userId,
+          result: data
+        })
+      }
+    } else {
+      // For regular programs, use the direct update approach
+      const result = await supabase
+        .from('programs')
+        .update({
+          is_current: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', programId)
+        .select()
+        .single()
+
+      data = result.data
+      error = result.error
+
+      if (error) {
+        console.error('❌ [setCurrentProgram] Error updating regular program to current:', {
+          programId,
+          userId,
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+      } else {
+        console.log('✅ [setCurrentProgram] Regular program successfully set as current:', {
+          programId,
+          programName: data.name,
+          userId: data.user_id
+        })
+      }
+    }
 
     if (error) throw error
 
@@ -1322,6 +1458,28 @@ export const setCurrentProgram = async (programId, userId) => {
  */
 export const deactivateProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
+    // First, get the program to determine ownership
+    const { data: programData, error: fetchError } = await supabase
+      .from('programs')
+      .select('user_id, assigned_to_client, coach_assigned')
+      .eq('id', programId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching program for deactivation:', fetchError)
+      throw fetchError
+    }
+
+    // Determine the correct user ID to use for filtering
+    // For coach-assigned programs, the user_id is the coach's ID, but we need to filter by assigned_to_client
+    const isCoachAssigned = programData.coach_assigned
+    const filterUserId = isCoachAssigned ? programData.assigned_to_client : programData.user_id
+
+    // Verify the user has permission to deactivate this program
+    if (filterUserId !== userId) {
+      throw new Error('You do not have permission to deactivate this program')
+    }
+
     const { data, error } = await supabase
       .from('programs')
       .update({
@@ -1330,7 +1488,6 @@ export const deactivateProgram = async (programId, userId) => {
         updated_at: new Date().toISOString()
       })
       .eq('id', programId)
-      .eq('user_id', userId)
       .select()
       .single()
 
@@ -1349,11 +1506,32 @@ export const deactivateProgram = async (programId, userId) => {
  */
 export const deleteProgram = async (programId, userId) => {
   return executeSupabaseOperation(async () => {
+    // First, get the program to determine ownership
+    const { data: programData, error: fetchError } = await supabase
+      .from('programs')
+      .select('user_id, assigned_to_client, coach_assigned')
+      .eq('id', programId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching program for deletion:', fetchError)
+      throw fetchError
+    }
+
+    // Determine the correct user ID to use for filtering
+    // For coach-assigned programs, the user_id is the coach's ID, but we need to filter by assigned_to_client
+    const isCoachAssigned = programData.coach_assigned
+    const filterUserId = isCoachAssigned ? programData.assigned_to_client : programData.user_id
+
+    // Verify the user has permission to delete this program
+    if (filterUserId !== userId) {
+      throw new Error('You do not have permission to delete this program')
+    }
+
     const { error } = await supabase
       .from('programs')
       .delete()
       .eq('id', programId)
-      .eq('user_id', userId)
 
     if (error) throw error
 
@@ -1515,10 +1693,11 @@ export const getProgramTemplates = async (filters = {}) => {
  */
 export const searchPrograms = async (searchTerm, userId, filters = {}) => {
   return executeSupabaseOperation(async () => {
+    // For coach-assigned programs, we need to search both user_id (coach's programs) and assigned_to_client (client's programs)
     let query = supabase
       .from('programs')
       .select('*')
-      .eq('user_id', userId)
+      .or(`user_id.eq.${userId},assigned_to_client.eq.${userId}`)
       .ilike('name', `%${searchTerm}%`)
       .order('name')
 

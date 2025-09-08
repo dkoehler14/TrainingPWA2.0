@@ -82,7 +82,7 @@ export const assignProgramToClient = async (programId, clientId, coachId, assign
 const createClientAssignmentNotification = async (clientId, coachId, programId, details) => {
   const notificationData = {
     userId: clientId,
-    type: 'program_assignment',
+    type: 'program_assigned',
     title: `🏋️ New Program Assignment from ${details.coachName}`,
     message: createAssignmentNotificationMessage(details),
     relatedId: programId,
@@ -93,7 +93,7 @@ const createClientAssignmentNotification = async (clientId, coachId, programId, 
     expiresAt: null // Don't expire program assignment notifications
   }
 
-  await createNotification(notificationData)
+  return await createNotification(notificationData)
 }
 
 /**
@@ -215,7 +215,7 @@ const createProgramModificationNotification = async (clientId, coachId, programI
 
   const notificationData = {
     userId: clientId,
-    type: 'program_modification',
+    type: 'system_message',
     title: `📝 Program Updated by ${coachName}`,
     message: `${coachName} has made updates to your program "${programName}". Check out the latest changes and continue with your updated routine!`,
     relatedId: programId,
@@ -319,7 +319,7 @@ export const unassignProgramFromClient = async (programId, coachId, reason = '')
 
     await createNotification({
       userId: clientId,
-      type: 'program_unassignment',
+      type: 'system_message',
       title: `📋 Program Assignment Ended`,
       message: `${coachName} has ended the assignment for program "${program.name}". The program remains in your library for future reference.${reason ? `\n\nReason: ${reason}` : ''}`,
       relatedId: programId,

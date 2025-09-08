@@ -887,11 +887,11 @@ export function invalidateWorkoutCache(userId) {
 export function invalidateProgramCache(userId) {
   // Unified cache invalidation to support both old and new cache key patterns
   const cacheKeysToInvalidate = [
-    // New unified cache keys
-    `user_programs_all_${userId}`,
+    // New unified cache keys (including coach-assigned programs)
+    `user_programs_all_including_coach_assigned_${userId}`,
 
     // Pattern-based invalidation for any filtered versions
-    `user_programs_all_${userId}_`,
+    `user_programs_all_including_coach_assigned_${userId}_`,
   ];
 
   console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache with unified approach:', {
@@ -931,14 +931,14 @@ export async function warmUserCache(userId, priority = 'normal') {
       //   )
       // )
 
-      // All user programs (both user and template) with complete workout structure
+      // All user programs (both user and template, including coach-assigned) with complete workout structure
       // This matches the unified cache key expected by Programs.js
       warmingPromises.push(
         supabaseCache.getWithCache(
-          `user_programs_all_${userId}`,
+          `user_programs_all_including_coach_assigned_${userId}`,
           () => fetchAndTransformPrograms(
             createCompleteProgramQuery(supabase.from('programs'))
-              .eq('user_id', userId)
+              .or(`user_id.eq.${userId},assigned_to_client.eq.${userId}`)
               .order('created_at', { ascending: false })
           ),
           { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user', 'all_programs'], userId }
@@ -1320,15 +1320,15 @@ export class CacheWarmingManager {
       })
     }
 
-    // Normal priority: User programs with complete structure
+    // Normal priority: User programs with complete structure (including coach-assigned)
     tasks.push({
       name: `programs-${userId}`,
       priority: 'normal',
       execute: () => supabaseCache.getWithCache(
-        `user_programs_all_${userId}`,
+        `user_programs_all_including_coach_assigned_${userId}`,
         () => fetchAndTransformPrograms(
           createCompleteProgramQuery(supabase.from('programs'))
-            .eq('user_id', userId)
+            .or(`user_id.eq.${userId},assigned_to_client.eq.${userId}`)
             .order('created_at', { ascending: false })
         ),
         { ttl: 30 * 60 * 1000, table: 'programs', tags: ['programs', 'user'], userId }
@@ -1421,10 +1421,10 @@ export async function getAvailableExercisesCached(userId) {
  */
 export async function getAllUserProgramsCached(userId) {
   return supabaseCache.getWithCache(
-    `user_programs_all_${userId}`,
+    `user_programs_all_including_coach_assigned_${userId}`,
     () => fetchAndTransformPrograms(
       createCompleteProgramQuery(supabase.from('programs'))
-        .eq('user_id', userId)
+        .or(`user_id.eq.${userId},assigned_to_client.eq.${userId}`)
         .order('created_at', { ascending: false })
     ),
     {
