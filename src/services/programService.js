@@ -1829,7 +1829,6 @@ export const createCoachAssignedProgram = async (programData, clientId, coachDat
   return executeSupabaseOperation(async () => {
     const assignedProgramData = {
       ...programData,
-      user_id: clientId, // Program belongs to client
       coach_assigned: true,
       assigned_to_client: clientId,
       assigned_at: new Date().toISOString(),
