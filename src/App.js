@@ -14,7 +14,6 @@ import ResetPassword from './pages/ResetPassword';
 import ProgressTracker2 from './pages/ProgressTracker2';
 import ProgressTracker3 from './pages/Progress3';
 import ProgressCoach from './pages/ProgressCoach';
-import Progress4 from './pages/Progress4';
 import Admin from './pages/Admin';
 import CoachDashboard from './pages/CoachDashboard';
 import CoachAnalytics from './pages/CoachAnalytics';
@@ -170,7 +169,6 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/progress-tracker-2" element={user ? <ProgressTracker2 /> : <Navigate to="/auth" />} />
         <Route path="/progress-tracker-3" element={user ? <ProgressTracker3 /> : <Navigate to="/auth" />} />
-        <Route path="/progress-tracker-4" element={user ? <Progress4 /> : <Navigate to="/auth" />} />
         <Route path="/edit-program/:programId" element={<CreateProgram mode="edit" />} />
         <Route path="/coach-dashboard" element={
           <CoachRoute>

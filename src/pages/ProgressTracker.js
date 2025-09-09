@@ -764,13 +764,6 @@ function ProgressTracker() {
             >
                 Progress Tracker v3.0
             </Button>
-			{/* <Button 
-                variant="primary" 
-                size="lg" 
-                onClick={() => navigate('/progress-tracker-4')}
-            >
-                Progress Tracker v4.0
-            </Button> */}
 			<Row>
 				<Col md={6}>
 					<Form.Group>
