@@ -80,8 +80,6 @@ function ProgressTracker() {
 		frequency: 0,
 		estimatedOneRepMax: 0,
 		exerciseProgress: [],
-		bodyPartFocus: {},
-		summaryStats: {},
 		consistencyScore: 0
 	});
 
@@ -187,8 +185,6 @@ function ProgressTracker() {
 				frequency: 0,
 				estimatedOneRepMax: 0,
 				exerciseProgress: [],
-				bodyPartFocus: {},
-				summaryStats: {},
 				consistencyScore: 0
 			});
 			return;
@@ -234,11 +230,9 @@ function ProgressTracker() {
 			});
 
 			// Calculate all metrics
-			const bodyPartFocus = analyzeBodyPartFocus(filteredLogs.map(log => ({ data: () => log })));
 			const consistencyScore = calculateConsistencyScore(filteredLogs.map(log => ({ data: () => log })));
 			const { pr, volume, frequency, estimatedOneRepMax } = calculateStats(logs);
 			const exerciseProgress = calculateProgressTrend(logs);
-			const summaryStats = await calculateSummaryStats(filteredLogs);
 
 			// Update all metrics at once
 			setMetrics({
@@ -247,8 +241,6 @@ function ProgressTracker() {
 				frequency,
 				estimatedOneRepMax,
 				exerciseProgress,
-				bodyPartFocus,
-				summaryStats,
 				consistencyScore
 			});
 		} catch (error) {
@@ -496,38 +488,6 @@ function ProgressTracker() {
 		};
 	};
 
-	const analyzeBodyPartFocus = (logs) => {
-		const bodyPartCount = {};
-
-		logs.forEach(doc => {
-			const log = doc.data();
-			// Handle both old Firestore structure and new Supabase structure
-			const logExercises = log.exercises || log.workout_log_exercises || [];
-			
-			logExercises.forEach(exercise => {
-				const completed = exercise.completed || [];
-				if (completed.some(c => c === true)) {
-					// Try to get muscle group from exercise data or lookup
-					let muscleGroup = 'Other';
-					
-					if (exercise.exercises?.primary_muscle_group) {
-						// Supabase structure with joined exercise data
-						muscleGroup = exercise.exercises.primary_muscle_group;
-					} else {
-						// Fallback to exercise lookup
-						const exerciseInfo = exercises.find(e => e.value === (exercise.exerciseId || exercise.exercise_id));
-						if (exerciseInfo) {
-							muscleGroup = exerciseInfo.primaryMuscleGroup || exerciseInfo.primary_muscle_group || 'Other';
-						}
-					}
-					
-					bodyPartCount[muscleGroup] = (bodyPartCount[muscleGroup] || 0) + 1;
-				}
-			});
-		});
-
-		return bodyPartCount;
-	};
 
 	const calculateConsistencyScore = (logs) => {
 		if (!logs || logs.length === 0) return 0;
@@ -588,114 +548,6 @@ function ProgressTracker() {
 		return Math.round((frequencyFactor * 0.7 + varianceFactor * 0.3) * 100);
 	};
 
-	const calculateSummaryStats = async (allLogs) => {
-		const stats = {};
-
-		// Group exercises by type
-		exercises.forEach(exercise => {
-			const exerciseLogs = allLogs.filter(log => {
-				// Handle both Firestore and Supabase structures
-				const logExercises = log.exercises || log.workout_log_exercises || [];
-				const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
-				return ex && (ex.completed || []).some(c => c === true);
-			});
-
-			if (exerciseLogs.length > 0) {
-				const allCompletedWeights = exerciseLogs.flatMap(log => {
-					const logExercises = log.exercises || log.workout_log_exercises || [];
-					const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
-					return ex ? (ex.weights || []).filter((_, index) => (ex.completed || [])[index]) : [];
-				});
-				const maxWeight = allCompletedWeights.length > 0 ? Math.max(...allCompletedWeights) : 0;
-
-				// Advanced trend analysis using regression instead of simple first/second half comparison
-				let volumeTrend = 'stable';
-				if (exerciseLogs.length >= 2) {
-					// Sort logs by date
-					const sortedLogs = [...exerciseLogs].sort((a, b) => {
-						const dateA = new Date(a.completed_date || a.date);
-						const dateB = new Date(b.completed_date || b.date);
-						return dateA - dateB;
-					});
-
-					// Calculate volume for each workout
-					const volumeData = sortedLogs.map(log => {
-						const logExercises = log.exercises || log.workout_log_exercises || [];
-						const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.value);
-						const logDate = new Date(log.completed_date || log.date);
-						
-						return {
-							date: logDate.getTime(),
-							volume: ex ? (ex.weights || []).reduce((sum, weight, index) => {
-								if ((ex.completed || [])[index]) {
-									return sum + weight * ((ex.reps || [])[index] || 0);
-								}
-								return sum;
-							}, 0) : 0
-						};
-					});
-
-					// Calculate regression
-					if (volumeData.length >= 2) {
-						const n = volumeData.length;
-						const sumX = volumeData.reduce((sum, p) => sum + p.date, 0);
-						const sumY = volumeData.reduce((sum, p) => sum + p.volume, 0);
-						const sumXY = volumeData.reduce((sum, p) => sum + (p.date * p.volume), 0);
-						const sumXX = volumeData.reduce((sum, p) => sum + (p.date * p.date), 0);
-
-						const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-
-						// Determine trend based on slope and significance threshold
-						const avgVolume = sumY / n;
-						const significanceThreshold = avgVolume * 0.001; // 0.1% of avg volume per millisecond is significant
-
-						if (slope > significanceThreshold) {
-							volumeTrend = 'increasing';
-						} else if (slope < -significanceThreshold) {
-							volumeTrend = 'decreasing';
-						}
-
-						// Calculate confidence
-						const rSquared = calculateRSquared(
-							volumeData.map(d => ({ x: d.date, y: d.volume })),
-							slope,
-							(sumY - slope * sumX) / n
-						);
-
-						// Add trend confidence
-						stats[exercise.label] = {
-							maxWeight,
-							frequency: exerciseLogs.length,
-							bodyPart: exercise.primaryMuscleGroup || exercise.primary_muscle_group,
-							exerciseType: exercise.exerciseType || exercise.exercise_type,
-							volumeTrend,
-							trendConfidence: Math.round(rSquared * 100)
-						};
-					} else {
-						stats[exercise.label] = {
-							maxWeight,
-							frequency: exerciseLogs.length,
-							bodyPart: exercise.primaryMuscleGroup || exercise.primary_muscle_group,
-							exerciseType: exercise.exerciseType || exercise.exercise_type,
-							volumeTrend: 'insufficient data',
-							trendConfidence: 0
-						};
-					}
-				} else {
-					stats[exercise.label] = {
-						maxWeight,
-						frequency: exerciseLogs.length,
-						bodyPart: exercise.primaryMuscleGroup || exercise.primary_muscle_group,
-						exerciseType: exercise.exerciseType || exercise.exercise_type,
-						volumeTrend: 'insufficient data',
-						trendConfidence: 0
-					};
-				}
-			}
-		});
-
-		return stats;
-	};
 
 	// Render loading spinners when data is loading
 	const renderLoadingSpinner = () => (
@@ -836,9 +688,6 @@ function ProgressTracker() {
 					<Nav.Link eventKey="volume">Volume Analysis</Nav.Link>
 				</Nav.Item>
 				<Nav.Item>
-					<Nav.Link eventKey="balance">Training Balance</Nav.Link>
-				</Nav.Item>
-				<Nav.Item>
 					<Nav.Link eventKey="logs">Exercise Logs</Nav.Link>
 				</Nav.Item>
 			</Nav>
@@ -958,80 +807,6 @@ function ProgressTracker() {
 						</>
 					)}
 
-					{activeTab === 'balance' && (
-						<Row>
-							<Col md={6}>
-								<Card>
-									<Card.Body>
-										<Card.Title>Body Part Training Distribution</Card.Title>
-										<div style={{ height: '300px' }}>
-											{Object.keys(metrics.bodyPartFocus).length > 0 && (
-												<Bar
-													data={{
-														labels: Object.keys(metrics.bodyPartFocus),
-														datasets: [{
-															label: 'Frequency',
-															data: Object.values(metrics.bodyPartFocus),
-															backgroundColor: [
-																'rgba(255, 99, 132, 0.6)',
-																'rgba(54, 162, 235, 0.6)',
-																'rgba(255, 206, 86, 0.6)',
-																'rgba(75, 192, 192, 0.6)',
-																'rgba(153, 102, 255, 0.6)',
-																'rgba(255, 159, 64, 0.6)',
-																'rgba(199, 199, 199, 0.6)'
-															]
-														}]
-													}}
-													options={{
-														responsive: true,
-														maintainAspectRatio: false
-													}}
-												/>
-											)}
-										</div>
-									</Card.Body>
-								</Card>
-							</Col>
-							<Col md={6}>
-								<Card>
-									<Card.Body>
-										<Card.Title>Exercise Progress Trends</Card.Title>
-										<Table striped bordered hover>
-											<thead>
-												<tr>
-													<th>Exercise</th>
-													<th>Max Weight</th>
-													<th>Volume Trend</th>
-													<th>Body Part</th>
-													<th>Exercise Type</th>
-												</tr>
-											</thead>
-											<tbody>
-												{Object.entries(metrics.summaryStats).map(([exercise, stats]) => (
-													<tr key={exercise}>
-														<td>{exercise}</td>
-														<td>{stats.maxWeight} lbs</td>
-														<td>
-															<span className={
-																stats.volumeTrend === 'increasing' ? 'text-success' :
-																	stats.volumeTrend === 'decreasing' ? 'text-danger' : ''
-															}>
-																{stats.volumeTrend === 'increasing' ? '↑' :
-																	stats.volumeTrend === 'decreasing' ? '↓' : '→'} {stats.volumeTrend}
-															</span>
-														</td>
-														<td>{stats.bodyPart}</td>
-														<td>{stats.exerciseType}</td>
-													</tr>
-												))}
-											</tbody>
-										</Table>
-									</Card.Body>
-								</Card>
-							</Col>
-						</Row>
-					)}
 
 					{activeTab === 'logs' && (
 						<Row>

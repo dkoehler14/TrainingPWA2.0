@@ -370,30 +370,30 @@
 }
 
 /* Chart Customizations */
-.recharts-tooltip-wrapper {
+.compound-lift-tracker .recharts-tooltip-wrapper {
     background: rgba(0, 0, 0, 0.8) !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
     border-radius: 8px !important;
 }
 
-.recharts-default-tooltip {
+.compound-lift-tracker .recharts-default-tooltip {
     background: rgba(0, 0, 0, 0.9) !important;
     border: none !important;
     border-radius: 8px !important;
     color: white !important;
 }
 
-.recharts-legend-wrapper {
+.compound-lift-tracker .recharts-legend-wrapper {
     padding-top: 20px !important;
 }
 
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
+.compound-lift-tracker .recharts-cartesian-grid-horizontal line,
+.compound-lift-tracker .recharts-cartesian-grid-vertical line {
     stroke: rgba(255, 255, 255, 0.1) !important;
 }
 
-.recharts-xAxis .recharts-cartesian-axis-tick-value,
-.recharts-yAxis .recharts-cartesian-axis-tick-value {
+.compound-lift-tracker .recharts-xAxis .recharts-cartesian-axis-tick-value,
+.compound-lift-tracker .recharts-yAxis .recharts-cartesian-axis-tick-value {
     fill: rgba(255, 255, 255, 0.8) !important;
     font-size: 12px !important;
 }

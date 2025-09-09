@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -24,6 +24,8 @@ function Progress3() {
     const [completionRate, setCompletionRate] = useState(0);
     const [volumeData, setVolumeData] = useState([]);
     const [personalRecords, setPersonalRecords] = useState([]);
+    const [bodyPartFocus, setBodyPartFocus] = useState({});
+    const [summaryStats, setSummaryStats] = useState({});
     const { user, isAuthenticated } = useContext(AuthContext);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -105,6 +107,8 @@ function Progress3() {
         calculateWorkoutCompletionRate(filteredLogs);
         calculateVolumeProgression(filteredLogs);
         calculatePersonalRecords(workoutLogs);
+        calculateBodyPartFocus(filteredLogs);
+        calculateSummaryStats(filteredLogs);
     };
 
     const filterLogsByDateRange = (logs) => {
@@ -214,7 +218,7 @@ function Progress3() {
 
     const calculateWorkoutCompletionRate = (logs) => {
         const totalPlannedWorkouts = logs.length;
-        const completedWorkouts = logs.filter(log => log.isWorkoutFinished).length;
+        const completedWorkouts = logs.filter(log => log.is_finished).length;
 
         const completionPercentage = totalPlannedWorkouts > 0
             ? Math.round((completedWorkouts / totalPlannedWorkouts) * 100)
@@ -286,6 +290,126 @@ log.exercises.forEach(exercise => {
         });
 
         setPersonalRecords(Array.from(prs.values()));
+    };
+    
+    const calculateBodyPartFocus = (logs) => {
+        const bodyPartCount = {};
+        logs.forEach(log => {
+            if (!log.exercises || !Array.isArray(log.exercises)) return;
+            log.exercises.forEach(exercise => {
+                if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
+                const exerciseId = exercise.exerciseId || exercise.exercise_id;
+                const exerciseData = exercises.find(e => e.id === exerciseId);
+                if (!exerciseData) return;
+                const primaryMuscleGroup = exerciseData.primary_muscle_group || exerciseData.primaryMuscleGroup || 'Other';
+                if (primaryMuscleGroup) {
+                    const completed = exercise.completed || [];
+                    // Count the actual number of completed sets instead of just exercises
+                    const completedSets = completed.filter(c => c === true).length;
+                    if (completedSets > 0) {
+                        bodyPartCount[primaryMuscleGroup] = (bodyPartCount[primaryMuscleGroup] || 0) + completedSets;
+                    }
+                }
+            });
+        });
+        setBodyPartFocus(bodyPartCount);
+    };
+    
+    const calculateSummaryStats = async (allLogs) => {
+        const stats = {};
+        exercises.forEach(exercise => {
+            const exerciseLogs = allLogs.filter(log => {
+                const logExercises = log.exercises || [];
+                const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.id);
+                return ex && (ex.completed || []).some(c => c === true);
+            });
+            if (exerciseLogs.length > 0) {
+                const allCompletedWeights = exerciseLogs.flatMap(log => {
+                    const logExercises = log.exercises || [];
+                    const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.id);
+                    return ex ? (ex.weights || []).filter((_, index) => (ex.completed || [])[index]) : [];
+                });
+                const maxWeight = allCompletedWeights.length > 0 ? Math.max(...allCompletedWeights) : 0;
+                let volumeTrend = 'stable';
+                if (exerciseLogs.length >= 2) {
+                    const sortedLogs = [...exerciseLogs].sort((a, b) => {
+                        const dateA = new Date(a.date);
+                        const dateB = new Date(b.date);
+                        return dateA - dateB;
+                    });
+                    const volumeData = sortedLogs.map(log => {
+                        const logExercises = log.exercises || [];
+                        const ex = logExercises.find(e => (e.exerciseId || e.exercise_id) === exercise.id);
+                        const logDate = new Date(log.date);
+                        return {
+                            date: logDate.getTime(),
+                            volume: ex ? (ex.weights || []).reduce((sum, weight, index) => {
+                                if ((ex.completed || [])[index]) {
+                                    return sum + weight * ((ex.reps || [])[index] || 0);
+                                }
+                                return sum;
+                            }, 0) : 0
+                        };
+                    });
+                    if (volumeData.length >= 2) {
+                        const n = volumeData.length;
+                        const sumX = volumeData.reduce((sum, p) => sum + p.date, 0);
+                        const sumY = volumeData.reduce((sum, p) => sum + p.volume, 0);
+                        const sumXY = volumeData.reduce((sum, p) => sum + (p.date * p.volume), 0);
+                        const sumXX = volumeData.reduce((sum, p) => sum + (p.date * p.date), 0);
+                        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+                        const avgVolume = sumY / n;
+                        const significanceThreshold = avgVolume * 0.001;
+                        if (slope > significanceThreshold) {
+                            volumeTrend = 'increasing';
+                        } else if (slope < -significanceThreshold) {
+                            volumeTrend = 'decreasing';
+                        }
+                        const rSquared = calculateRSquared(volumeData.map(d => ({ x: d.date, y: d.volume })), slope, (sumY - slope * sumX) / n);
+                        stats[exercise.name] = {
+                            maxWeight,
+                            frequency: exerciseLogs.length,
+                            bodyPart: exercise.primary_muscle_group || exercise.primaryMuscleGroup,
+                            exerciseType: exercise.exercise_type || exercise.exerciseType,
+                            volumeTrend,
+                            trendConfidence: Math.round(rSquared * 100)
+                        };
+                    } else {
+                        stats[exercise.name] = {
+                            maxWeight,
+                            frequency: exerciseLogs.length,
+                            bodyPart: exercise.primary_muscle_group || exercise.primaryMuscleGroup,
+                            exerciseType: exercise.exercise_type || exercise.exerciseType,
+                            volumeTrend: 'insufficient data',
+                            trendConfidence: 0
+                        };
+                    }
+                } else {
+                    stats[exercise.name] = {
+                        maxWeight,
+                        frequency: exerciseLogs.length,
+                        bodyPart: exercise.primary_muscle_group || exercise.primaryMuscleGroup,
+                        exerciseType: exercise.exercise_type || exercise.exerciseType,
+                        volumeTrend: 'insufficient data',
+                        trendConfidence: 0
+                    };
+                }
+            }
+        });
+        setSummaryStats(stats);
+    };
+    
+    const calculateRSquared = (points, slope, intercept) => {
+        if (points.length < 2) return 0;
+        const yMean = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+        let ssTotal = 0;
+        let ssResidual = 0;
+        points.forEach(point => {
+            const yPredicted = slope * point.x + intercept;
+            ssTotal += Math.pow(point.y - yMean, 2);
+            ssResidual += Math.pow(point.y - yPredicted, 2);
+        });
+        return ssTotal === 0 ? 0 : 1 - (ssResidual / ssTotal);
     };
 
     const estimateOneRepMax = (weight, reps) => {
@@ -371,11 +495,21 @@ log.exercises.forEach(exercise => {
                                         margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="date" />
+                                        <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        />
                                         <YAxis />
                                         <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
                                         <Legend />
-                                        <Line type="monotone" dataKey="volume" stroke="#8884d8" activeDot={{ r: 8 }} name="Total Volume" />
+                                        <Line type="monotone" dataKey="volume" stroke="#8884d8" activeDot={{ r: 8 }} name="Total Volume" >
+                                            <LabelList 
+                                                dataKey="name"
+                                                position="bottom"
+                                                fontSize={12}
+                                                fill="#333"
+                                            />
+                                        </Line>
                                     </LineChart>
                                 </ResponsiveContainer>
                             </Card.Body>
@@ -637,6 +771,7 @@ log.exercises.forEach(exercise => {
                             <Card.Body>
                                 <ResponsiveContainer width="100%" height={400}>
                                     <LineChart
+                                        data={stackedData}
                                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
@@ -652,9 +787,8 @@ log.exercises.forEach(exercise => {
                                         {activeGroups.map((group, index) => (
                                             <Line
                                                 key={group}
-                                                data={muscleVolumeTrends[group]}
                                                 type="monotone"
-                                                dataKey="volume"
+                                                dataKey={group}
                                                 name={group}
                                                 stroke={COLORS[index % COLORS.length]}
                                                 activeDot={{ r: 8 }}
@@ -662,6 +796,98 @@ log.exercises.forEach(exercise => {
                                         ))}
                                     </LineChart>
                                 </ResponsiveContainer>
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                </Row>
+            </div>
+        );
+    };
+
+    const renderBalanceTab = () => {
+        return (
+            <div className="balance-analytics">
+                <Row>
+                    <Col md={6} className="mb-4">
+                        <Card className="shadow-sm">
+                            <Card.Header>
+                                <h5 className="mb-0">Muscle Group Training Distribution</h5>
+                            </Card.Header>
+                            <Card.Body>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <BarChart
+                                        data={Object.entries(bodyPartFocus).map(([key, value], index) => ({
+                                            id: index,
+                                            name: key,
+                                            value: value
+                                        }))}
+                                        // margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                                    >
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis
+                                            type="category"
+                                            dataKey="name"
+                                            height={60}
+                                            interval={0}
+                                            fontSize={12}
+                                        />
+                                        <YAxis
+                                            datakey="value"
+                                            fontSize={12}
+                                            label={{ value: 'Sets', position: 'leftInside', dx: -10, dy: -140, fontSize: 12}}
+                                        />
+                                        <Tooltip
+                                            formatter={(value, name) => [value, 'Sets']}
+                                            labelFormatter={(label) => `Muscle Group: ${label}`}
+                                        />
+                                        <Bar
+                                            dataKey="value"
+                                            fill="#3057c0ff"
+                                            name="Sets"
+                                        />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                    <Col md={6} className="mb-4">
+                        <Card className="shadow-sm">
+                            <Card.Header>
+                                <h5 className="mb-0">Exercise Progress Trends</h5>
+                            </Card.Header>
+                            <Card.Body>
+                                <div className="table-responsive">
+                                    <table className="table">
+                                        <thead>
+                                            <tr>
+                                                <th>Exercise</th>
+                                                <th>Max Weight</th>
+                                                <th>Volume Trend</th>
+                                                <th>Muscle Group</th>
+                                                <th>Exercise Type</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.entries(summaryStats).map(([exercise, stats]) => (
+                                                <tr key={exercise}>
+                                                    <td>{exercise}</td>
+                                                    <td>{stats.maxWeight} lbs</td>
+                                                    <td>
+                                                        <span className={
+                                                            stats.volumeTrend === 'increasing' ? 'text-success' :
+                                                            stats.volumeTrend === 'decreasing' ? 'text-danger' : ''
+                                                        }>
+                                                            {stats.volumeTrend === 'increasing' ? '↑' :
+                                                            stats.volumeTrend === 'decreasing' ? '↓' : '→'} {stats.volumeTrend}
+                                                        </span>
+                                                    </td>
+                                                    <td>{stats.bodyPart}</td>
+                                                    <td>{stats.exerciseType}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </Card.Body>
                         </Card>
                     </Col>
@@ -737,11 +963,20 @@ log.exercises.forEach(exercise => {
                                         Strength Analysis
                                     </Nav.Link>
                                 </Nav.Item>
+                                <Nav.Item>
+                                    <Nav.Link
+                                        className={activeTab === 'balance'}
+                                        onClick={() => setActiveTab('balance')}
+                                    >
+                                        Training Balance
+                                    </Nav.Link>
+                                </Nav.Item>
                             </Nav>
 
                             {activeTab === 'overview' && renderOverviewTab()}
                             {activeTab === 'strength' && renderStrengthTab()}
                             {activeTab === 'volume' && renderVolumeTab()}
+                            {activeTab === 'balance' && renderBalanceTab()}
                         </div>
                     )}
                 </Col>

@@ -573,26 +573,26 @@
 }
 
 /* Chart Customizations */
-.recharts-tooltip-wrapper {
+.hypertrophy-hub .recharts-tooltip-wrapper {
     background: rgba(0, 0, 0, 0.8) !important;
     border: 1px solid rgba(255, 255, 255, 0.2) !important;
     border-radius: 8px !important;
 }
 
-.recharts-default-tooltip {
+.hypertrophy-hub .recharts-default-tooltip {
     background: rgba(0, 0, 0, 0.9) !important;
     border: none !important;
     border-radius: 8px !important;
     color: white !important;
 }
 
-.recharts-cartesian-grid-horizontal line,
-.recharts-cartesian-grid-vertical line {
+.hypertrophy-hub .recharts-cartesian-grid-horizontal line,
+.hypertrophy-hub .recharts-cartesian-grid-vertical line {
     stroke: rgba(255, 255, 255, 0.1) !important;
 }
 
-.recharts-xAxis .recharts-cartesian-axis-tick-value,
-.recharts-yAxis .recharts-cartesian-axis-tick-value {
+.hypertrophy-hub .recharts-xAxis .recharts-cartesian-axis-tick-value,
+.hypertrophy-hub .recharts-yAxis .recharts-cartesian-axis-tick-value {
     fill: rgba(255, 255, 255, 0.8) !important;
     font-size: 12px !important;
 }
