@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Container, Row, Col, Form, Button, Accordion, Table, Modal, Dropdown, Card } from 'react-bootstrap';
-import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical, GripVertical } from 'react-bootstrap-icons';
+import { Trash, ChevronDown, ChevronUp, Pencil, ThreeDotsVertical, GripVertical, BarChart } from 'react-bootstrap-icons';
 import { useAuth } from '../hooks/useAuth';
 import { useNumberInput } from '../hooks/useNumberInput'; // Adjust path as needed
 import { useFormPersistence } from '../hooks/useFormPersistence';
 import { useIsCoach } from '../hooks/useRoleChecking';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseGrid from '../components/ExerciseGrid';
+import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 import AutoSaveIndicator from '../components/AutoSaveIndicator';
 import ProgramAssignmentModal from '../components/ProgramAssignmentModal';
 import '../styles/CreateProgram.css';
@@ -244,6 +245,7 @@ const SortableDesktopExercise = ({
   onOpenNotes,
   onRemoveExercise,
   onSetsRepsChange,
+  onViewHistory,
   weeks
 }) => {
   const {
@@ -336,6 +338,10 @@ const SortableDesktopExercise = ({
               {hasExerciseNotes ? 'Edit Notes' : 'Add Notes'}
               {hasExerciseNotes && <span className="ms-1 badge bg-primary rounded-circle" style={{ width: '8px', height: '8px', padding: '0' }}> </span>}
             </Dropdown.Item>
+            <Dropdown.Item onClick={() => onViewHistory(selectedExercise)} className="d-flex align-items-center">
+              <BarChart className="me-2" />
+              View History
+            </Dropdown.Item>
             <Dropdown.Item onClick={() => onRemoveExercise(0, dayIndex, exIndex)} className="d-flex align-items-center text-danger">
               <Trash className="me-2" />
               Delete Exercise
@@ -421,6 +427,8 @@ function CreateProgram({ mode = 'create' }) {
   const [editingDay, setEditingDay] = useState({ dayIndex: null, value: '' });
   const [autoSaveTriggered, setAutoSaveTriggered] = useState(false);
   const [activeId, setActiveId] = useState(null); // Track active drag item
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [selectedExerciseHistory, setSelectedExerciseHistory] = useState(null);
 
   // Coach-specific state variables
   const { hasRole: isCoach } = useIsCoach();
@@ -1313,12 +1321,20 @@ function CreateProgram({ mode = 'create' }) {
     setCurrentExerciseSelection({ weekIndex, dayIndex, exIndex });
     setShowExerciseModal(true);
   };
+  
+  const openHistoryModal = (exercise) => {
+    console.log("Open History Modal exercise:", exercise);
+    setSelectedExerciseHistory(exercise);
+    console.log("Selected Exercise History", selectedExerciseHistory);
+    setShowHistoryModal(true);
+    console.log(showHistoryModal);
+  };
 
   const renderMobileExerciseRow = (day, dayIndex, exercise, exIndex) => {
     const isExpanded = isExerciseExpanded(dayIndex, exIndex);
     const selectedExercise = exercises.find(opt => opt.value === exercise.exerciseId);
     const hasExerciseNotes = hasNotes(dayIndex, exIndex);
-
+  
     return (
       <SortableMobileExercise
         key={`exercise-${0}-${dayIndex}-${exIndex}`}
@@ -1335,6 +1351,7 @@ function CreateProgram({ mode = 'create' }) {
         onOpenNotes={openNotesModal}
         onRemoveExercise={removeExercise}
         onSetsRepsChange={handleSetsRepsChange}
+        onViewHistory={openHistoryModal}
         weeks={weeks}
       />
     );
@@ -1343,7 +1360,7 @@ function CreateProgram({ mode = 'create' }) {
   const renderDesktopExerciseRow = (day, dayIndex, exercise, exIndex) => {
     const hasExerciseNotes = hasNotes(dayIndex, exIndex);
     const selectedExercise = exercises.find(opt => opt.value === exercise.exerciseId);
-
+  
     return (
       <SortableDesktopExercise
         key={`exercise-${0}-${dayIndex}-${exIndex}`}
@@ -1358,6 +1375,7 @@ function CreateProgram({ mode = 'create' }) {
         onOpenNotes={openNotesModal}
         onRemoveExercise={removeExercise}
         onSetsRepsChange={handleSetsRepsChange}
+        onViewHistory={openHistoryModal}
         weeks={weeks}
       />
     );
@@ -2121,6 +2139,15 @@ function CreateProgram({ mode = 'create' }) {
           )}
         </Modal.Footer>
       </Modal>
+
+      {/* Exercise History Modal */}
+      <ExerciseHistoryModal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        exercise={selectedExerciseHistory}
+        exercisesList={exercises}
+        weightUnit={weightUnit}
+      />
 
       {/* Drag Overlay for visual feedback */}
       <DragOverlay dropAnimation={defaultDropAnimationSideEffects}>

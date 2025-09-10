@@ -174,6 +174,14 @@ function Progress3() {
         return volume;
     };
 
+    const calculateCompletedSets = (exercise) => {
+        let completedSets = 0;
+        if (exercise && exercise.completed && Array.isArray(exercise.completed)) {
+            completedSets = exercise.completed.filter(c => c === true).length;
+        }
+        return completedSets;
+    };
+
     const calculateStrengthMetrics = (logs) => {
         if (!selectedExercise) return;
 
@@ -679,7 +687,7 @@ log.exercises.forEach(exercise => {
                     const exerciseData = exercises.find(e => e.id === exerciseId);
                     if (!exerciseData) return;
 
-                    const volume = calculateExerciseVolume(exercise);
+                    const volume = calculateCompletedSets(exercise);
 
                     const primaryGroup = exerciseData.primaryMuscleGroup || exerciseData.primary_muscle_group;
                     if (primaryGroup) {
@@ -743,8 +751,8 @@ log.exercises.forEach(exercise => {
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="date" />
-                                        <YAxis />
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
+                                        <YAxis label={{ value: 'Sets', position: 'insideLeft', angle: 0, dy: -165, dx: -10 }} />
+                                        <Tooltip formatter={(value) => `${value.toLocaleString()} sets`} />
                                         <Legend />
                                         {activeGroups.map((group, index) => (
                                             <Bar
@@ -781,8 +789,8 @@ log.exercises.forEach(exercise => {
                                             type="category"
                                             allowDecimals={false}
                                         />
-                                        <YAxis />
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
+                                        <YAxis label={{ value: 'Sets', position: 'insideLeft', angle: 0, dy: -165, dx: -10 }} />
+                                        <Tooltip formatter={(value) => `${value.toLocaleString()} sets`} />
                                         <Legend />
                                         {activeGroups.map((group, index) => (
                                             <Line
