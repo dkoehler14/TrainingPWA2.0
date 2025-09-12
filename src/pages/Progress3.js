@@ -2,9 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
-import { Calendar, ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import { ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
 import workoutLogService from '../services/workoutLogService';
@@ -16,7 +14,7 @@ function Progress3() {
     const [muscleGroups, setMuscleGroups] = useState({});
     const [selectedExercise, setSelectedExercise] = useState(null);
     const [activeTab, setActiveTab] = useState('overview');
-    const [dateRange, setDateRange] = useState('month');
+    const [dateRange, setDateRange] = useState('1month');
     const [startDate, setStartDate] = useState(new Date(new Date().setMonth(new Date().getMonth() - 1)));
     const [endDate, setEndDate] = useState(new Date());
     const [muscleGroupData, setMuscleGroupData] = useState([]);
@@ -40,6 +38,36 @@ function Progress3() {
             dateStr: d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
         };
     };
+
+    useEffect(() => {
+        const now = new Date();
+        let newStartDate, newEndDate;
+
+        switch (dateRange) {
+            case '1month':
+                newStartDate = new Date(now.setMonth(now.getMonth() - 1));
+                newEndDate = new Date();
+                break;
+            case '3months':
+                newStartDate = new Date(now.setMonth(now.getMonth() - 3));
+                newEndDate = new Date();
+                break;
+            case '1year':
+                newStartDate = new Date(now.setFullYear(now.getFullYear() - 1));
+                newEndDate = new Date();
+                break;
+            case 'alltime':
+                newStartDate = new Date(0); // Very early date for all time
+                newEndDate = new Date();
+                break;
+            default:
+                newStartDate = new Date(now.setMonth(now.getMonth() - 1));
+                newEndDate = new Date();
+        }
+
+        setStartDate(newStartDate);
+        setEndDate(newEndDate);
+    }, [dateRange]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -454,7 +482,7 @@ log.exercises.forEach(exercise => {
                                     <div className="progress-text">{completionRate}%</div>
                                 </div>
                                 <div className="text-center mt-3">
-                                    Completion rate from {startDate.toLocaleDateString()} to {endDate.toLocaleDateString()}
+                                    Completion rate {dateRange === 'alltime' ? 'for all time' : `from ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}`}
                                 </div>
                             </Card.Body>
                         </Card>
@@ -918,31 +946,17 @@ log.exercises.forEach(exercise => {
                             <div className="d-flex justify-content-between align-items-center mb-4">
                                 <h1 className="soft-title analytics-title">Workout Analytics</h1>
                                 <div className="d-flex align-items-center gap-2">
-                                    <div className="date-range-picker">
-                                        <Form.Label className="me-2">From:</Form.Label>
-                                        <DatePicker
-                                            selected={startDate}
-                                            onChange={date => setStartDate(date)}
-                                            selectsStart
-                                            startDate={startDate}
-                                            endDate={endDate}
-                                            className="form-control form-control-sm"
-                                            dateFormat="MMM dd, yyyy"
-                                        />
-                                    </div>
-                                    <div className="date-range-picker">
-                                        <Form.Label className="me-2">To:</Form.Label>
-                                        <DatePicker
-                                            selected={endDate}
-                                            onChange={date => setEndDate(date)}
-                                            selectsEnd
-                                            startDate={startDate}
-                                            endDate={endDate}
-                                            minDate={startDate}
-                                            className="form-control form-control-sm"
-                                            dateFormat="MMM dd, yyyy"
-                                        />
-                                    </div>
+                                    <Form.Label className="me-2">Time Period:</Form.Label>
+                                    <Form.Select
+                                        value={dateRange}
+                                        onChange={(e) => setDateRange(e.target.value)}
+                                        className="form-control form-control-sm"
+                                    >
+                                        <option value="1month">1 Month</option>
+                                        <option value="3months">3 Months</option>
+                                        <option value="1year">1 Year</option>
+                                        <option value="alltime">All Time</option>
+                                    </Form.Select>
                                 </div>
                             </div>
 
