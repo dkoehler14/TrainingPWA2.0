@@ -457,7 +457,7 @@ log.exercises.forEach(exercise => {
         return (
             <div className="analytics-overview">
                 <Row>
-                    <Col md={6} className="mb-4">
+                    {/* <Col md={6} className="mb-4">
                         <Card className="shadow-sm h-100">
                             <Card.Header>
                                 <h5 className="mb-0">Workout Completion Rate</h5>
@@ -486,9 +486,9 @@ log.exercises.forEach(exercise => {
                                 </div>
                             </Card.Body>
                         </Card>
-                    </Col>
+                    </Col> */}
 
-                    <Col md={6} className="mb-4">
+                    <Col md={12} className="mb-4">
                         <Card className="shadow-sm h-100">
                             <Card.Header>
                                 <h5 className="mb-0">Volume by Muscle Group</h5>
