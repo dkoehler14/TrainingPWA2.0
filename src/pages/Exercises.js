@@ -3,12 +3,14 @@ import { Container, Row, Col, Button, Alert, Spinner } from 'react-bootstrap';
 import { PlusLg } from 'react-bootstrap-icons';
 import ExerciseCreationModal from '../components/ExerciseCreationModal';
 import ExerciseOrganizer from '../components/ExerciseOrganizer';
+import ExercisePerformanceModal from '../components/ExercisePerformanceModal';
 import '../styles/Exercises.css';
 import '../styles/ExerciseGrid.css';
 import '../styles/ExerciseOrganizer.css';
 import { getAvailableExercises } from '../services/exerciseService';
 import { useAuth, useRoles, useAuthLoading } from '../hooks/useAuth';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
+import { supabase } from '../config/supabase';
 
 function Exercises() {
   const { user, isAuthenticated } = useAuth();
@@ -24,6 +26,11 @@ function Exercises() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [currentExercise, setCurrentExercise] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Performance modal state
+  const [showPerformanceModal, setShowPerformanceModal] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState(null);
+  const [workoutLogs, setWorkoutLogs] = useState({});
 
   useEffect(() => {
     fetchExercises();
@@ -55,6 +62,62 @@ function Exercises() {
     }
   };
 
+  const fetchWorkoutLogsForExercise = async (exercise) => {
+    if (!user) return {};
+
+    try {
+      // Fetch workout logs for this specific exercise
+      const { data: logsData, error } = await supabase
+        .from('workout_log_exercises')
+        .select(`
+          *,
+          workout_logs (
+            id,
+            user_id,
+            program_id,
+            week_index,
+            day_index,
+            completed_date,
+            is_finished
+          )
+        `)
+        .eq('exercise_id', exercise.id)
+        .eq('workout_logs.user_id', user.id);
+
+      if (error) throw error;
+
+      const logs = {};
+      logsData.forEach(log => {
+        const workoutLog = log.workout_logs;
+        if (workoutLog) {
+          const key = `week${(workoutLog.week_index || 0) + 1}_day${(workoutLog.day_index || 0) + 1}`;
+
+          if (!logs[key]) {
+            logs[key] = {
+              exercises: {},
+              isWorkoutFinished: workoutLog.is_finished || false,
+              completedDate: workoutLog.completed_date || null
+            };
+          }
+
+          logs[key].exercises[exercise.id] = {
+            exerciseId: exercise.id,
+            sets: log.sets,
+            reps: log.reps,
+            weights: log.weights,
+            completed: log.completed,
+            bodyweight: log.bodyweight
+          };
+        }
+      });
+
+      return logs;
+    } catch (error) {
+      console.error("Error fetching workout logs for exercise: ", error);
+      return {};
+    }
+  };
+
   const openAddModal = () => {
     setValidationError('');
     setIsEditMode(false);
@@ -67,6 +130,13 @@ function Exercises() {
     setIsEditMode(true);
     setCurrentExercise(exercise);
     setShowModal(true);
+  };
+
+  const handleExerciseClick = async (exercise) => {
+    setSelectedExercise(exercise);
+    const logs = await fetchWorkoutLogsForExercise(exercise);
+    setWorkoutLogs(logs);
+    setShowPerformanceModal(true);
   };
 
   // Callback for when a new exercise is added
@@ -119,7 +189,7 @@ function Exercises() {
                     onClick={openAddModal}
                     className="soft-button exercises-button gradient"
                   >
-                    <PlusLg className="me-2" /> Add New Exercise
+                    <PlusLg className="me-2" /> {userRole === 'admin' ? 'Add New Exercise' : 'Create Custom Exercise'}
                   </Button>
                 </div>
 
@@ -128,6 +198,7 @@ function Exercises() {
                   exercises={exercises}
                   showEditButton={true}
                   onEditClick={openEditModal}
+                  onExerciseClick={handleExerciseClick}
                   className="exercises-organizer"
                   userRole={isProfileLoading ? null : userRole}
                   isRoleLoading={isProfileLoading}
@@ -147,6 +218,15 @@ function Exercises() {
         initialData={isEditMode ? currentExercise : null}
         onExerciseAdded={handleExerciseAdded}
         onExerciseUpdated={handleExerciseUpdated}
+      />
+
+      {/* Exercise Performance Modal */}
+      <ExercisePerformanceModal
+        show={showPerformanceModal}
+        onHide={() => setShowPerformanceModal(false)}
+        exercise={selectedExercise}
+        userId={user?.id}
+        workoutLogs={workoutLogs}
       />
     </Container>
   );

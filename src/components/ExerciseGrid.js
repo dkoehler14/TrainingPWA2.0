@@ -217,7 +217,7 @@ const ExerciseGrid = ({
                 {filteredExercises.map(ex => (
                     <Col xs={12} md={6} lg={4} key={ex.id} className="mb-3">
                         <div
-                            className={`p-3 border rounded exercise-card h-100 d-flex flex-column ${ex.isGlobal ? 'exercise-card-global' : 'exercise-card-custom'} ${showEditButton && ex.isGlobal && !canEditExercise(ex) ? 'exercise-card-readonly' : ''}`}
+                            className={`p-3 border rounded exercise-card h-100 d-flex flex-column ${ex.isGlobal ? 'exercise-card-global' : 'exercise-card-custom'} ${showEditButton && ex.isGlobal && !canEditExercise(ex) && userRole === 'admin' ? 'exercise-card-readonly' : ''}`}
                             style={{
                                 cursor: onExerciseClick ? 'pointer' : 'default',
                                 backgroundColor: showEditButton && ex.isGlobal && !canEditExercise(ex) ? '#f8f9fa' : '#f8f9fa',
@@ -301,7 +301,7 @@ const ExerciseGrid = ({
                             )}
 
                             {/* Read-only indicator for non-editable global exercises */}
-                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && (
+                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && userRole === 'admin' && (
                                 <div
                                     className="position-absolute d-flex align-items-center justify-content-center"
                                     style={{

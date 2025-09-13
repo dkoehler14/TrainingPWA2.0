@@ -138,7 +138,7 @@ const ExerciseOrganizer = ({
                                     Edit
                                 </Button>
                             )}
-                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && (
+                            {showEditButton && ex.isGlobal && !isRoleLoading && !canEditExercise(ex) && userRole === 'admin' && (
                                 <Badge bg="secondary" className="text-muted">
                                     Read Only
                                 </Badge>
