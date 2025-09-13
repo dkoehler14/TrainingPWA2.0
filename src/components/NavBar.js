@@ -54,7 +54,7 @@ function NavBar({ user, userRole, isReady }) {
             {user && <Nav.Link href="/quick-workout" className="nav-link">Quick Workout</Nav.Link>}
 
             {user && <Nav.Link href="/programs" className="nav-link">Programs</Nav.Link>}
-            {user && showAnalytics && <Nav.Link href="/progress-tracker" className="nav-link">Analytics</Nav.Link>}
+            {user && showAnalytics && <Nav.Link href="/progress-tracker-3" className="nav-link">Analytics</Nav.Link>}
             {user && <Nav.Link href="/progress-coach" className="nav-link">Progress & AI Coach</Nav.Link>}
             {/* {user && <Nav.Link href="/analytics" className="nav-link">Analytics</Nav.Link>} */}
             {user && <Nav.Link href="/exercises" className="nav-link">Exercises</Nav.Link>}
