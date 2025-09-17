@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
@@ -590,6 +590,7 @@ log.exercises.forEach(exercise => {
                         </Card>
                     </Col>
                 </Row>
+
             </div>
         );
     };
@@ -841,10 +842,74 @@ log.exercises.forEach(exercise => {
     };
 
     const renderBalanceTab = () => {
+        // Calculate previous period data
+        let previousBodyPartFocus = {};
+        if (dateRange !== 'alltime') {
+            let prevStartDate, prevEndDate;
+            switch (dateRange) {
+                case '1month':
+                    prevStartDate = new Date(startDate);
+                    prevStartDate.setMonth(prevStartDate.getMonth() - 1);
+                    prevEndDate = new Date(startDate);
+                    break;
+                case '3months':
+                    prevStartDate = new Date(startDate);
+                    prevStartDate.setMonth(prevStartDate.getMonth() - 3);
+                    prevEndDate = new Date(startDate);
+                    break;
+                case '1year':
+                    prevStartDate = new Date(startDate);
+                    prevStartDate.setFullYear(prevStartDate.getFullYear() - 1);
+                    prevEndDate = new Date(startDate);
+                    break;
+                default:
+                    prevStartDate = new Date(startDate);
+                    prevEndDate = new Date(endDate);
+            }
+
+            // Filter logs for previous period
+            const prevLogs = workoutLogs.filter(log => {
+                const logDate = new Date(log.date);
+                return logDate >= prevStartDate && logDate <= prevEndDate;
+            });
+
+            // Calculate bodyPartFocus for previous period
+            prevLogs.forEach(log => {
+                if (!log.exercises || !Array.isArray(log.exercises)) return;
+                log.exercises.forEach(exercise => {
+                    if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
+                    const exerciseId = exercise.exerciseId || exercise.exercise_id;
+                    const exerciseData = exercises.find(e => e.id === exerciseId);
+                    if (!exerciseData) return;
+                    const primaryMuscleGroup = exerciseData.primary_muscle_group || exerciseData.primaryMuscleGroup || 'Other';
+                    if (primaryMuscleGroup) {
+                        const completed = exercise.completed || [];
+                        const completedSets = completed.filter(c => c === true).length;
+                        if (completedSets > 0) {
+                            previousBodyPartFocus[primaryMuscleGroup] = (previousBodyPartFocus[primaryMuscleGroup] || 0) + completedSets;
+                        }
+                    }
+                });
+            });
+        }
+
+        // Prepare data for radar chart
+        const currentData = Object.entries(bodyPartFocus).map(([key, value]) => ({ subject: key, current: value }));
+        const previousData = Object.entries(previousBodyPartFocus).map(([key, value]) => ({ subject: key, previous: value }));
+
+        // Combine data
+        const allSubjects = new Set([...currentData.map(d => d.subject), ...previousData.map(d => d.subject)]);
+        const radarData = Array.from(allSubjects).map(subject => {
+            const curr = currentData.find(d => d.subject === subject)?.current || 0;
+            const prev = previousData.find(d => d.subject === subject)?.previous || 0;
+            return { subject, current: curr, previous: prev };
+        });
+        console.log(radarData);
+
         return (
             <div className="balance-analytics">
                 <Row>
-                    <Col md={6} className="mb-4">
+                    {/* <Col md={6} className="mb-4">
                         <Card className="shadow-sm">
                             <Card.Header>
                                 <h5 className="mb-0">Muscle Group Training Distribution</h5>
@@ -885,8 +950,29 @@ log.exercises.forEach(exercise => {
                                 </ResponsiveContainer>
                             </Card.Body>
                         </Card>
+                    </Col> */}
+                    <Col md={12} className="mb-4">
+                        <Card className="shadow-sm">
+                            <Card.Header>
+                                <h5 className="mb-0">Muscle Group Balance Radar</h5>
+                            </Card.Header>
+                            <Card.Body>
+                                <ResponsiveContainer width="100%" height={350}>
+                                    <RadarChart data={radarData}>
+                                        <PolarGrid />
+                                        <PolarAngleAxis dataKey="subject" />
+                                        <PolarRadiusAxis />
+                                        <Radar dataKey="current" stroke="#3057c0ff" fill="#3057c0ff" fillOpacity={0.6} name="Current" />
+                                        {dateRange !== 'alltime' && <Radar dataKey="previous" stroke="#388e3c" fill="#388e3c" fillOpacity={0.6} name="Previous" />}
+                                        <Legend />
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </Card.Body>
+                        </Card>
                     </Col>
-                    <Col md={6} className="mb-4">
+                </Row>
+                <Row>
+                    <Col md={12} className="mb-4">
                         <Card className="shadow-sm">
                             <Card.Header>
                                 <h5 className="mb-0">Exercise Progress Trends</h5>
