@@ -149,7 +149,7 @@ function Home() {
           <Row className="align-items-center mb-4 home-header-row">
             <Col>
               <h1 className="soft-title dashboard-greeting">
-                👋 Welcome back, {dashboardData.userName}!
+                Welcome Back, {dashboardData.userName}!
               </h1>
               {isConnected && (
                 <small className="text-success">
@@ -159,7 +159,7 @@ function Home() {
             </Col>
             <Col xs="auto">
               <Button as={Link} to="/log-workout" className="soft-button gradient cta-button">
-                🚀 Start Today's Workout
+                Start Today's Workout
               </Button>
             </Col>
           </Row>
