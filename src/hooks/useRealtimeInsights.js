@@ -28,6 +28,16 @@ export function useRealtimeInsights(options = {}) {
     onError = null
   } = options
 
+  // Use refs to keep callbacks stable for useEffect dependencies
+  const onNewInsightRef = useRef(onNewInsight);
+  const onInsightUpdateRef = useRef(onInsightUpdate);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onNewInsightRef.current = onNewInsight;
+    onInsightUpdateRef.current = onInsightUpdate;
+    onErrorRef.current = onError;
+  }, [onNewInsight, onInsightUpdate, onError]);
+
   // Clean up subscription
   const cleanup = useCallback(() => {
     if (subscriptionRef.current) {
@@ -76,8 +86,8 @@ export function useRealtimeInsights(options = {}) {
               }
 
               // Call callback if provided
-              if (onNewInsight) {
-                onNewInsight(newRecord)
+              if (onNewInsightRef.current) {
+                onNewInsightRef.current(newRecord)
               }
             }
             break
@@ -89,8 +99,8 @@ export function useRealtimeInsights(options = {}) {
             )
             
             // Call callback if provided
-            if (onInsightUpdate) {
-              onInsightUpdate(newRecord, oldRecord)
+            if (onInsightUpdateRef.current) {
+              onInsightUpdateRef.current(newRecord, oldRecord)
             }
             break
 
@@ -113,11 +123,11 @@ export function useRealtimeInsights(options = {}) {
     } catch (err) {
       console.error('Error handling insight change:', err)
       setError(err)
-      if (onError) {
-        onError(err)
+      if (onErrorRef.current) {
+        onErrorRef.current(err);
       }
     }
-  }, [user?.id, enableNotifications, onNewInsight, onInsightUpdate, onError])
+  }, [user?.id, enableNotifications])
 
   // Set up real-time subscription
   useEffect(() => {
