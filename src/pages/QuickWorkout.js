@@ -4,6 +4,7 @@ import { Plus, X, BarChart, Pencil } from 'react-bootstrap-icons';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
 import { useNumberInput } from '../hooks/useNumberInput.js';
+import { useNavigate } from 'react-router-dom';
 import '../styles/LogWorkout.css';
 import '../styles/QuickWorkoutDraft.css';
 import { debounce } from 'lodash';
@@ -12,6 +13,7 @@ import workoutLogService from '../services/workoutLogService';
 import { transformSupabaseExercises } from '../utils/dataTransformations';
 import ExerciseGrid from '../components/ExerciseGrid';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
+import WorkoutSummaryModal from '../components/WorkoutSummaryModal';
 
 // Performance monitoring simplified - using console.log for now
 
@@ -40,8 +42,11 @@ function QuickWorkout() {
     const [availableDrafts, setAvailableDrafts] = useState([]);
     const [lastSaved, setLastSaved] = useState(null);
     const [showIncompleteWarningModal, setShowIncompleteWarningModal] = useState(false);
+    const [showSummaryModal, setShowSummaryModal] = useState(false);
+    const [workoutSummaryData, setWorkoutSummaryData] = useState([]);
 
     const { user, isAuthenticated, userRole } = useAuth();
+    const navigate = useNavigate();
 
     // Refs for number inputs
     const repsInputRef = useRef(null);
@@ -615,11 +620,24 @@ function QuickWorkout() {
 
             showUserMessage('Quick workout finished successfully!', 'success');
 
+            // Store workout data for summary modal before clearing
+            const summaryData = selectedExercises.map(ex => ({
+                ...ex,
+                name: exercisesList.find(e => e.id === ex.exerciseId)?.name || 'Unknown'
+            }));
+            setWorkoutSummaryData(summaryData);
+
             // Reset form
             setSelectedExercises([]);
             setWorkoutName('');
             setCurrentDraft(null);
             setLastSaved(null);
+
+            // Show summary modal with stored data
+            setTimeout(() => {
+                setShowSummaryModal(true);
+            }, 100); // Small delay to ensure state updates complete
+
         } catch (error) {
             console.error("Error saving quick workout:", error);
             showUserMessage('Failed to finish workout. Please try again.', 'error');
@@ -1075,6 +1093,18 @@ function QuickWorkout() {
                     </Button>
                 </Modal.Footer>
             </Modal>
+
+            <WorkoutSummaryModal
+                show={showSummaryModal}
+                onHide={() => {
+                    setShowSummaryModal(false);
+                    setWorkoutSummaryData([]); // Clear stored data when closing
+                    navigate('/');
+                }}
+                workoutData={workoutSummaryData}
+                exercisesList={exercisesList}
+                weightUnit="LB"
+            />
         </Container>
     );
 }
