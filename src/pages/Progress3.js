@@ -1,12 +1,60 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { Container, Row, Col, Card, Nav, Button, Form, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Card, Nav, Button, Form, Spinner, ButtonGroup } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
+import Select, { components, ValueContainerProps } from 'react-select';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
 import { ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
 import workoutLogService from '../services/workoutLogService';
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
+
+const CustomOption = (props) => {
+    return (
+        <components.Option {...props}>
+            <input
+                type="checkbox"
+                checked={props.isSelected}
+                onChange={() => null} // The click is handled by the Option component
+                style={{ marginRight: '8px' }}
+            />
+            {props.label}
+        </components.Option>
+    );
+};
+
+const CustomValueContainer = (props) => {
+    const { children, getValue } = props;
+    const selectedCount = getValue().length;
+
+    // Find the input component among the children
+    const childArray = React.Children.toArray(children);
+    const input = childArray.find(child => React.isValidElement(child) && (child.type.name === 'Input' || child.type.name === 'DummyInput'));
+
+    if (selectedCount > 0) {
+        const label = `${selectedCount} selected`;
+        // Render the custom label and the input field
+        return <components.ValueContainer {...props}>{label}{input}</components.ValueContainer>;
+    }
+
+    // When no options are selected, render the default children (placeholder and input)
+    return <components.ValueContainer {...props}>{children}</components.ValueContainer>;
+};
+
+const checkboxSelectStyles = {
+    option: (provided, state) => ({
+        ...provided,
+        // Override background color for selected options
+        backgroundColor: state.isSelected 
+            ? (state.isFocused ? '#f8f9fa' : 'white') // Use hover color if focused, otherwise white
+            : (state.isFocused ? '#f8f9fa' : 'white'), // Standard hover color
+        color: '#212529', // Standard text color
+        ':active': {
+            ...provided[':active'],
+            backgroundColor: '#e9ecef', // Slightly darker for click feedback
+        },
+    }),
+};
 
 function Progress3() {
     const [workoutLogs, setWorkoutLogs] = useState([]);
@@ -25,7 +73,9 @@ function Progress3() {
     const [bodyPartFocus, setBodyPartFocus] = useState({});
     const [summaryStats, setSummaryStats] = useState({});
     const { user, isAuthenticated } = useContext(AuthContext);
+    const [selectedRadarGroups, setSelectedRadarGroups] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [volumeMetric, setVolumeMetric] = useState('sets'); // 'sets' or 'totalVolume'
 
     const getWeekStartDate = (date) => {
         const d = new Date(date);
@@ -126,7 +176,14 @@ function Progress3() {
         if (workoutLogs.length > 0 && exercises.length > 0 && Object.keys(muscleGroups).length > 0) {
             processAnalyticsData();
         }
-    }, [workoutLogs, exercises, muscleGroups, startDate, endDate, selectedExercise]);
+    }, [workoutLogs, exercises, muscleGroups, startDate, endDate, selectedExercise, volumeMetric]);
+
+    useEffect(() => {
+        if (Object.keys(bodyPartFocus).length > 0) {
+            const allGroups = Object.keys(bodyPartFocus).map(group => ({ value: group, label: group }));
+            setSelectedRadarGroups(allGroups);
+        }
+    }, [bodyPartFocus]);
 
     const processAnalyticsData = () => {
         const filteredLogs = filterLogsByDateRange(workoutLogs);
@@ -197,6 +254,18 @@ function Progress3() {
         if (exercise && exercise.sets && exercise.reps && Array.isArray(exercise.reps) && exercise.weights && Array.isArray(exercise.weights)) {
             for (let i = 0; i < exercise.sets; i++) {
                 volume += (exercise.reps[i] || 0) * (exercise.weights[i] || 0);
+            }
+        }
+        return volume;
+    };
+
+    const calculateExerciseVolumeForCompleted = (exercise) => {
+        let volume = 0;
+        if (exercise && exercise.reps && Array.isArray(exercise.reps) && exercise.weights && Array.isArray(exercise.weights) && exercise.completed && Array.isArray(exercise.completed)) {
+            for (let i = 0; i < exercise.completed.length; i++) {
+                if (exercise.completed[i]) {
+                    volume += (exercise.reps[i] || 0) * (exercise.weights[i] || 0);
+                }
             }
         }
         return volume;
@@ -275,11 +344,14 @@ function Progress3() {
             let weeklyVolume = volumeByWeek.get(weekKey) || 0;
 
             log.exercises.forEach(exercise => {
-                if (exercise) {
-                    weeklyVolume += calculateExerciseVolume(exercise);
+                if (exercise) { 
+                    if (volumeMetric === 'sets') {
+                        weeklyVolume += calculateCompletedSets(exercise);
+                    } else { // 'totalVolume'
+                        weeklyVolume += calculateExerciseVolumeForCompleted(exercise);
+                    }
                 }
             });
-
             volumeByWeek.set(weekKey, weeklyVolume);
         });
 
@@ -521,24 +593,30 @@ log.exercises.forEach(exercise => {
                 <Row>
                     <Col md={12} className="mb-4">
                         <Card className="shadow-sm">
-                            <Card.Header>
-                                <h5 className="mb-0">Weekly Volume Progression</h5>
+                            <Card.Header> 
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Weekly Volume Progression</h5>
+                                    <ButtonGroup size="sm">
+                                        <Button variant={volumeMetric === 'sets' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('sets')}>Sets</Button>
+                                        <Button variant={volumeMetric === 'totalVolume' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('totalVolume')}>Volume</Button>
+                                    </ButtonGroup>
+                                </div>
                             </Card.Header>
                             <Card.Body>
                                 <ResponsiveContainer width="100%" height={300}>
                                     <LineChart
                                         data={volumeData}
-                                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                                        margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis
                                             dataKey="date"
                                             tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                         />
-                                        <YAxis />
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
+                                        <YAxis label={{ value: volumeMetric === 'sets' ? 'Sets' : 'Volume (lbs)', position: 'insideLeft', angle: -90, dy: 0, dx: -10, style: { textAnchor: 'middle' } }} />
+                                        <Tooltip formatter={(value) => `${value.toLocaleString()} ${volumeMetric === 'sets' ? 'sets' : 'lbs'}`} />
                                         <Legend />
-                                        <Line type="monotone" dataKey="volume" stroke="#8884d8" activeDot={{ r: 8 }} name="Total Volume" >
+                                        <Line type="monotone" dataKey="volume" stroke="#8884d8" activeDot={{ r: 8 }} name={volumeMetric === 'sets' ? 'Total Sets' : 'Total Volume'} >
                                             <LabelList 
                                                 dataKey="name"
                                                 position="bottom"
@@ -713,10 +791,16 @@ log.exercises.forEach(exercise => {
                 log.exercises.forEach(exercise => {
                     if (!exercise || (!exercise.exerciseId && !exercise.exercise_id)) return;
                     const exerciseId = exercise.exerciseId || exercise.exercise_id;
-                    const exerciseData = exercises.find(e => e.id === exerciseId);
-                    if (!exerciseData) return;
+                    const exerciseData = exercises.find(e => e.id === exerciseId); 
+                    
+                    let volume;
+                    if (volumeMetric === 'sets') {
+                        volume = calculateCompletedSets(exercise);
+                    } else {
+                        volume = calculateExerciseVolumeForCompleted(exercise);
+                    }
 
-                    const volume = calculateCompletedSets(exercise);
+                    if (!exerciseData) return;
 
                     const primaryGroup = exerciseData.primaryMuscleGroup || exerciseData.primary_muscle_group;
                     if (primaryGroup) {
@@ -770,18 +854,25 @@ log.exercises.forEach(exercise => {
                     <Col md={12} className="mb-4">
                         <Card className="shadow-sm">
                             <Card.Header>
-                                <h5 className="mb-0">Volume Distribution by Muscle Group</h5>
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Volume Distribution by Muscle Group</h5>
+                                    <ButtonGroup size="sm">
+                                        <Button variant={volumeMetric === 'sets' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('sets')}>Sets</Button>
+                                        <Button variant={volumeMetric === 'totalVolume' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('totalVolume')}>Volume</Button>
+                                    </ButtonGroup>
+                                </div>
                             </Card.Header>
                             <Card.Body>
                                 <ResponsiveContainer width="100%" height={400}>
                                     <BarChart
                                         data={stackedData}
                                         margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                                        barCategoryGap="20%"
                                     >
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="date" />
-                                        <YAxis label={{ value: 'Sets', position: 'insideLeft', angle: 0, dy: -165, dx: -10 }} />
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} sets`} />
+                                        <YAxis label={{ value: volumeMetric === 'sets' ? 'Sets' : 'Volume (lbs)', position: 'insideLeft', angle: -90, dy: 0, dx: -10, style: { textAnchor: 'middle' } }} />
+                                        <Tooltip formatter={(value) => `${value.toLocaleString()} ${volumeMetric === 'sets' ? 'sets' : 'lbs'}`} />
                                         <Legend />
                                         {activeGroups.map((group, index) => (
                                             <Bar
@@ -803,7 +894,13 @@ log.exercises.forEach(exercise => {
                     <Col md={12} className="mb-4">
                         <Card className="shadow-sm">
                             <Card.Header>
-                                <h5 className="mb-0">Volume Trends by Muscle Group</h5>
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <h5 className="mb-0">Volume Trends by Muscle Group</h5>
+                                    <ButtonGroup size="sm">
+                                        <Button variant={volumeMetric === 'sets' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('sets')}>Sets</Button>
+                                        <Button variant={volumeMetric === 'totalVolume' ? 'primary' : 'outline-primary'} onClick={() => setVolumeMetric('totalVolume')}>Volume</Button>
+                                    </ButtonGroup>
+                                </div>
                             </Card.Header>
                             <Card.Body>
                                 <ResponsiveContainer width="100%" height={400}>
@@ -818,8 +915,8 @@ log.exercises.forEach(exercise => {
                                             type="category"
                                             allowDecimals={false}
                                         />
-                                        <YAxis label={{ value: 'Sets', position: 'insideLeft', angle: 0, dy: -165, dx: -10 }} />
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} sets`} />
+                                        <YAxis label={{ value: volumeMetric === 'sets' ? 'Sets' : 'Volume (lbs)', position: 'insideLeft', angle: -90, dy: 0, dx: -10, style: { textAnchor: 'middle' } }} />
+                                        <Tooltip formatter={(value) => `${value.toLocaleString()} ${volumeMetric === 'sets' ? 'sets' : 'lbs'}`} />
                                         <Legend />
                                         {activeGroups.map((group, index) => (
                                             <Line
@@ -904,61 +1001,36 @@ log.exercises.forEach(exercise => {
             const prev = previousData.find(d => d.subject === subject)?.previous || 0;
             return { subject, current: curr, previous: prev };
         });
-        console.log(radarData);
+
+        const radarGroupOptions = Object.keys(bodyPartFocus).map(group => ({ value: group, label: group }));
+        const selectedGroupsSet = new Set(selectedRadarGroups.map(g => g.value));
+        const filteredRadarData = radarData.filter(d => selectedGroupsSet.has(d.subject));
 
         return (
             <div className="balance-analytics">
                 <Row>
-                    {/* <Col md={6} className="mb-4">
-                        <Card className="shadow-sm">
-                            <Card.Header>
-                                <h5 className="mb-0">Muscle Group Training Distribution</h5>
-                            </Card.Header>
-                            <Card.Body>
-                                <ResponsiveContainer width="100%" height={350}>
-                                    <BarChart
-                                        data={Object.entries(bodyPartFocus).map(([key, value], index) => ({
-                                            id: index,
-                                            name: key,
-                                            value: value
-                                        }))}
-                                        // margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis
-                                            type="category"
-                                            dataKey="name"
-                                            height={60}
-                                            interval={0}
-                                            fontSize={12}
-                                        />
-                                        <YAxis
-                                            datakey="value"
-                                            fontSize={12}
-                                            label={{ value: 'Sets', position: 'leftInside', dx: -10, dy: -140, fontSize: 12}}
-                                        />
-                                        <Tooltip
-                                            formatter={(value, name) => [value, 'Sets']}
-                                            labelFormatter={(label) => `Muscle Group: ${label}`}
-                                        />
-                                        <Bar
-                                            dataKey="value"
-                                            fill="#3057c0ff"
-                                            name="Sets"
-                                        />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </Card.Body>
-                        </Card>
-                    </Col> */}
                     <Col md={12} className="mb-4">
                         <Card className="shadow-sm">
                             <Card.Header>
                                 <h5 className="mb-0">Muscle Group Balance Radar</h5>
                             </Card.Header>
                             <Card.Body>
+                                <div className="muscle-group-select-container mb-3">
+                                    <Select
+                                        isMulti
+                                        options={radarGroupOptions}
+                                        value={selectedRadarGroups}
+                                        onChange={setSelectedRadarGroups}
+                                        className="mb-3"
+                                        closeMenuOnSelect={false}
+                                        hideSelectedOptions={false}
+                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        styles={checkboxSelectStyles}
+                                        classNamePrefix="select"
+                                    />
+                                </div>
                                 <ResponsiveContainer width="100%" height={350}>
-                                    <RadarChart data={radarData}>
+                                    <RadarChart data={filteredRadarData}>
                                         <PolarGrid />
                                         <PolarAngleAxis dataKey="subject" />
                                         <PolarRadiusAxis />
