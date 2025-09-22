@@ -74,6 +74,7 @@ function Progress3() {
     const [summaryStats, setSummaryStats] = useState({});
     const { user, isAuthenticated } = useContext(AuthContext);
     const [selectedRadarGroups, setSelectedRadarGroups] = useState([]);
+    const [selectedVolumeGroups, setSelectedVolumeGroups] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [volumeMetric, setVolumeMetric] = useState('sets'); // 'sets' or 'totalVolume'
 
@@ -184,6 +185,13 @@ function Progress3() {
             setSelectedRadarGroups(allGroups);
         }
     }, [bodyPartFocus]);
+
+    useEffect(() => {
+        if (Object.keys(muscleGroups).length > 0) {
+            const allGroups = Object.keys(muscleGroups).map(group => ({ value: group, label: group }));
+            setSelectedVolumeGroups(allGroups);
+        }
+    }, [muscleGroups]);
 
     const processAnalyticsData = () => {
         const filteredLogs = filterLogsByDateRange(workoutLogs);
@@ -844,8 +852,10 @@ log.exercises.forEach(exercise => {
             stackedData.push(weekData);
         });
 
+        const volumeGroupOptions = Object.keys(muscleGroups).map(group => ({ value: group, label: group }));
+        const selectedGroupsSet = new Set(selectedVolumeGroups.map(g => g.value));
         const activeGroups = Object.keys(muscleVolumeTrends).filter(group =>
-            muscleVolumeTrends[group].some(data => data.volume > 0)
+            selectedGroupsSet.has(group) && muscleVolumeTrends[group].some(data => data.volume > 0)
         );
 
         return (
@@ -863,6 +873,21 @@ log.exercises.forEach(exercise => {
                                 </div>
                             </Card.Header>
                             <Card.Body>
+                                <div className="muscle-group-select-container mb-3">
+                                    <Select
+                                        isMulti
+                                        options={volumeGroupOptions}
+                                        value={selectedVolumeGroups}
+                                        onChange={setSelectedVolumeGroups}
+                                        className="mb-3"
+                                        closeMenuOnSelect={false}
+                                        hideSelectedOptions={false}
+                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        styles={checkboxSelectStyles}
+                                        classNamePrefix="select"
+                                        isSearchable={false}
+                                    />
+                                </div>
                                 <ResponsiveContainer width="100%" height={400}>
                                     <BarChart
                                         data={stackedData}
@@ -903,6 +928,21 @@ log.exercises.forEach(exercise => {
                                 </div>
                             </Card.Header>
                             <Card.Body>
+                                <div className="muscle-group-select-container mb-3">
+                                    <Select
+                                        isMulti
+                                        options={volumeGroupOptions}
+                                        value={selectedVolumeGroups}
+                                        onChange={setSelectedVolumeGroups}
+                                        className="mb-3"
+                                        closeMenuOnSelect={false}
+                                        hideSelectedOptions={false}
+                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        styles={checkboxSelectStyles}
+                                        classNamePrefix="select"
+                                        isSearchable={false}
+                                    />
+                                </div>
                                 <ResponsiveContainer width="100%" height={400}>
                                     <LineChart
                                         data={stackedData}

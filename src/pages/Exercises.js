@@ -82,7 +82,8 @@ function Exercises() {
           )
         `)
         .eq('exercise_id', exercise.id)
-        .eq('workout_logs.user_id', user.id);
+        .eq('workout_logs.user_id', user.id)
+        .eq('workout_logs.is_finished', true);
 
       if (error) throw error;
 
