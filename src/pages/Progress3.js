@@ -1027,6 +1027,7 @@ log.exercises.forEach(exercise => {
                                         components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
                                         styles={checkboxSelectStyles}
                                         classNamePrefix="select"
+                                        isSearchable={false}
                                     />
                                 </div>
                                 <ResponsiveContainer width="100%" height={350}>
