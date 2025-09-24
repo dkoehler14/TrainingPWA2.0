@@ -2,12 +2,48 @@ import React, { useState, useEffect, useContext } from 'react';
 import { Container, Row, Col, Card, Nav, Button, Form, Spinner, ButtonGroup } from 'react-bootstrap';
 import { AuthContext } from '../context/AuthContext';
 import Select, { components, ValueContainerProps } from 'react-select';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { ChevronLeft, ChevronRight } from 'react-bootstrap-icons';
 import '../styles/Progress3.css';
 import { getCollectionCached, getAllExercisesMetadata, getDocCached, warmUserCache } from '../api/supabaseCacheMigration';
 import workoutLogService from '../services/workoutLogService';
 const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
+
+const CustomControl = (props) => {
+    const handleTouchStart = (e) => {
+        // Focus the select input to trigger openMenuOnFocus
+        if (props.innerRef && props.innerRef.current) {
+            props.innerRef.current.focus();
+        }
+        // Alternative: try to find and focus the input element
+        const selectElement = e.currentTarget.querySelector('input');
+        if (selectElement) {
+            selectElement.focus();
+        }
+    };
+
+    const handleClick = (e) => {
+        // Handle regular click events for desktop
+        if (!props.selectProps.menuIsOpen) {
+            props.selectProps.onMenuOpen();
+        }
+    };
+
+    return (
+        <components.Control
+            {...props}
+            onTouchStart={handleTouchStart}
+            onClick={handleClick}
+            style={{
+                ...props.styles,
+                // Ensure the entire control area is touchable
+                touchAction: 'manipulation',
+                cursor: 'pointer'
+            }}
+        />
+    );
+};
 
 const CustomOption = (props) => {
     return (
@@ -27,18 +63,57 @@ const CustomValueContainer = (props) => {
     const { children, getValue } = props;
     const selectedCount = getValue().length;
 
+    const handleTouchStart = (e) => {
+        e.preventDefault();
+        
+        // Find and focus the select input to trigger openMenuOnFocus
+        const container = e.currentTarget.closest('.select__control').parentNode;
+        const hiddenInput = container.querySelector('input[type="text"]') || 
+                           container.querySelector('input') ||
+                           container.querySelector('[tabindex]');
+        
+        if (hiddenInput) {
+            hiddenInput.focus();
+        }
+    };
+
     // Find the input component among the children
     const childArray = React.Children.toArray(children);
     const input = childArray.find(child => React.isValidElement(child) && (child.type.name === 'Input' || child.type.name === 'DummyInput'));
 
     if (selectedCount > 0) {
         const label = `${selectedCount} selected`;
-        // Render the custom label and the input field
-        return <components.ValueContainer {...props}>{label}{input}</components.ValueContainer>;
+        
+        return (
+            <components.ValueContainer 
+                {...props}
+                onTouchStart={handleTouchStart}
+                style={{
+                    ...props.style,
+                    touchAction: 'manipulation',
+                    cursor: 'pointer'
+                }}
+            >
+                {label}
+                {input}
+            </components.ValueContainer>
+        );
     }
-
-    // When no options are selected, render the default children (placeholder and input)
-    return <components.ValueContainer {...props}>{children}</components.ValueContainer>;
+    
+    // When no options are selected, add touch handler to default container
+    return (
+        <components.ValueContainer 
+            {...props}
+            onTouchStart={handleTouchStart}
+            style={{
+                ...props.style,
+                touchAction: 'manipulation',
+                cursor: 'pointer'
+            }}
+        >
+            {children}
+        </components.ValueContainer>
+    );
 };
 
 const checkboxSelectStyles = {
@@ -574,25 +649,48 @@ log.exercises.forEach(exercise => {
                                 <h5 className="mb-0">Volume by Muscle Group</h5>
                             </Card.Header>
                             <Card.Body>
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <PieChart>
-                                        <Pie
-                                            data={muscleGroupData}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                        >
-                                            {muscleGroupData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip formatter={(value) => `${value.toLocaleString()} lb`} />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                <ReactECharts
+                                    option={{
+                                        tooltip: {
+                                            trigger: 'item',
+                                            formatter: '{b}: {c} lb ({d}%)'
+                                        },
+                                        // legend: {
+                                        //     bottom: '5%',
+                                        //     left: 'center'
+                                        // },
+                                        series: [{
+                                            name: 'Volume by Muscle Group',
+                                            type: 'pie',
+                                            radius: ['40%', '80%'],
+                                            itemStyle: {
+                                                borderRadius: 10,
+                                                borderColor: '#fff',
+                                                borderWidth: 2
+                                            },
+                                            data: muscleGroupData.map((item, index) => ({
+                                                name: item.name,
+                                                value: item.value,
+                                                itemStyle: { color: COLORS[index % COLORS.length] }
+                                            })),
+                                            label: {
+                                                formatter: '{b}: {d}%',
+                                            },
+                                            emphasis: {
+                                                itemStyle: {
+                                                    shadowBlur: 10,
+                                                    shadowOffsetX: 0,
+                                                    shadowColor: 'rgba(0, 0, 0, 0.5)'
+                                                }
+                                            },
+                                            labelLine: {
+                                                length: 10,
+                                                length2: 10
+                                            }
+                                        }]
+                                    }}
+                                    style={{ height: '250px' }}
+                                />
                             </Card.Body>
                         </Card>
                     </Col>
@@ -611,7 +709,7 @@ log.exercises.forEach(exercise => {
                                 </div>
                             </Card.Header>
                             <Card.Body>
-                                <ResponsiveContainer width="100%" height={300}>
+                                {/* <ResponsiveContainer width="100%" height={300}>
                                     <LineChart
                                         data={volumeData}
                                         margin={{ top: 5, right: 30, left: 30, bottom: 5 }}
@@ -624,8 +722,8 @@ log.exercises.forEach(exercise => {
                                         <YAxis label={{ value: volumeMetric === 'sets' ? 'Sets' : 'Volume (lbs)', position: 'insideLeft', angle: -90, dy: 0, dx: -10, style: { textAnchor: 'middle' } }} />
                                         <Tooltip formatter={(value) => `${value.toLocaleString()} ${volumeMetric === 'sets' ? 'sets' : 'lbs'}`} />
                                         <Legend />
-                                        <Line type="monotone" dataKey="volume" stroke="#8884d8" activeDot={{ r: 8 }} name={volumeMetric === 'sets' ? 'Total Sets' : 'Total Volume'} >
-                                            <LabelList 
+                                        <Line type="monotone" dataKey="volume" stroke="#4a5fd5" activeDot={{ r: 8 }} name={volumeMetric === 'sets' ? 'Total Sets' : 'Total Volume'} >
+                                            <LabelList
                                                 dataKey="name"
                                                 position="bottom"
                                                 fontSize={12}
@@ -633,7 +731,70 @@ log.exercises.forEach(exercise => {
                                             />
                                         </Line>
                                     </LineChart>
-                                </ResponsiveContainer>
+                                </ResponsiveContainer> */}
+                                <ReactECharts
+                                    option={{
+                                        tooltip: {
+                                            trigger: 'axis',
+                                            formatter: (params) => {
+                                                const param = params[0];
+                                                return `${param.name}: ${param.value.toLocaleString()} ${volumeMetric === 'sets' ? 'sets' : 'lbs'}`;
+                                            }
+                                        },
+                                        legend: {
+                                            data: [volumeMetric === 'sets' ? 'Total Sets' : 'Total Volume'],
+                                            bottom: 0,
+                                            show: false
+                                        },
+                                        grid: {
+                                            top: 5,
+                                            right: 30,
+                                            left: 20,
+                                            bottom: 5
+                                        },
+                                        xAxis: {
+                                            type: 'category',
+                                            boundaryGap: false,
+                                            data: volumeData.map(item => item.date),
+                                            axisLabel: {
+                                                formatter: (value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                            }
+                                        },
+                                        yAxis: {
+                                            type: 'value',
+                                            name: volumeMetric === 'sets' ? 'Sets' : 'Volume (lbs)',
+                                            nameLocation: 'middle',
+                                            nameGap: 50
+                                        },
+                                        series: [{
+                                            name: volumeMetric === 'sets' ? 'Total Sets' : 'Total Volume',
+                                            type: 'line',
+                                            smooth: true,
+                                            data: volumeData.map(item => item.volume),
+                                            areaStyle: {
+                                                    color: {
+                                                            type: 'linear',
+                                                            x: 0,
+                                                            y: 0,
+                                                            x2: 0,
+                                                            y2: 1,
+                                                            colorStops: [{
+                                                                    offset: 0, color: 'rgba(30, 64, 175, 0.3)'
+                                                            }, {
+                                                                    offset: 1, color: 'rgba(30, 64, 175, 0.1)'
+                                                            }]
+                                                    }
+                                            },
+                                            itemStyle: {
+                                                    color: '#1e40af'
+                                            },
+                                            emphasis: {
+                                                focus: 'series'
+                                            }
+                                        }]
+                                    }}
+                                    style={{ height: '300px' }}
+                                />
                             </Card.Body>
                         </Card>
                     </Col>
@@ -882,10 +1043,12 @@ log.exercises.forEach(exercise => {
                                         className="mb-3"
                                         closeMenuOnSelect={false}
                                         hideSelectedOptions={false}
-                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        components={{ /*Control: CustomControl,*/ Option: CustomOption, ValueContainer: CustomValueContainer }}
                                         styles={checkboxSelectStyles}
                                         classNamePrefix="select"
                                         isSearchable={false}
+                                        openMenuOnFocus={true}
+                                        menuShouldBlockScroll={false}
                                     />
                                 </div>
                                 <ResponsiveContainer width="100%" height={400}>
@@ -937,10 +1100,11 @@ log.exercises.forEach(exercise => {
                                         className="mb-3"
                                         closeMenuOnSelect={false}
                                         hideSelectedOptions={false}
-                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        components={{ Control: CustomControl, Option: CustomOption, ValueContainer: CustomValueContainer }}
                                         styles={checkboxSelectStyles}
                                         classNamePrefix="select"
                                         isSearchable={false}
+                                        openMenuOnFocus={true}
                                     />
                                 </div>
                                 <ResponsiveContainer width="100%" height={400}>
@@ -1064,10 +1228,11 @@ log.exercises.forEach(exercise => {
                                         className="mb-3"
                                         closeMenuOnSelect={false}
                                         hideSelectedOptions={false}
-                                        components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                                        components={{ Control: CustomControl, Option: CustomOption, ValueContainer: CustomValueContainer }}
                                         styles={checkboxSelectStyles}
                                         classNamePrefix="select"
                                         isSearchable={false}
+                                        openMenuOnFocus={true}
                                     />
                                 </div>
                                 <ResponsiveContainer width="100%" height={350}>
