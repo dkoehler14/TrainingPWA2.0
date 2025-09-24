@@ -40,6 +40,8 @@ function ExercisePerformanceModal({ show, onHide, exercise, userId, workoutLogs 
         filterDate.setMonth(now.getMonth() - 3);
     }
 
+    console.log(filterDate);
+
     return filterDate;
   };
 
@@ -141,18 +143,26 @@ function ExercisePerformanceModal({ show, onHide, exercise, userId, workoutLogs 
       }
     });
 
-    // Process sessions
+    // Process sessions - sort descending for table display
     exerciseMetrics.sessions.sort((a, b) => {
       if (a.completionDate && b.completionDate) {
-        return a.completionDate - b.completionDate; // Sort by actual date
+        return b.completionDate - a.completionDate; // Sort by actual date descending
       }
-      // Fallback to week/day sorting
+      // Fallback to week/day sorting descending
+      if (a.weekNum !== b.weekNum) return b.weekNum - a.weekNum;
+      return b.dayNum - a.dayNum;
+    });
+
+    // Create progress trend based on chronological order (ascending)
+    const sortedSessionsAsc = [...exerciseMetrics.sessions].sort((a, b) => {
+      if (a.completionDate && b.completionDate) {
+        return a.completionDate - b.completionDate;
+      }
       if (a.weekNum !== b.weekNum) return a.weekNum - b.weekNum;
       return a.dayNum - b.dayNum;
     });
 
-    // Create progress trend based on chronological order
-    exerciseMetrics.progressTrend = exerciseMetrics.sessions.map((session, index) => ({
+    exerciseMetrics.progressTrend = sortedSessionsAsc.map((session, index) => ({
       session: index + 1,
       maxWeight: session.maxWeight,
       volume: session.volume,
@@ -226,20 +236,20 @@ function ExercisePerformanceModal({ show, onHide, exercise, userId, workoutLogs 
           <>
             {/* Performance Summary */}
             <Row className="mb-4">
-              <Col md={4}>
-                <div className="text-center p-3 bg-light rounded">
+              <Col xs={4} md={4}>
+                <div className="text-center p-2 bg-light rounded">
                   <h4>{exerciseMetrics.maxWeight}</h4>
                   <small className="text-muted">Max {getWeightLabel()} (lbs)</small>
                 </div>
               </Col>
-              <Col md={4}>
-                <div className="text-center p-3 bg-light rounded">
+              <Col xs={4} md={4}>
+                <div className="text-center p-2 bg-light rounded">
                   <h4>{exerciseMetrics.sessions.length}</h4>
                   <small className="text-muted">Total Sessions</small>
                 </div>
               </Col>
-              <Col md={4}>
-                <div className="text-center p-3 bg-light rounded">
+              <Col xs={4} md={4}>
+                <div className="text-center p-2 bg-light rounded">
                   <h4>{Math.round(exerciseMetrics.totalVolume)}</h4>
                   <small className="text-muted">Total Volume (lbs)</small>
                 </div>
