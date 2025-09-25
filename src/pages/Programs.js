@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Alert, Collapse } from 'react-bootstrap';
+import { Container, Row, Col, Card, Button, Modal, Spinner, Accordion, Badge, Alert, Collapse, ButtonGroup } from 'react-bootstrap';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../config/supabase';
@@ -15,7 +15,104 @@ import { useClientCoach } from '../hooks/useClientCoach';
 import { getClientAssignedPrograms } from '../services/programService';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
+import ReactECharts from 'echarts-for-react';
+import Select, { components } from 'react-select';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
+
+const COLORS = ['#1E88E5', '#D32F2F', '#7B1FA2', '#388E3C', '#FBC02D', '#F57C00', '#00ACC1', '#C2185B', '#00796B', '#F06292', '#616161'];
+
+const hexToRgba = (hex, alpha) => {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const CustomOption = (props) => {
+  return (
+    <components.Option {...props}>
+      <input
+        type="checkbox"
+        checked={props.isSelected}
+        onChange={() => null} // The click is handled by the Option component
+        style={{ marginRight: '8px' }}
+      />
+      {props.label}
+    </components.Option>
+  );
+};
+
+const CustomValueContainer = (props) => {
+  const { children, getValue } = props;
+  const selectedCount = getValue().length;
+
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+
+    // Find and focus the select input to trigger openMenuOnFocus
+    const container = e.currentTarget.closest('.select__control').parentNode;
+    const hiddenInput = container.querySelector('input[type="text"]') ||
+                        container.querySelector('input') ||
+                        container.querySelector('[tabindex]');
+
+    if (hiddenInput) {
+      hiddenInput.focus();
+    }
+  };
+
+  // Find the input component among the children
+  const childArray = React.Children.toArray(children);
+  const input = childArray.find(child => React.isValidElement(child) && (child.type.name === 'Input' || child.type.name === 'DummyInput'));
+
+  if (selectedCount > 0) {
+    const label = `${selectedCount} selected`;
+
+    return (
+      <components.ValueContainer
+        {...props}
+        onTouchStart={handleTouchStart}
+        style={{
+          ...props.style,
+          touchAction: 'manipulation',
+          cursor: 'pointer'
+        }}
+      >
+        {label}
+        {input}
+      </components.ValueContainer>
+    );
+  }
+
+  // When no options are selected, add touch handler to default container
+  return (
+    <components.ValueContainer
+      {...props}
+      onTouchStart={handleTouchStart}
+      style={{
+        ...props.style,
+        touchAction: 'manipulation',
+        cursor: 'pointer'
+      }}
+    >
+      {children}
+    </components.ValueContainer>
+  );
+};
+
+const checkboxSelectStyles = {
+  option: (provided, state) => ({
+    ...provided,
+    // Override background color for selected options
+    backgroundColor: state.isSelected
+      ? (state.isFocused ? '#f8f9fa' : 'white') // Use hover color if focused, otherwise white
+      : (state.isFocused ? '#f8f9fa' : 'white'), // Standard hover color
+    color: '#212529', // Standard text color
+    ':active': {
+      ...provided[':active'],
+      backgroundColor: '#e9ecef', // Slightly darker for click feedback
+    },
+  }),
+};
 
 function Programs({ userRole }) {
   const [userPrograms, setUserPrograms] = useState([]);
@@ -45,6 +142,8 @@ function Programs({ userRole }) {
   const chartContainerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 767);
   const [expandedDays, setExpandedDays] = useState({});
+  const [weeklyProgressView, setWeeklyProgressView] = useState('total'); // 'total' or 'groups'
+  const [selectedMuscleGroups, setSelectedMuscleGroups] = useState([]);
 
   // Error handling states
   const [error, setError] = useState(null);
@@ -475,6 +574,36 @@ function Programs({ userRole }) {
 
   const getExerciseName = (exerciseId) => {
     return exercises.find(ex => ex.id === exerciseId)?.name || 'Unknown';
+  };
+
+  // Function to calculate planned weekly sets data for the chart
+  const calculatePlannedWeeklySets = (program = selectedProgram) => {
+    if (!program || !program.weeklyConfigs) return [];
+
+    const weeklySets = [];
+    program.weeklyConfigs.forEach((week, weekIndex) => {
+      let totalSets = 0;
+      const muscleSets = {};
+      week.forEach(day => {
+        if (day.exercises) {
+          day.exercises.forEach(ex => {
+            const sets = ex.sets || 0;
+            totalSets += sets;
+            const exercise = exercises.find(e => e.id === ex.exerciseId);
+            if (exercise) {
+              const group = exercise.primary_muscle_group || exercise.primaryMuscleGroup || 'Other';
+              muscleSets[group] = (muscleSets[group] || 0) + sets;
+            }
+          });
+        }
+      });
+      weeklySets.push({
+        week: weekIndex + 1,
+        totalSets,
+        ...muscleSets
+      });
+    });
+    return weeklySets;
   };
 
   // Helper function to safely process programs with error handling
@@ -1445,6 +1574,118 @@ function Programs({ userRole }) {
     const weeklyProgress = calculateWeeklyProgress();
     const exerciseMetrics = calculateExerciseMetrics();
 
+    const weeklySetsData = calculatePlannedWeeklySets();
+
+    // Get all muscle groups for select options
+    const allMuscleGroups = new Set();
+    weeklySetsData.forEach(week => {
+      Object.keys(week).forEach(key => {
+        if (key !== 'week' && key !== 'totalSets') {
+          allMuscleGroups.add(key);
+        }
+      });
+    });
+    const muscleGroupOptions = Array.from(allMuscleGroups).map(group => ({ value: group, label: group }));
+
+    // Generate ECharts options for weekly progress chart
+    const getWeeklyProgressChartOption = () => {
+      const series = [];
+      if (weeklyProgressView === 'total') {
+        series.push({
+          name: 'Total Sets',
+          type: 'line',
+          smooth: true,
+          data: weeklySetsData.map(d => d.totalSets),
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [{
+                offset: 0, color: 'rgba(30, 64, 175, 0.3)'
+              }, {
+                offset: 1, color: 'rgba(30, 64, 175, 0.1)'
+              }]
+            }
+          },
+          itemStyle: {
+            color: '#1e40af'
+          },
+          emphasis: {
+            focus: 'series'
+          }
+        });
+      } else {
+        const selectedGroups = selectedMuscleGroups.length > 0 ? selectedMuscleGroups.map(g => g.value) : Array.from(allMuscleGroups);
+        selectedGroups.forEach((group, index) => {
+          series.push({
+            name: group,
+            type: 'line',
+            smooth: true,
+            data: weeklySetsData.map(d => d[group] || 0),
+            areaStyle: {
+              color: {
+                type: 'linear',
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [{
+                  offset: 0, color: hexToRgba(COLORS[index % COLORS.length], 0.3)
+                }, {
+                  offset: 1, color: hexToRgba(COLORS[index % COLORS.length], 0.1)
+                }]
+              }
+            },
+            itemStyle: {
+              color: COLORS[index % COLORS.length]
+            },
+            emphasis: {
+              focus: 'series'
+            }
+          });
+        });
+      }
+
+      return {
+        tooltip: {
+          trigger: 'axis',
+          formatter: (params) => {
+            let result = `Week ${params[0].name}<br/>`;
+            params.forEach(param => {
+              result += `${param.seriesName}: ${param.value} sets<br/>`;
+            });
+            return result;
+          }
+        },
+        legend: {
+          data: series.map(s => s.name),
+          bottom: /*weeklyProgressView === 'groups' ? 30 :*/ 0,
+          show: weeklyProgressView === 'groups'
+        },
+        grid: {
+          top: 10,
+          right: 30,
+          left: 20,
+          bottom: weeklyProgressView === 'groups' ? 70 : 20
+        },
+        xAxis: {
+          type: 'category',
+          data: weeklySetsData.map(d => `Week ${d.week}`),
+          axisLabel: {
+            rotate: 0 //weeklyProgressView === 'groups' ? 45 : 0
+          }
+        },
+        yAxis: {
+          type: 'value',
+          name: 'Sets'
+        },
+        series
+      };
+    };
+
     // Find current week based on completion status
     const getCurrentWeekIndex = () => {
       for (let weekIndex = 0; weekIndex < selectedProgram.weeklyConfigs.length; weekIndex++) {
@@ -1557,26 +1798,37 @@ function Programs({ userRole }) {
                 </div>
 
                 <div className="col-md-9">
-                  <h5 className="mb-3">Weekly Progress</h5>
-                  <div className="weekly-progress-bars">
-                    {weeklyProgress.map((weekProgress) => (
-                      <div key={weekProgress.week} className="mb-2">
-                        <div className="d-flex justify-content-between mb-1">
-                          <span>Week {weekProgress.week}</span>
-                          <span>{weekProgress.completedDays}/{weekProgress.totalDays} days</span>
-                        </div>
-                        <div className="progress" style={{ height: '8px' }}>
-                          <div
-                            className="progress-bar"
-                            role="progressbar"
-                            style={{ width: `${weekProgress.percentage}%` }}
-                            aria-valuenow={weekProgress.percentage}
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                          />
-                        </div>
+                  <h5 className="mb-3">Planned Volume</h5>
+                  <div className="weekly-progress-chart">
+                    <div className="mb-3">
+                      <ButtonGroup size="sm">
+                        <Button variant={weeklyProgressView === 'total' ? 'primary' : 'outline-primary'} onClick={() => setWeeklyProgressView('total')}>Total Sets</Button>
+                        <Button variant={weeklyProgressView === 'groups' ? 'primary' : 'outline-primary'} onClick={() => setWeeklyProgressView('groups')}>By Muscle Group</Button>
+                      </ButtonGroup>
+                    </div>
+                    {weeklyProgressView === 'groups' && (
+                      <div className="mb-3">
+                        <Select
+                          isMulti
+                          options={muscleGroupOptions}
+                          value={selectedMuscleGroups}
+                          onChange={setSelectedMuscleGroups}
+                          closeMenuOnSelect={false}
+                          hideSelectedOptions={false}
+                          components={{ Option: CustomOption, ValueContainer: CustomValueContainer }}
+                          styles={checkboxSelectStyles}
+                          classNamePrefix="select"
+                          isSearchable={false}
+                          openMenuOnFocus={true}
+                          placeholder="Select muscle groups..."
+                        />
                       </div>
-                    ))}
+                    )}
+                    <ReactECharts
+                      key={`weekly-progress-${weeklyProgressView}-${selectedMuscleGroups.length}`}
+                      option={getWeeklyProgressChartOption()}
+                      style={{ height: '300px' }}
+                    />
                   </div>
                   <div className="mt-3">
                     <div className="d-flex justify-content-between">
@@ -2399,6 +2651,29 @@ function Programs({ userRole }) {
       }, 200);
     }
   }, [activeTab, selectedProgram]);
+
+  // Initialize selected muscle groups when switching to groups view
+  useEffect(() => {
+    if (weeklyProgressView === 'groups' && selectedProgram) {
+      // Calculate muscle groups for the current program
+      const weeklySetsData = calculatePlannedWeeklySets();
+      const allMuscleGroups = new Set();
+      weeklySetsData.forEach(week => {
+        Object.keys(week).forEach(key => {
+          if (key !== 'week' && key !== 'totalSets') {
+            allMuscleGroups.add(key);
+          }
+        });
+      });
+      const muscleGroupOptions = Array.from(allMuscleGroups).map(group => ({ value: group, label: group }));
+
+      if (muscleGroupOptions.length > 0 && selectedMuscleGroups.length === 0) {
+        setSelectedMuscleGroups(muscleGroupOptions);
+      }
+    } else if (weeklyProgressView === 'total') {
+      setSelectedMuscleGroups([]);
+    }
+  }, [weeklyProgressView, selectedProgram, selectedMuscleGroups.length]);
 
   return (
     <>
