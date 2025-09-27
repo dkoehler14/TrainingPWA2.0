@@ -600,6 +600,11 @@ export class SupabaseCache {
           }
         }
       }
+      // If no patterns matched but we have filters, enable filter-only invalidation
+      if (!shouldInvalidate && (tags.length > 0 || tables.length > 0 || userId)) {
+        shouldInvalidate = true
+        matchReason = 'filter-only invalidation'
+      }
 
       // Additional filtering by tags
       if (shouldInvalidate && tags.length > 0) {
@@ -885,23 +890,16 @@ export function invalidateWorkoutCache(userId) {
 }
 
 export function invalidateProgramCache(userId) {
-  // Unified cache invalidation to support both old and new cache key patterns
-  const cacheKeysToInvalidate = [
-    // New unified cache keys (including coach-assigned programs)
-    `user_programs_all_including_coach_assigned_${userId}`,
-
-    // Pattern-based invalidation for any filtered versions
-    `user_programs_all_including_coach_assigned_${userId}_`,
-  ];
-
-  console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache with unified approach:', {
+  // Invalidate all program-related caches for the user by tags
+  console.log('🗑️ [CACHE_INVALIDATE] Invalidating program cache by tags:', {
     userId,
-    cacheKeys: cacheKeysToInvalidate,
+    tags: ['programs'],
     reason: 'program-update'
   });
 
-  return supabaseCache.invalidate(cacheKeysToInvalidate, {
+  return supabaseCache.invalidate([], {
     userId,
+    tags: ['programs'],
     reason: 'program-update'
   });
 }
