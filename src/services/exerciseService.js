@@ -295,6 +295,7 @@ export const createExercise = async (exerciseData) => {
       .single()
 
     if (error) throw error
+    supabaseCache.invalidateExerciseCache()
 
     console.log('Exercise created:', data.name)
     return data
@@ -348,6 +349,7 @@ export const updateExercise = async (exerciseId, updates, userRole = null) => {
       }
       throw error
     }
+    supabaseCache.invalidateExerciseCache()
 
     console.log('Exercise updated:', data.name)
     return data
@@ -394,6 +396,7 @@ export const deleteExercise = async (exerciseId, userRole = null, userId = null)
       }
       throw error
     }
+    supabaseCache.invalidateExerciseCache()
 
     console.log('Exercise deleted:', exerciseId)
     return true
@@ -527,6 +530,7 @@ export const bulkCreateExercises = async (exercisesData) => {
       .select()
 
     if (error) throw error
+    supabaseCache.invalidateExerciseCache()
 
     console.log(`${data.length} exercises created`)
     return data

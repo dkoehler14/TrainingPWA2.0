@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase'
 import { handleSupabaseError } from '../utils/supabaseErrorHandler'
+import { invalidateUserCache } from '../api/supabaseCache'
 
 /**
  * User Service for Supabase user profile operations
@@ -67,6 +68,7 @@ export const createUserProfile = async (authUser, additionalData = {}) => {
     if (error) throw error
 
     console.log('User profile created:', data.email)
+    invalidateUserCache(data.id)
     return data
   } catch (error) {
     console.error('Error creating user profile:', error)
@@ -162,6 +164,7 @@ export const updateUserProfile = async (userId, updates) => {
 
     if (error) throw error
 
+    invalidateUserCache(userId)
     console.log('User profile updated:', data.email)
     return data
   } catch (error) {
@@ -213,6 +216,7 @@ export const updateUserProfileByAuthId = async (authId, updates) => {
 
     if (error) throw error
 
+    invalidateUserCache(authId)
     console.log('User profile updated:', data.email)
     return data
   } catch (error) {
@@ -233,6 +237,7 @@ export const deleteUserProfile = async (userId) => {
 
     if (error) throw error
 
+    invalidateUserCache(userId)
     console.log('User profile deleted:', userId)
     return true
   } catch (error) {
@@ -278,6 +283,7 @@ export const updateUserPreferences = async (userId, preferences) => {
       .single()
 
     if (error) throw error
+    invalidateUserCache(userId)
     return data
   } catch (error) {
     console.error('Error updating user preferences:', error)
@@ -301,6 +307,7 @@ export const updateUserSettings = async (userId, settings) => {
       .single()
 
     if (error) throw error
+    invalidateUserCache(userId)
     return data
   } catch (error) {
     console.error('Error updating user settings:', error)
@@ -475,6 +482,7 @@ export const updateUserLastLogin = async (userId) => {
       .single()
 
     if (error) throw error
+    invalidateUserCache(userId)
     return data
   } catch (error) {
     console.error('Error updating user last login:', error)
@@ -500,6 +508,7 @@ export const deactivateUserProfile = async (userId) => {
 
     if (error) throw error
 
+    invalidateUserCache(userId)
     console.log('User profile deactivated:', userId)
     return data
   } catch (error) {
@@ -526,6 +535,7 @@ export const reactivateUserProfile = async (userId) => {
 
     if (error) throw error
 
+    invalidateUserCache(userId)
     console.log('User profile reactivated:', userId)
     return data
   } catch (error) {

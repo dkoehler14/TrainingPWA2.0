@@ -1848,8 +1848,8 @@ export const createCoachAssignedProgram = async (programData, clientId, coachDat
     if (error) throw error
 
     // Invalidate cache for both coach and client
-    invalidateProgramCache(programData.user_id) // Coach's cache
-    invalidateProgramCache(clientId) // Client's cache
+    invalidateProgramCache(data.user_id) // Coach's cache
+    invalidateProgramCache(data.assigned_to_client) // Client's cache
 
     console.log('Coach-assigned program created:', data.name, 'for client:', clientId)
     return data
@@ -2010,6 +2010,13 @@ export const updateCoachAssignment = async (programId, updates) => {
  */
 export const unassignProgram = async (programId) => {
   return executeSupabaseOperation(async () => {
+    const { data: currentProgram, error: fetchError } = await supabase
+      .from('programs')
+      .select('assigned_to_client')
+      .eq('id', programId)
+      .single()
+
+    if (fetchError) throw fetchError
     const { data, error } = await supabase
       .from('programs')
       .update({
@@ -2030,6 +2037,9 @@ export const unassignProgram = async (programId) => {
     // Invalidate cache for coach
     invalidateProgramCache(data.user_id)
 
+    if (currentProgram.assigned_to_client) {
+      invalidateProgramCache(currentProgram.assigned_to_client)
+    }
     console.log('Program unassigned:', data.name)
     return data
   }, 'unassignProgram')

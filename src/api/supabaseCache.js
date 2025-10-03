@@ -29,6 +29,14 @@ let cacheStats = {
   totalQueries: 0,
   averageQueryTime: 0,
 
+  // Cache consistency monitoring
+  totalRequests: 0,
+  cacheHits: 0,
+  cacheMisses: 0,
+  invalidationAttempts: 0,
+  invalidationSuccesses: 0,
+  invalidationFailures: 0,
+
   // Database read tracking
   supabaseReads: 0,           // Actual database reads
   cacheServedQueries: 0,      // Queries served from cache
@@ -44,7 +52,7 @@ let cacheStats = {
   avgCacheQueryTime: 0,       // Average cache query time
   performanceImprovement: 0,  // Speed improvement percentage
   bandwidthUsed: 0,           // Data transferred from database (bytes)
-  bandwidthSaved: 0,          // Data transfer saved through cache (bytes)
+  bandwidthSaved: 0,           // Data transfer saved through cache (bytes)
 
   // Session metrics
   sessionStartTime: Date.now(),
@@ -259,10 +267,13 @@ function trackCacheHit(table, dataSize, queryTime, userId = null) {
  */
 function updateCacheStats(isHit, queryTime = 0) {
   cacheStats.totalQueries++
+  cacheStats.totalRequests++
   if (isHit) {
     cacheStats.hits++
+    cacheStats.cacheHits++
   } else {
     cacheStats.misses++
+    cacheStats.cacheMisses++
   }
 
   // Update average query time (exponential moving average)
@@ -563,6 +574,9 @@ export class SupabaseCache {
     const logger = createDebugLogger('SUPABASE_CACHE', 'INVALIDATE');
     const startTime = performance.now();
 
+    // Track invalidation attempt
+    cacheStats.invalidationAttempts++
+
     let invalidatedCount = 0
     const keysToDelete = []
     const matchedEntries = []
@@ -658,6 +672,13 @@ export class SupabaseCache {
 
     cacheStats.invalidations += invalidatedCount
 
+    // Track invalidation success/failure
+    if (invalidatedCount > 0) {
+      cacheStats.invalidationSuccesses++
+    } else {
+      cacheStats.invalidationFailures++
+    }
+
     const endTime = performance.now();
     const invalidationTime = endTime - startTime;
 
@@ -676,11 +697,25 @@ export class SupabaseCache {
 
     return invalidatedCount
   }
-
-  /**
-   * Cleanup expired entries
-   */
-  cleanup() {
+  
+    /**
+     * Invalidate user-specific exercise cache entries
+     */
+    invalidateUserExerciseCache(userId) {
+      return this.invalidate([], { userId, tags: ['exercises', 'user'] })
+    }
+  
+    /**
+     * Invalidate user-specific program cache entries
+     */
+    invalidateUserProgramCache(userId) {
+      return this.invalidate([], { userId, tags: ['programs', 'user'] })
+    }
+  
+    /**
+     * Cleanup expired entries
+     */
+    cleanup() {
     let cleanedCount = 0
     const keysToDelete = []
 
@@ -823,6 +858,27 @@ export class SupabaseCache {
         avgQueryTime: `${cacheStats.averageQueryTime.toFixed(2)}ms`
       }
     }
+  }
+
+  /**
+   * Get cache consistency monitoring statistics
+   */
+  getCacheStats() {
+    return {
+      totalRequests: cacheStats.totalRequests,
+      cacheHits: cacheStats.cacheHits,
+      cacheMisses: cacheStats.cacheMisses,
+      invalidationAttempts: cacheStats.invalidationAttempts,
+      invalidationSuccesses: cacheStats.invalidationSuccesses,
+      invalidationFailures: cacheStats.invalidationFailures
+    }
+  }
+
+  /**
+   * Get cache hit ratio as percentage
+   */
+  getHitRatio() {
+    return cacheStats.totalRequests > 0 ? (cacheStats.cacheHits / cacheStats.totalRequests) * 100 : 0
   }
 
   /**

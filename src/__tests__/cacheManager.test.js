@@ -604,7 +604,579 @@ describe('Cache Utility Operations', () => {
         cacheManager.set('1_2', cacheValue, mockCacheStore, null)
       ).rejects.toThrow();
     });
-  });  
+  });
+  
+  describe('Cache Invalidation Integration Tests', () => {
+    let mockSupabaseCache;
+  
+    beforeEach(() => {
+      // Mock the supabaseCache module
+      mockSupabaseCache = {
+        invalidateExerciseCache: jest.fn(),
+        invalidateUserCache: jest.fn(),
+        invalidateProgramCache: jest.fn(),
+        invalidateWorkoutCache: jest.fn()
+      };
+  
+      // Mock the supabase client
+      jest.doMock('../config/supabase.js', () => ({
+        supabase: {
+          from: jest.fn(() => ({
+            insert: jest.fn(() => ({
+              select: jest.fn(() => ({
+                single: jest.fn(() => Promise.resolve({ data: { id: 'test-id' }, error: null }))
+              }))
+            })),
+            update: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                select: jest.fn(() => ({
+                  single: jest.fn(() => Promise.resolve({ data: { id: 'test-id' }, error: null }))
+                }))
+              }))
+            })),
+            delete: jest.fn(() => ({
+              eq: jest.fn(() => Promise.resolve({ error: null }))
+            }))
+          }))
+        }
+      }));
+  
+      // Mock the supabaseCache module
+      jest.doMock('../api/supabaseCache.js', () => mockSupabaseCache);
+  
+      // Clear all mocks
+      jest.clearAllMocks();
+    });
+  
+    describe('Exercise Service Cache Invalidation', () => {
+      it('should call invalidateExerciseCache when creating an exercise', async () => {
+        const { createExercise } = await import('../services/exerciseService.js');
+  
+        const exerciseData = {
+          name: 'Test Exercise',
+          primary_muscle_group: 'chest',
+          exercise_type: 'compound'
+        };
+  
+        await createExercise(exerciseData);
+  
+        expect(mockSupabaseCache.invalidateExerciseCache).toHaveBeenCalledTimes(1);
+      });
+  
+      it('should call invalidateExerciseCache when updating an exercise', async () => {
+        const { updateExercise } = await import('../services/exerciseService.js');
+  
+        const exerciseId = 'test-exercise-id';
+        const updates = { name: 'Updated Exercise' };
+  
+        await updateExercise(exerciseId, updates);
+  
+        expect(mockSupabaseCache.invalidateExerciseCache).toHaveBeenCalledTimes(1);
+      });
+  
+      it('should call invalidateExerciseCache when deleting an exercise', async () => {
+        const { deleteExercise } = await import('../services/exerciseService.js');
+  
+        const exerciseId = 'test-exercise-id';
+  
+        await deleteExercise(exerciseId);
+  
+        expect(mockSupabaseCache.invalidateExerciseCache).toHaveBeenCalledTimes(1);
+      });
+  
+      it('should call invalidateExerciseCache when bulk creating exercises', async () => {
+        const { bulkCreateExercises } = await import('../services/exerciseService.js');
+  
+        const exercisesData = [
+          { name: 'Exercise 1', primary_muscle_group: 'chest' },
+          { name: 'Exercise 2', primary_muscle_group: 'back' }
+        ];
+  
+        await bulkCreateExercises(exercisesData);
+  
+        expect(mockSupabaseCache.invalidateExerciseCache).toHaveBeenCalledTimes(1);
+      });
+    });
+  
+    describe('User Service Cache Invalidation', () => {
+      it('should call invalidateUserCache when updating user analytics', async () => {
+        const { updateUserAnalytics } = await import('../services/workoutLogService.js');
+  
+        const userId = 'test-user-id';
+        const exercises = [
+          {
+            exerciseId: 'test-exercise',
+            completed: [true, true],
+            reps: [10, 8],
+            weights: [100, 100]
+          }
+        ];
+  
+        await updateUserAnalytics(userId, exercises);
+  
+        expect(mockSupabaseCache.invalidateUserCache).toHaveBeenCalledWith(userId);
+      });
+  
+      it('should call invalidateUserCache when completing a draft workout', async () => {
+        const { completeDraft } = await import('../services/workoutLogService.js');
+  
+        const authUserId = 'test-user-id';
+        const draftId = 'test-draft-id';
+        const exercises = [];
+        const workoutName = 'Test Workout';
+  
+        await completeDraft(authUserId, draftId, exercises, workoutName);
+  
+        expect(mockSupabaseCache.invalidateUserCache).toHaveBeenCalledWith(authUserId);
+      });
+    });
+    
+    describe('Cache Invalidation Integration Tests', () => {
+      let mockInvalidateExerciseCache;
+      let mockInvalidateUserCache;
+      let mockInvalidateProgramCache;
+      let mockInvalidateWorkoutCache;
+    
+      beforeEach(() => {
+        // Mock the cache invalidation functions
+        mockInvalidateExerciseCache = jest.fn();
+        mockInvalidateUserCache = jest.fn();
+        mockInvalidateProgramCache = jest.fn();
+        mockInvalidateWorkoutCache = jest.fn();
+    
+        // Mock the supabaseCache module
+        jest.doMock('../api/supabaseCache.js', () => ({
+          invalidateExerciseCache: mockInvalidateExerciseCache,
+          invalidateUserCache: mockInvalidateUserCache,
+          invalidateProgramCache: mockInvalidateProgramCache,
+          invalidateWorkoutCache: mockInvalidateWorkoutCache,
+          supabaseCache: {
+            invalidate: jest.fn(),
+            getWithCache: jest.fn(),
+            setCacheEntry: jest.fn()
+          }
+        }));
+    
+        // Clear all mocks
+        jest.clearAllMocks();
+      });
+    
+      describe('Exercise Service Cache Invalidation', () => {
+        it('should call invalidateExerciseCache when creating a new exercise', async () => {
+          const { createExercise } = await import('../services/exerciseService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'exercise-1', name: 'Test Exercise' },
+                  error: null
+                })
+              })
+            })
+          });
+    
+          await createExercise({ name: 'Test Exercise', primary_muscle_group: 'chest' });
+    
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledWith();
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledTimes(1);
+        });
+    
+        it('should call invalidateExerciseCache when updating an exercise', async () => {
+          const { updateExercise } = await import('../services/exerciseService.js');
+    
+          // Mock supabase responses
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'exercise-1', name: 'Old Name', is_global: false, created_by: 'user-1' },
+                  error: null
+                })
+              })
+            }),
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: { id: 'exercise-1', name: 'Updated Exercise' },
+                    error: null
+                  })
+                })
+              })
+            })
+          });
+    
+          await updateExercise('exercise-1', { name: 'Updated Exercise' });
+    
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledWith();
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledTimes(1);
+        });
+    
+        it('should call invalidateExerciseCache when deleting an exercise', async () => {
+          const { deleteExercise } = await import('../services/exerciseService.js');
+    
+          // Mock supabase responses
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'exercise-1', name: 'Test Exercise', is_global: false, created_by: 'user-1' },
+                  error: null
+                })
+              })
+            }),
+            delete: jest.fn().mockReturnValue({
+              eq: jest.fn().mockResolvedValue({
+                error: null
+              })
+            })
+          });
+    
+          await deleteExercise('exercise-1', 'user', 'user-1');
+    
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledWith();
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledTimes(1);
+        });
+    
+        it('should call invalidateExerciseCache when bulk creating exercises', async () => {
+          const { bulkCreateExercises } = await import('../services/exerciseService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockResolvedValue({
+                data: [{ id: 'exercise-1', name: 'Exercise 1' }, { id: 'exercise-2', name: 'Exercise 2' }],
+                error: null
+              })
+            })
+          });
+    
+          await bulkCreateExercises([
+            { name: 'Exercise 1', primary_muscle_group: 'chest' },
+            { name: 'Exercise 2', primary_muscle_group: 'back' }
+          ]);
+    
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledWith();
+          expect(mockInvalidateExerciseCache).toHaveBeenCalledTimes(1);
+        });
+      });
+    
+      describe('User Service Cache Invalidation', () => {
+        it('should call invalidateUserCache when updating user analytics', async () => {
+          const { updateUserAnalytics } = await import('../services/userService.js');
+    
+          // Mock supabase responses
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            upsert: jest.fn().mockResolvedValue({
+              error: null
+            })
+          });
+    
+          const exercises = [
+            { exerciseId: 'ex-1', completed: [true, true], weights: [100, 105], reps: [10, 10] }
+          ];
+    
+          await updateUserAnalytics('user-1', exercises);
+    
+          expect(mockInvalidateUserCache).toHaveBeenCalledWith('user-1');
+          expect(mockInvalidateUserCache).toHaveBeenCalledTimes(1);
+        });
+      });
+    
+      describe('Program Service Cache Invalidation', () => {
+        it('should call invalidateProgramCache when creating a program', async () => {
+          const { createProgram } = await import('../services/programService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { id: 'program-1', name: 'Test Program', user_id: 'user-1' },
+                  error: null
+                })
+              })
+            })
+          });
+    
+          await createProgram({ name: 'Test Program', user_id: 'user-1' });
+    
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('user-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledTimes(1);
+        });
+    
+        it('should call invalidateProgramCache when updating a program', async () => {
+          const { updateProgram } = await import('../services/programService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: { id: 'program-1', name: 'Updated Program', user_id: 'user-1' },
+                    error: null
+                  })
+                })
+              })
+            })
+          });
+    
+          await updateProgram('program-1', { name: 'Updated Program' });
+    
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('user-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledTimes(1);
+        });
+    
+        it('should call invalidateProgramCache for both coach and client when creating coach-assigned program', async () => {
+          const { createCoachAssignedProgram } = await import('../services/programService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: {
+                    id: 'program-1',
+                    name: 'Coach Program',
+                    user_id: 'coach-1',
+                    assigned_to_client: 'client-1'
+                  },
+                  error: null
+                })
+              })
+            })
+          });
+    
+          await createCoachAssignedProgram(
+            { name: 'Coach Program', user_id: 'coach-1' },
+            'client-1',
+            { notes: 'Test program' }
+          );
+    
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('coach-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('client-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledTimes(2);
+        });
+    
+        it('should call invalidateProgramCache for both coach and client when updating coach assignment', async () => {
+          const { updateCoachAssignment } = await import('../services/programService.js');
+    
+          // Mock supabase response
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'program-1',
+                      name: 'Updated Coach Program',
+                      user_id: 'coach-1',
+                      assigned_to_client: 'client-1'
+                    },
+                    error: null
+                  })
+                })
+              })
+            })
+          });
+    
+          await updateCoachAssignment('program-1', { coach_notes: 'Updated notes' });
+    
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('coach-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('client-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledTimes(2);
+        });
+    
+        it('should call invalidateProgramCache for both coach and client when unassigning program', async () => {
+          const { unassignProgram } = await import('../services/programService.js');
+    
+          // Mock supabase responses
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValueOnce({
+            select: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                single: jest.fn().mockResolvedValue({
+                  data: { assigned_to_client: 'client-1' },
+                  error: null
+                })
+              })
+            })
+          }).mockReturnValueOnce({
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: {
+                      id: 'program-1',
+                      name: 'Unassigned Program',
+                      user_id: 'coach-1',
+                      assigned_to_client: null
+                    },
+                    error: null
+                  })
+                })
+              })
+            })
+          });
+    
+          await unassignProgram('program-1');
+    
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('coach-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledWith('client-1');
+          expect(mockInvalidateProgramCache).toHaveBeenCalledTimes(2);
+        });
+      });
+    
+      describe('Workout Log Service Cache Invalidation', () => {
+        it('should call invalidateUserCache when completing a draft workout', async () => {
+          const { completeDraft } = await import('../services/workoutLogService.js');
+    
+          // Mock supabase responses
+          const mockSupabase = require('../config/supabase.js').supabase;
+          mockSupabase.from.mockReturnValue({
+            update: jest.fn().mockReturnValue({
+              eq: jest.fn().mockReturnValue({
+                select: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: { id: 'draft-1', name: 'Completed Draft' },
+                    error: null
+                  })
+                })
+              })
+            })
+          });
+    
+          await completeDraft('user-1', 'draft-1', [], 'Completed Workout');
+    
+          expect(mockInvalidateUserCache).toHaveBeenCalledWith('user-1');
+          expect(mockInvalidateUserCache).toHaveBeenCalledTimes(1);
+        });
+      });
+    });
+  
+    describe('Program Service Cache Invalidation', () => {
+      it('should call invalidateProgramCache when creating a program', async () => {
+        const { createProgram } = await import('../services/programService.js');
+  
+        const programData = {
+          user_id: 'test-user-id',
+          name: 'Test Program',
+          description: 'Test program description'
+        };
+  
+        await createProgram(programData);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith(programData.user_id);
+      });
+  
+      it('should call invalidateProgramCache when updating a program', async () => {
+        const { updateProgram } = await import('../services/programService.js');
+  
+        const programId = 'test-program-id';
+        const updates = { name: 'Updated Program' };
+  
+        await updateProgram(programId, updates);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('test-user-id');
+      });
+  
+      it('should call invalidateProgramCache when updating program progress', async () => {
+        const { updateProgramProgress } = await import('../services/programService.js');
+  
+        const programId = 'test-program-id';
+        const completedWeeks = 2;
+  
+        await updateProgramProgress(programId, completedWeeks);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('test-user-id');
+      });
+  
+      it('should call invalidateProgramCache for both coach and client when creating coach-assigned program', async () => {
+        const { createCoachAssignedProgram } = await import('../services/programService.js');
+  
+        const programData = {
+          user_id: 'coach-id',
+          name: 'Coach Program',
+          description: 'Program for client'
+        };
+        const clientId = 'client-id';
+        const coachData = { notes: 'Test notes' };
+  
+        await createCoachAssignedProgram(programData, clientId, coachData);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('coach-id');
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('client-id');
+      });
+  
+      it('should call invalidateProgramCache for both coach and client when updating coach assignment', async () => {
+        const { updateCoachAssignment } = await import('../services/programService.js');
+  
+        const programId = 'test-program-id';
+        const updates = { coach_notes: 'Updated notes' };
+  
+        await updateCoachAssignment(programId, updates);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('coach-id');
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('client-id');
+      });
+  
+      it('should call invalidateProgramCache for both coach and client when unassigning program', async () => {
+        const { unassignProgram } = await import('../services/programService.js');
+  
+        const programId = 'test-program-id';
+  
+        await unassignProgram(programId);
+  
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('coach-id');
+        expect(mockSupabaseCache.invalidateProgramCache).toHaveBeenCalledWith('client-id');
+      });
+    });
+  
+    describe('Workout Log Service Cache Invalidation', () => {
+      it('should call invalidateUserCache when updating user analytics in workout log service', async () => {
+        const { updateUserAnalytics } = await import('../services/workoutLogService.js');
+  
+        const userId = 'test-user-id';
+        const exercises = [
+          {
+            exerciseId: 'test-exercise',
+            completed: [true],
+            reps: [10],
+            weights: [100]
+          }
+        ];
+  
+        await updateUserAnalytics(userId, exercises);
+  
+        expect(mockSupabaseCache.invalidateUserCache).toHaveBeenCalledWith(userId);
+      });
+  
+      it('should call invalidateUserCache when completing draft in workout log service', async () => {
+        const { completeDraft } = await import('../services/workoutLogService.js');
+  
+        const authUserId = 'test-user-id';
+        const draftId = 'test-draft-id';
+        const exercises = [];
+        const workoutName = 'Test Workout';
+  
+        await completeDraft(authUserId, draftId, exercises, workoutName);
+  
+        expect(mockSupabaseCache.invalidateUserCache).toHaveBeenCalledWith(authUserId);
+      });
+    });
+  });
   describe('Performance Tests', () => {
     it('should handle rapid cache get operations efficiently', async () => {
       const cacheEntry = {

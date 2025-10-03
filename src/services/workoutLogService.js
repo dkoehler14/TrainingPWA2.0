@@ -10,7 +10,7 @@
 
 import { supabase } from '../config/supabase'
 import { withSupabaseErrorHandling } from '../config/supabase'
-import { supabaseCache } from '../api/supabaseCache'
+import { supabaseCache, invalidateUserCache } from '../api/supabaseCache'
 import { WorkoutLogCacheManager } from '../utils/cacheManager'
 
 // Import comprehensive error handling system
@@ -557,6 +557,22 @@ class WorkoutLogService {
 
         // Perform the update with transaction boundaries
         const result = await this.updateWorkoutLog(workoutLogId, updates);
+
+        // Invalidate exercise history and progress caches after successful update
+        if (result) {
+          try {
+            supabaseCache.invalidate([
+              `exercise_history_${result.user_id}_*`,
+              `workout_logs_progress_${result.user_id}_*`
+            ]);
+          } catch (cacheError) {
+            console.warn('⚠️ CACHE INVALIDATION FAILED (NON-CRITICAL):', {
+              workoutLogId,
+              cacheError: cacheError.message,
+              updateContinues: true
+            });
+          }
+        }
 
         // Update cache if cache manager is provided
         if (cacheManager && result) {
@@ -2144,7 +2160,9 @@ class WorkoutLogService {
           try {
             const patterns = [
               `workout_log_${data.user_id}_${data.program_id}_${data.week_index}_${data.day_index}`,
-              `program_workout_logs_${data.user_id}_${data.program_id}`
+              `program_workout_logs_${data.user_id}_${data.program_id}`,
+              `exercise_history_${data.user_id}_*`,
+              `workout_logs_progress_${data.user_id}_*`
             ];
             supabaseCache.invalidate(patterns);
             transactionState.cacheInvalidated = true;
@@ -3405,6 +3423,9 @@ class WorkoutLogService {
       // Update user analytics
       await this.updateUserAnalytics(authUserId, exercises)
 
+      // Invalidate user cache after successful analytics update
+      invalidateUserCache(authUserId)
+
       return data
     }, 'completeDraft')
   }
@@ -3726,6 +3747,9 @@ class WorkoutLogService {
           })
 
         if (error) throw error
+
+        // Invalidate user cache after successful analytics update
+        invalidateUserCache(userId)
       }
     }, 'updateUserAnalytics')
   }
